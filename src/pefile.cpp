@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2018 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2018 Laszlo Molnar
+   Copyright (C) 1996-2020 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2020 Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -1432,8 +1432,9 @@ void PeFile::processLoadConf(Interval *iv) // pass 1
     soloadconf = get_le32(loadconf);
     if (soloadconf == 0)
         return;
-    if (soloadconf > 256)
-        throwCantPack("size of Load Configuration directory unexpected");
+    static unsigned const MAX_SOLOADCONF = 256;  // XXX FIXME: Why?
+    if (soloadconf > MAX_SOLOADCONF)
+        info("Load Configuration directory %u > %u", soloadconf, MAX_SOLOADCONF);
 
     // if there were relocation entries referring to the load config table
     // then we need them for the copy of the table too

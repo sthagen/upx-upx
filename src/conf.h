@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2018 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2018 Laszlo Molnar
+   Copyright (C) 1996-2020 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2020 Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -230,7 +230,9 @@ typedef size_t upx_rsize_t;
 #endif
 
 // avoid warnings about shadowing global functions
+#undef basename
 #undef index
+#undef outp
 #define basename            upx_basename
 #define index               upx_index
 #define outp                upx_outp

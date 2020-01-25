@@ -2,7 +2,7 @@
 @
 @  This file is part of the UPX executable compressor.
 @
-@  Copyright (C) 2000-2018 John F. Reiser
+@  Copyright (C) 2000-2020 John F. Reiser
 @  All Rights Reserved.
 @
 @  UPX and the UCL library are free software; you can redistribute them
@@ -40,6 +40,7 @@ sz_b_info = 12
   sz_cpr= 4
   b_method= 8
 
+MAP_ANONYMOUS= 0x20
 MAP_PRIVATE=   0x02
 MAP_FIXED=     0x10
 
@@ -61,14 +62,13 @@ PATH_MAX= 4096
 #define OVERHEAD 2048
 #define MAX_ELF_HDR 512
 
-mflg_subr:  @ for handling QNX vs Linux
-        orr r3,r3,#0  @ re-written to MAP_PRIVATE|MAP_ANONYMOUS
-        ret
+mflg_data: .int MAP_PRIVATE|MAP_ANONYMOUS  @ overwritten for QNX vs Linux
 
 SP_fd= 3*4
 /* In:
    r4= LENX
    r5= ADRX
+   lr= "/proc/self/exe"
 new sp/            elfaddr,fd, ADRU,LENU, f_exp,%entry, argc,argv,0,envp,0,auxv
         (ADRX,LENX) = extent of compressed program (after moving)
         (ADRU,LENU) = params for final munmap()
@@ -113,13 +113,14 @@ F_entry=   7*4
 
         mov r2,#PATH_MAX
         mov r1,r0  @ buffer
-        adr r0,proc_self_exe  @ arg1
+        mov r0,lr  @ arg1= "/proc/self/exe"
         sub r2,r2,#1  @ room for null terminator
-        bl readlink; add r2,r1,r0  @ provisional end
-        cmn r0,#4096; bcc link_ok  @ no error
-        adr r1,proc_self_exe    @ buffer (input name)
-        add r2,r1,#proc_self_align - proc_self_exe  @ end
+        bl readlink
+        cmn r0,#4096
+        movcs r1,lr  @ "/proc/self/exe"
+        movcs r0,#14  @ strlen("/proc/self/exe")
 link_ok:
+        add r2,r1,r0  @ end
         mov r0,r6  @ &old_strings
         mov  r3,#0;        strb r3,[r0,#-1]!  @ terminate link name
 0: // copy backwards to beginning
@@ -182,14 +183,15 @@ F_delta= 3*4
         str r0,[sp,#F_entry - F_delta]  @ entry address
 
 // Map 1 page of /proc/self/exe so that it does not disappear
-        mov r5,#0  @ SEEK_SET
-        ldr r4,[sp,#F_fd - F_delta]!  @ fd
+        ldr r4,[sp],#4  @ pop r4,F_fd
+        mov r5,#0  @ SEEK_SET offset
+        stmdb sp!,{r4,r5}  @ arg5,arg6 calling convention
         mov r3,#MAP_PRIVATE
         mov r2,#PROT_READ
         mov r1,#PAGE_SIZE
         mov r0,#0  @ any address
         bl mmap  @ no error check: cannot recover
-        ldr r0,[sp],#4  @ F_fd
+        ldmia sp!,{r0,r1}  @ fd, offset
         bl close
 
 #if DEBUG  //{
@@ -214,16 +216,16 @@ F_delta= 3*4
         mov r10,#0
         mov r11,#0
 
-#if DEBUG  //{
+#if 1|DEBUG  //{
 /* Heuristic cache flush: sweep contiguous range to force collisions and evictions. */
-        sub r12,sp,#(1<<19)  @ limit: 1/2 MB more
+        sub r12,sp,#(1<<18)  @ limit: 1/4 MB more
 sweep:
         ldr r7,[sp],#-(1<<5)  @ extend stack; read allocate 32 bytes
         str r7,[sp]  @ make it dirty
         ldr r7,[sp]  @ read alocate again in case dirtying caused COW split
         cmp r12,sp; blo sweep
 
-        add sp,sp,#(1<<19)  @ pop stack
+        add sp,sp,#(1<<18)  @ pop stack
 #endif  //}
 
 #if defined(ARMEL_DARWIN)  /*{*/
@@ -431,10 +433,11 @@ get_sys_munmap: .globl get_sys_munmap  // r0= system call instruction
 
 mmap_privanon: .globl mmap_privanon
         stmdb sp!,{r4,r5,lr}
+        ldr r4,mflg_data  @ Map_PRIVATE|MAP_ANON for Linux; MAP_PRIVANON for QNX
         mov r5,#0  @ offset= 0
+        orr r3,r3,r4  @ combine with input (such as MAP_FIXED)
         mvn r4,#0  @ fd= -1
-        adr lr, mmap_do
-        b mflg_subr // fix r3 for QNX vs Linux
+        b mmap_do
 
 #if 1|DEBUG  /*{*/
 

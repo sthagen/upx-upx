@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2018 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2018 Laszlo Molnar
+   Copyright (C) 1996-2020 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2020 Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -30,6 +30,12 @@
 #include "compress.h"
 #include "mem.h"
 
+#if (ACC_CC_CLANG)
+#  pragma clang diagnostic ignored "-Wshadow"
+#endif
+#if (ACC_CC_GNUC >= 0x040200)
+#  pragma GCC diagnostic ignored "-Wshadow"
+#endif
 #if (ACC_CC_MSC)
 #  pragma warning(disable: 4456)    // -Wno-shadow
 #endif

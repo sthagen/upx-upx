@@ -2,9 +2,9 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 2004-2018 John Reiser
-   Copyright (C) 1996-2018 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2018 Laszlo Molnar
+   Copyright (C) 2004-2020 John Reiser
+   Copyright (C) 1996-2020 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2020 Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -111,9 +111,11 @@ typename T::Shdr const *PackVmlinuxBase<T>::getElfSections()
     int j;
     for (p = shdri, j= ehdri.e_shnum; --j>=0; ++p) {
         if (Shdr::SHT_STRTAB==p->sh_type
-        &&  (p->sh_size + p->sh_offset) <= (unsigned long)file_size
-        &&       p->sh_name  <  p->sh_size
-        &&  (10+ p->sh_name) <= p->sh_size  // 1+ strlen(".shstrtab")
+        &&  p->sh_offset  <   (unsigned long)file_size
+        &&  p->sh_size    <= ((unsigned long)file_size - p->sh_offset)
+        &&  p->sh_name    <   (unsigned long)file_size
+        &&  10            <= ((unsigned long)file_size - p->sh_name)
+            // 10 == (1+ strlen(".shstrtab"))
         ) {
             delete [] shstrtab;
             shstrtab = new char[1+ p->sh_size];
@@ -577,6 +579,7 @@ int PackVmlinuxBase<T>::canUnpack()
     Shdr *p;
     for (p= shdri, j= ehdri.e_shnum; --j>=0; ++p) {
         if ((unsigned)file_size < (p->sh_size + p->sh_offset)
+        || (5+ p->sh_name) < p->sh_name  // wrap: ignore malformed
         ||  shstrsec->sh_size < (5+ p->sh_name) ) {
             continue;
         }

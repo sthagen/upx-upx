@@ -2,9 +2,9 @@
 *
 *  This file is part of the UPX executable compressor.
 *
-*  Copyright (C) 1996-2018 Markus Franz Xaver Johannes Oberhumer
-*  Copyright (C) 1996-2018 Laszlo Molnar
-*  Copyright (C) 2000-2018 John F. Reiser
+*  Copyright (C) 1996-2020 Markus Franz Xaver Johannes Oberhumer
+*  Copyright (C) 1996-2020 Laszlo Molnar
+*  Copyright (C) 2000-2020 John F. Reiser
 *  All Rights Reserved.
 *
 *  UPX and the UCL library are free software; you can redistribute them
@@ -402,7 +402,7 @@ movsl_subr:
 movsl:  // In:  edi= 4-byte aligned dst; esi= 4-byte aligned src; ecx= word count
 .real_start_ofmovsl:
         mov tmp,#7; tst ecx,tmp; bne 9b
-        lsr ecx,#3; beq 9f
+        lsr ecx,#3; beq 8f  // THUMB return when zero
         .balign 4; bx pc; nop  // enter ARM mode
         .arm
         stmdb  sp!,{r2,   r4,r6, r7,r8,r9}  // tmp===r3, ecx===r5
@@ -412,6 +412,9 @@ movsl:  // In:  edi= 4-byte aligned dst; esi= 4-byte aligned src; ecx= word coun
         ldmia  sp!,{r2,   r4,r6, r7,r8,r9}
 9:
         ret
+8:
+        .thumb
+        bx lr
 
 #if !defined(ARMEL_EABI4)  /*{*/
         .arm

@@ -1,7 +1,7 @@
 #
 # UPX Makefile - needs GNU make 3.81 or better
 #
-# Copyright (C) 1996-2018 Markus Franz Xaver Johannes Oberhumer
+# Copyright (C) 1996-2020 Markus Franz Xaver Johannes Oberhumer
 #
 
 # build configuration options for this Makefile
@@ -148,7 +148,7 @@ upx_testsuite_SRCDIR := $(top_srcdir)/../upx-testsuite
 endif
 endif
 # run the UPX testsuite
-# The expected (old) checksums are in $(top_srcdir)/.github/travis_testsuite_1.sh
+# The expected (old) checksums are in $(top_srcdir)/.github/travis_testsuite_1-expected_sha256sums.sh
 # The   actual (new) checksums are in tmp-testsuite/testsuite_1/.sha256sums.recreate
 ifneq ($(wildcard $(upx_testsuite_SRCDIR)/files/packed/.),)
 ifneq ($(wildcard $(top_srcdir)/.github/travis_testsuite_1.sh),)

@@ -2,9 +2,9 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2018 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2018 Laszlo Molnar
-   Copyright (C) 2000-2018 John F. Reiser
+   Copyright (C) 1996-2020 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2020 Laszlo Molnar
+   Copyright (C) 2000-2020 John F. Reiser
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -517,7 +517,13 @@ do_xmap(
 
     for ( j=0; j < mhdr->ncmds; ++j,
         (sc = (Mach_segment_command const *)(sc->cmdsize + (unsigned char const *)sc))
-    ) if (LC_SEGMENT_64==sc->cmd && sc->vmsize!=0) {
+    ) if (LC_SEGMENT_64==sc->cmd && sc->vmsize==0) {
+            // Typical __DWARF info segment for 'rust'
+            struct b_info h;
+            xread(xi, (unsigned char *)&h, sizeof(h));
+            DPRINTF("    0==.vmsize; skipping %%x\\n", h.sz_cpr);
+            xi->buf += h.sz_cpr;
+    else if (LC_SEGMENT_64==sc->cmd && sc->vmsize!=0) {
         Extent xo;
         size_t mlen = xo.size = sc->filesize;
         Addr  addr = xo.buf  = base + (Addr)sc->vmaddr;

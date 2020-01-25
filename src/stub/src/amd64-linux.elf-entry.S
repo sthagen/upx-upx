@@ -2,9 +2,9 @@
 *
 *  This file is part of the UPX executable compressor.
 *
-*  Copyright (C) 1996-2018 Markus Franz Xaver Johannes Oberhumer
-*  Copyright (C) 1996-2018 Laszlo Molnar
-*  Copyright (C) 2000-2018 John F. Reiser
+*  Copyright (C) 1996-2020 Markus Franz Xaver Johannes Oberhumer
+*  Copyright (C) 1996-2020 Laszlo Molnar
+*  Copyright (C) 2000-2020 John F. Reiser
 *  All Rights Reserved.
 *
 *  UPX and the UCL library are free software; you can redistribute them
@@ -55,6 +55,8 @@ MAP_FIXED=     0x10
 MAP_ANONYMOUS= 0x20
 
 SYS_mmap= 9  // 64-bit mode only!
+
+FD_stderr= 2
 
 PAGE_SHIFT= 12
 PAGE_MASK= (~0<<PAGE_SHIFT)
@@ -207,12 +209,18 @@ msg_SELinux:
 L70:
         .asciz "PROT_EXEC|PROT_WRITE failed.\n"
 L71:
+
         // IDENTSTR goes here
 
   section ELFMAINZ
+msg_proc_self_exe:
+        push $14; pop %arg3  // length
+        push %arg1; pop %arg2  // "/proc/self/exe"
+        jmp L75
 L72:
         pop %arg2  // message text
-        push $2; pop %arg1  // fd stderr
+L75:
+        push $FD_stderr; pop %arg1
         push $ __NR_write; pop %rax
         syscall
 die:
@@ -225,7 +233,7 @@ unfold:  // IN: rbp= &f_exp; rsp/ &proc_self_exe,%entry
         pop %arg1  // &proc_self_exe
         sub %arg2l,%arg2l  // O_RDONLY
         push $__NR_open; pop %rax
-        syscall
+        syscall; test %eax,%eax; js msg_proc_self_exe
         push %rax  // save fd
 
         lea -4+ FOLD - proc_self_exe(%arg1),%rsi  // &O_BINFO | is_ptinterp
@@ -285,7 +293,7 @@ unfold:  // IN: rbp= &f_exp; rsp/ &proc_self_exe,%entry
         movq %rsi,%arg1  // src
         pop %arg2  // P_14  srclen
         call *%rbp  // old f_exp
-        pop %ecx  // P_13  toss .sz_unc
+        pop %rcx  // P_13  toss .sz_unc
 
 // PROT_EXEC
         pop %arg2  // P_12  length

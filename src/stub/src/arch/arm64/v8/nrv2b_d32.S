@@ -2,9 +2,9 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2018 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2018 Laszlo Molnar
-   Copyright (C) 2000-2018 John F. Reiser
+   Copyright (C) 1996-2020 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2020 Laszlo Molnar
+   Copyright (C) 2000-2020 John F. Reiser
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -29,6 +29,8 @@
    <jreiser@users.sourceforge.net>
 */
 
+#include "macros.S"
+
 #define lr   x30
 #define ip0  x16
 
@@ -48,6 +50,7 @@
 #define SUB2( dst,src) sub  dst,dst,src
 #define SUB2S(dst,src) subs dst,dst,src
 #define LDRB3(reg,psrc,incr) ldrb reg,psrc,incr
+#define LDR3( reg,psrc,incr) ldr  reg,psrc,incr
 #define STRB3(reg,pdst,incr) strb reg,pdst,incr
 
 #undef  GETBIT

@@ -2,9 +2,9 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2018 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2018 Laszlo Molnar
-   Copyright (C) 2000-2018 John F. Reiser
+   Copyright (C) 1996-2020 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2020 Laszlo Molnar
+   Copyright (C) 2000-2020 John F. Reiser
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -131,6 +131,7 @@ static void
 err_exit(int a)
 {
     (void)a;  // debugging convenience
+    DPRINTF("err_exit %%d\\n", a);
     exit(127);
 }
 #endif  //}
@@ -198,8 +199,10 @@ ERR_LAB
                     h.b_method
 #endif  //}
                 );
-            if (j != 0 || out_len != (nrv_uint)h.sz_unc)
+            if (j != 0 || out_len != (nrv_uint)h.sz_unc) {
+                DPRINTF("j=%%x  out_len=%%x  &h=%%p\\n", j, out_len, &h);
                 err_exit(7);
+            }
             // Skip Ehdr+Phdrs: separate 1st block, not filtered
             if (h.b_ftid!=0 && f_unf  // have filter
             &&  ((512 < out_len)  // this block is longer than Ehdr+Phdrs
@@ -226,19 +229,27 @@ make_hatch_x86_64(
     unsigned const frag_mask
 )
 {
+    unsigned xprot = 0;
     unsigned *hatch = 0;
     DPRINTF("make_hatch %%p %%x %%x\\n",phdr,reloc,frag_mask);
     if (phdr->p_type==PT_LOAD && phdr->p_flags & PF_X) {
+        if (
         // Try page fragmentation just beyond .text .
-        if ( ( (hatch = (void *)(phdr->p_memsz + phdr->p_vaddr + reloc)),
+             ( (hatch = (void *)(phdr->p_memsz + phdr->p_vaddr + reloc)),
                 ( phdr->p_memsz==phdr->p_filesz  // don't pollute potential .bss
                 &&  (1*4)<=(frag_mask & -(int)(size_t)hatch) ) ) // space left on page
         // Try Elf64_Ehdr.e_ident[12..15] .  warning: 'const' cast away
         ||   ( (hatch = (void *)(&((Elf64_Ehdr *)(phdr->p_vaddr + reloc))->e_ident[12])),
                 (phdr->p_offset==0) )
+        // Allocate and use a new page.
+        ||   (  xprot = 1, hatch = mmap(0, PAGE_SIZE, PROT_WRITE|PROT_READ,
+                MAP_PRIVATE|MAP_ANONYMOUS, -1, 0) )
         )
         {
             hatch[0] = 0xc35a050f;  // syscall; pop %rdx; ret
+            if (xprot) {
+                mprotect(hatch, 1*sizeof(unsigned), PROT_EXEC|PROT_READ);
+            }
         }
         else {
             hatch = 0;
@@ -260,22 +271,30 @@ make_hatch_ppc64(
     unsigned const frag_mask
 )
 {
+    unsigned xprot = 0;
     unsigned *hatch = 0;
     DPRINTF("make_hatch %%p %%x %%x\\n",phdr,reloc,frag_mask);
     if (phdr->p_type==PT_LOAD && phdr->p_flags & PF_X) {
+        if (
         // Try page fragmentation just beyond .text .
-        if ( ( (hatch = (void *)(phdr->p_memsz + phdr->p_vaddr + reloc)),
+            ( (hatch = (void *)(phdr->p_memsz + phdr->p_vaddr + reloc)),
                 ( phdr->p_memsz==phdr->p_filesz  // don't pollute potential .bss
                 &&  (3*4)<=(frag_mask & -(int)(size_t)hatch) ) ) // space left on page
         // Try Elf64_Phdr[1].p_paddr (2 instr) and .p_filesz (1 instr)
         ||   ( (hatch = (void *)(&((Elf64_Phdr *)(1+  // Ehdr and Phdr are contiguous
                 ((Elf64_Ehdr *)(phdr->p_vaddr + reloc))))[1].p_paddr)),
                 (phdr->p_offset==0) )
+        // Allocate and use a new page.
+        ||   (  xprot = 1, hatch = mmap(0, 1<<12, PROT_WRITE|PROT_READ,
+                MAP_PRIVATE|MAP_ANONYMOUS, -1, 0) )
         )
         {
             hatch[0]= 0x44000002;  // sc
             hatch[1]= ORRX(12,31,31);  // movr r12,r31 ==> or r12,r31,r31
             hatch[2]= 0x4e800020;  // blr
+            if (xprot) {
+                mprotect(hatch, 3*sizeof(unsigned), PROT_EXEC|PROT_READ);
+            }
         }
         else {
             hatch = 0;
@@ -291,6 +310,7 @@ make_hatch_arm64(
     unsigned const frag_mask
 )
 {
+    unsigned xprot = 0;
     unsigned *hatch = 0;
     //DPRINTF((STR_make_hatch(),phdr,reloc));
     if (phdr->p_type==PT_LOAD && phdr->p_flags & PF_X) {
@@ -302,17 +322,24 @@ make_hatch_arm64(
         // which uses the comma to save bytes when test_locj involves locj
         // and the action is the same when either test succeeds.
 
+        if (
         // Try page fragmentation just beyond .text .
-        if ( ( (hatch = (void *)(~3ul & (3+ phdr->p_memsz + phdr->p_vaddr + reloc))),
+             ( (hatch = (void *)(~3ul & (3+ phdr->p_memsz + phdr->p_vaddr + reloc))),
                 ( phdr->p_memsz==phdr->p_filesz  // don't pollute potential .bss
                 &&  (2*4)<=(frag_mask & -(int)(uint64_t)hatch) ) ) // space left on page
         // Try Elf64_Ehdr.e_ident[8..15] .  warning: 'const' cast away
         ||   ( (hatch = (void *)(&((Elf64_Ehdr *)(phdr->p_vaddr + reloc))->e_ident[8])),
-                (phdr->p_offset==0)
+                (phdr->p_offset==0) )
+        // Allocate and use a new page.
+        ||   (  xprot = 1, hatch = mmap(0, 1<<12, PROT_WRITE|PROT_READ,
+                MAP_PRIVATE|MAP_ANONYMOUS, -1, 0) )
         )
-        ) {
-            hatch[0]= 0xd4000001;  // svc #0
-            hatch[1]= 0xd65f03c0;  // ret (jmp *lr)
+        {
+            hatch[0] = 0xd4000001;  // svc #0
+            hatch[1] = 0xd65f03c0;  // ret (jmp *lr)
+            if (xprot) {
+                mprotect(hatch, 2*sizeof(unsigned), PROT_EXEC|PROT_READ);
+            }
         }
         else {
             hatch = 0;
@@ -406,7 +433,9 @@ xfind_pages(unsigned mflags, Elf64_Phdr const *phdr, int phnum,
         }
     }
     DPRINTF("  addr=%%p  lo=%%p  hi=%%p\\n", addr, lo, hi);
-    addr = (Elf64_Addr)mmap((void *)addr, hi, PROT_NONE, mflags, -1, 0);
+    // PROT_WRITE allows testing of 64k pages on 4k Linux
+    addr = (Elf64_Addr)mmap((void *)addr, hi, (DEBUG ? PROT_WRITE : PROT_NONE),  // FIXME XXX EVIL
+        mflags, -1, 0);
     DPRINTF("  addr=%%p\\n", addr);
     *p_brk = hi + addr;  // the logical value of brk(0)
     return (Elf64_Addr)(addr - lo);

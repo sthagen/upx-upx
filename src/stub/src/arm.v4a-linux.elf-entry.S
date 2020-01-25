@@ -2,9 +2,9 @@
 *
 *  This file is part of the UPX executable compressor.
 *
-*  Copyright (C) 1996-2018 Markus Franz Xaver Johannes Oberhumer
-*  Copyright (C) 1996-2018 Laszlo Molnar
-*  Copyright (C) 2000-2018 John F. Reiser
+*  Copyright (C) 1996-2020 Markus Franz Xaver Johannes Oberhumer
+*  Copyright (C) 1996-2020 Laszlo Molnar
+*  Copyright (C) 2000-2020 John F. Reiser
 *  All Rights Reserved.
 *
 *  UPX and the UCL library are free software; you can redistribute them
@@ -55,6 +55,7 @@ MAP_ANONYMOUS= 0x20
 MAP_FIXED=     0x10
 MAP_PRIVATE=   0x02
 
+FD_stderr=      2
 O_RDONLY=       0
 
 PAGE_SHIFT= 12
@@ -124,9 +125,9 @@ end_decompress: .globl end_decompress
         /* IDENTSTR goes here */
 
 section ELFMAINZ
-unfold:  // in: r3= mflg; lr= &O_BINFO
+unfold:  // in: r3= mflg; r6= elfaddr; lr= &O_BINFO
         str r3,[sp,#F_mflg]
-        mvn r10,r6; add r10,r10,#1  @ "neg r10,r6": -elfaddr
+        mov r10,#0; sub r10,r10,r6  @ "neg r10,r6": -elfaddr
         add r6,lr,#4  @ &b_info of folded code
         add r14,r6,r10  @ offset(b_info)
 
@@ -172,9 +173,7 @@ unfold:  // in: r3= mflg; lr= &O_BINFO
         ldr r3,[sp],#4  @ P_01  sz_unc
 
         ldr r1,[sp,#F_mflg]  @ mflg
-        ldr r0,[r4]  @ "orr r3,r3,#0" at mflg_subr
-        orr r0,r0,r1  @ change the 8-bit immediate
-        str r0,[r4]
+        str r1,[r4]  @ pass mflg to folded code
 
 // PROT_EXEC
         ldr r0,[sp,#F_f_exp]
@@ -193,11 +192,15 @@ unfold:  // in: r3= mflg; lr= &O_BINFO
         ldr r0,[sp,#F_ADRU]
         sub r4,r9,r1  @ LENX= sz_pack2 - O_BINFO
         add r5,r0,r1  @ ADRX= new Elf32_Ehdr + O_BINFO
-        add r6,r6,#2*4  @ past mflg_subr
+        add r6,r6,#4  @ past the forwarded data
 #if DEBUG  /*{*/
         stmdb sp!,{TRACE_REGS}; mov r0,#3; bl trace
 #endif  /*}*/
+        adr lr,proc_self_exe
         add pc,r6,r10  @ goto reloc(unfold)
+proc_self_exe:
+        .asciz "/proc/self/exe"
+        .balign 4
 
 #if DEBUG  /*{*/
 TRACE_BUFLEN=512
@@ -249,11 +252,16 @@ L620:
         ret
 hex:
         .ascii "0123456789abcdef"
+        .balign 4
 #endif  /*}*/
 
-proc_self_exe:
-        .asciz "/proc/self/exe"
-        .balign 4
+L75:
+        mov r2,#14  @ length
+        adr r1,proc_self_exe
+        mov r0,#FD_stderr
+        do_sys7t __NR_write
+        mov r0,#127
+        do_sys7t __NR_exit
 
 main:  // IN: lr= &f_exp
         ldr r0,[lr,#sz_pack2 - f_exp]  @ sz_pack2
@@ -267,6 +275,7 @@ main:  // IN: lr= &f_exp
         adr r0,proc_self_exe
         mov r1,#O_RDONLY
         do_sys7t __NR_open
+        cmp r0,#0; blt L75
         str r0,[sp,#F_fd]
 
         ldr r3,[lr,#mflg - f_exp]

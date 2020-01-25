@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2018 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2018 Laszlo Molnar
+   Copyright (C) 1996-2020 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2020 Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -780,6 +780,7 @@ public:
 
     virtual bool canPack();
     virtual int canUnpack();
+    virtual upx_uint64_t get_mod_init_func(Mach_segment_command const *segptr);
     virtual unsigned find_SEGMENT_gap(unsigned const k, unsigned pos_eof);
 
 protected:
@@ -822,6 +823,7 @@ protected:
     unsigned o__mod_init_func;  // file offset to __DATA.__mod_init_func Mach_section_command
     upx_uint64_t prev_mod_init_func;
     upx_uint64_t pagezero_vmsize;
+    upx_uint64_t vma_max;  // max over (.vmsize + .vmaddr)
     Mach_header mhdri;
 
     Mach_header mhdro;
