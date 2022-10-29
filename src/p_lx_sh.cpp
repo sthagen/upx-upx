@@ -2,9 +2,9 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2020 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2020 Laszlo Molnar
-   Copyright (C) 2000-2020 John F. Reiser
+   Copyright (C) 1996-2022 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2022 Laszlo Molnar
+   Copyright (C) 2000-2022 John F. Reiser
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -78,7 +78,7 @@ PackLinuxI386sh::buildLoader(Filter const *ft)
     MemBuffer buf(sz_fold);
     memcpy(buf, stub_i386_linux_elf_shell_fold, sz_fold);
 
-    checkPatch(NULL, 0, 0, 0);  // reset
+    checkPatch(nullptr, 0, 0, 0);  // reset
     patch_le32(buf,sz_fold,"UPX3",l_shname);
     patch_le32(buf,sz_fold,"UPX2",o_shname);
 
@@ -114,17 +114,22 @@ bool PackLinuxI386sh::getShellName(char *buf)
     buf[l_shname] = 0;
     static char const *const shname[] = { // known shells that accept "-c" arg
         "ash", "bash", "bsh", "csh", "ksh", "pdksh", "sh", "tcsh", "zsh",
-        "python",
-        NULL
+        "python", "python2", "python3",
+        nullptr
     };
     const char *bname = strrchr(buf, '/');
-    if (bname == NULL)
+    if (bname == nullptr)
         return false;
-    for (int j = 0; NULL != shname[j]; ++j) {
+    for (int j = 0; nullptr != shname[j]; ++j) {
         if (0 == strcmp(shname[j], bname + 1)) {
             bool const s = super::canPack();
             if (s) {
                 opt->o_unix.blocksize = blocksize = file_size;
+            }
+            unsigned size = fi->st_size();
+            if (size > (125<<10)) { // 128KB but allow 3KB for environment
+                printWarn(fi->getName(), "Likely E2BIG for size=%u", size);
+                return false;
             }
             return s;
         }

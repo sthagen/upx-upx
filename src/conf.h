@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2020 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2020 Laszlo Molnar
+   Copyright (C) 1996-2022 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2022 Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -25,15 +25,29 @@
    <markus@oberhumer.com>               <ezerotven+github@gmail.com>
  */
 
+#pragma once
+#ifndef UPX_CONF_H__
+#define UPX_CONF_H__ 1
 
-#ifndef __UPX_CONF_H
-#define __UPX_CONF_H 1
+#if defined(__cplusplus)
+#  if (__cplusplus >= 201402L)
+#  elif defined(_MSC_VER) && defined(_MSVC_LANG) && (_MSVC_LANG+0 >= 201402L)
+#  else
+#    error "C++ 14 is required"
+#  endif
+#endif
 
 #include "version.h"
 
 #if !defined(_FILE_OFFSET_BITS)
 #  define _FILE_OFFSET_BITS 64
 #endif
+#if defined(_WIN32) && defined(__MINGW32__) && defined(__GNUC__)
+#  if !defined(_USE_MINGW_ANSI_STDIO)
+#    define _USE_MINGW_ANSI_STDIO 1
+#  endif
+#endif
+
 #undef NDEBUG
 
 
@@ -49,17 +63,41 @@
 #include "miniacc.h"
 #if !(ACC_CC_CLANG || ACC_CC_GNUC || ACC_CC_MSC)
    // other compilers may work, but we're NOT interested into supporting them
-#  error "only clang and gcc are officially supported"
+#  error "only clang, gcc and msvc are officially supported"
 #endif
 // UPX sanity checks for a sane compiler
 #if !defined(UINT_MAX) || (UINT_MAX != 0xffffffffL)
 #  error "UINT_MAX"
 #endif
+ACC_COMPILE_TIME_ASSERT_HEADER(CHAR_BIT == 8)
+ACC_COMPILE_TIME_ASSERT_HEADER(sizeof(short) == 2)
 ACC_COMPILE_TIME_ASSERT_HEADER(sizeof(int) == 4)
+ACC_COMPILE_TIME_ASSERT_HEADER(sizeof(long long) == 8)
+// check sane compiler mandatory flags
+ACC_COMPILE_TIME_ASSERT_HEADER(-1 == ~0) // two's complement - see http://wg21.link/P0907R4
+ACC_COMPILE_TIME_ASSERT_HEADER(0u-1 == ~0u) // two's complement - see http://wg21.link/P0907R4
 ACC_COMPILE_TIME_ASSERT_HEADER((1u << 31) << 1 == 0)
 ACC_COMPILE_TIME_ASSERT_HEADER(((int)(1u << 31)) >> 31 == -1) // arithmetic right shift
+ACC_COMPILE_TIME_ASSERT_HEADER((-1) >> 31 == -1) // arithmetic right shift
 ACC_COMPILE_TIME_ASSERT_HEADER(CHAR_MAX == 255) // -funsigned-char
-ACC_COMPILE_TIME_ASSERT_HEADER((char)(-1) > 0) // -funsigned-char
+ACC_COMPILE_TIME_ASSERT_HEADER((char)(-1) == 255) // -funsigned-char
+
+// enable/disable some warnings
+#if (ACC_CC_CLANG >= 0x0b0000)
+#  pragma clang diagnostic error "-Wsuggest-override"
+#elif (ACC_CC_GNUC >= 0x0a0000)
+   // don't enable before gcc-10 because of gcc bug #78010
+#  pragma GCC diagnostic error "-Wsuggest-override"
+#endif
+    // Some non-GLIBC toolchains do not use 'nullptr' everywhere when C++:
+    // openwrt-sdk-x86-64_gcc-11.2.0_musl.Linux-x86_64/staging_dir/
+    //   toolchain-x86_64_gcc-11.2.0_musl/include/fortify/stdlib.h:
+    //   51:32: error: zero as null pointer constant
+#if (ACC_CC_CLANG >= 0x050000)
+#  pragma clang diagnostic error "-Wzero-as-null-pointer-constant"
+#elif (ACC_CC_GNUC >= 0x040700) && defined(__GLIBC__)
+#  pragma GCC diagnostic error "-Wzero-as-null-pointer-constant"
+#endif
 
 #if (ACC_CC_MSC)
 #  pragma warning(error: 4127)
@@ -71,14 +109,9 @@ ACC_COMPILE_TIME_ASSERT_HEADER((char)(-1) > 0) // -funsigned-char
 #  pragma warning(disable: 4820) // padding added after data member
 #endif
 
-// FIXME - quick hack for arm-wince-gcc-3.4 (Debian pocketpc-*.deb packages)
-#if 1 && (ACC_ARCH_ARM) && defined(__pe__) && !defined(__CEGCC__) && !defined(_WIN32)
-#  undef HAVE_CHMOD
-#  undef HAVE_CHOWN
-#  undef HAVE_LSTAT
-#  undef HAVE_UTIME
-#endif
-
+#undef snprintf
+#undef vsnprintf
+#define HAVE_STDINT_H 1
 #define ACC_WANT_ACC_INCD_H 1
 #define ACC_WANT_ACC_INCE_H 1
 #define ACC_WANT_ACC_LIB_H 1
@@ -95,12 +128,6 @@ typedef acc_uint32_t    upx_uint32_t;
 typedef acc_int64_t     upx_int64_t;
 typedef acc_uint64_t    upx_uint64_t;
 typedef acc_uintptr_t   upx_uintptr_t;
-#define UPX_INT16_C     ACC_INT16_C
-#define UPX_UINT16_C    ACC_UINT16_C
-#define UPX_INT32_C     ACC_INT32_C
-#define UPX_UINT32_C    ACC_UINT32_C
-#define UPX_INT64_C     ACC_INT64_C
-#define UPX_UINT64_C    ACC_UINT64_C
 
 typedef unsigned char   upx_byte;
 #define upx_bytep       upx_byte *
@@ -134,11 +161,8 @@ typedef unsigned char   upx_byte;
 #define WITH_ZLIB 1
 #if (WITH_UCL)
 #  define ucl_compress_config_t REAL_ucl_compress_config_t
-#  include <ucl/uclconf.h>
-#  include <ucl/ucl.h>
-#  if !defined(UCL_VERSION) || (UCL_VERSION < 0x010300L)
-#    error "please upgrade your UCL installation"
-#  endif
+#  include <ucl/include/ucl/uclconf.h>
+#  include <ucl/include/ucl/ucl.h>
 #  undef ucl_compress_config_t
 #  undef ucl_compress_config_p
 #endif
@@ -165,8 +189,18 @@ typedef unsigned char   upx_byte;
 // see C 11 standard, Annex K
 typedef size_t upx_rsize_t;
 #define UPX_RSIZE_MAX       UPX_RSIZE_MAX_MEM
-#define UPX_RSIZE_MAX_MEM   (768 * 1024 * 1024)   // DO NOT CHANGE
+#define UPX_RSIZE_MAX_MEM   (768 * 1024 * 1024)   // DO NOT CHANGE !!!
 #define UPX_RSIZE_MAX_STR   (1024 * 1024)
+
+// using the system off_t was a bad idea even back in 199x...
+typedef upx_int64_t upx_off_t;
+#undef off_t
+#if 0
+// at some future point we can do this...
+#define off_t DO_NOT_USE_off_t
+#else
+#define off_t upx_off_t
+#endif
 
 
 /*************************************************************************
@@ -183,10 +217,10 @@ typedef size_t upx_rsize_t;
 #  define STDERR_FILENO     (fileno(stderr))
 #endif
 
-#if !(HAVE_STRCASECMP) && (HAVE_STRICMP)
+#if !(HAVE_STRCASECMP) && (HAVE_STRICMP) && !defined(strcasecmp)
 #  define strcasecmp        stricmp
 #endif
-#if !(HAVE_STRNCASECMP) && (HAVE_STRNICMP)
+#if !(HAVE_STRNCASECMP) && (HAVE_STRNICMP) && !defined(strncasecmp)
 #  define strncasecmp       strnicmp
 #endif
 
@@ -258,32 +292,53 @@ typedef size_t upx_rsize_t;
 //
 **************************************************************************/
 
-#if (ACC_CC_MSC)
-#define __packed_struct(s)      struct s {
-#define __packed_struct_end()   };
+#define CLANG_FORMAT_DUMMY_STATEMENT /*empty*/
+
+#if defined(_WIN32) && defined(__MINGW32__) && defined(__GNUC__) && !defined(__clang__)
+#  define attribute_format(a,b) __attribute__((__format__(__gnu_printf__,a,b)));
+#elif (ACC_CC_CLANG || ACC_CC_GNUC)
+#  define attribute_format(a,b) __attribute__((__format__(__printf__,a,b)));
 #else
-#define __packed_struct(s)      __acc_struct_packed(s)
-#define __packed_struct_end()   __acc_struct_packed_end()
+#  define attribute_format(a,b) /*empty*/
+#endif
+
+inline void NO_printf(const char *, ...) attribute_format(1, 2);
+inline void NO_fprintf(FILE *, const char *, ...) attribute_format(2, 3);
+inline void NO_printf(const char *, ...) {}
+inline void NO_fprintf(FILE *, const char *, ...) {}
+
+#if !defined(__has_builtin)
+#  define __has_builtin(x)      0
+#endif
+
+#if __has_builtin(__builtin_memcpy_inline)
+#  define upx_memcpy_inline     __builtin_memcpy_inline
+#elif __has_builtin(__builtin_memcpy)
+#  define upx_memcpy_inline     __builtin_memcpy
+#elif defined(__GNUC__)
+#  define upx_memcpy_inline     __builtin_memcpy
+#else
+#  define upx_memcpy_inline     memcpy
 #endif
 
 #define UNUSED(var)             ACC_UNUSED(var)
 #define COMPILE_TIME_ASSERT(e)  ACC_COMPILE_TIME_ASSERT(e)
 
-#define __COMPILE_TIME_ASSERT_ALIGNOF_SIZEOF(a,b) { \
+// TODO cleanup: we now require C++14, so remove all __packed_struct usage
+#define __packed_struct(s)      struct alignas(1) s {
+#define __packed_struct_end()   };
+
+#define COMPILE_TIME_ASSERT_ALIGNOF_USING_SIZEOF__(a,b) { \
      typedef a acc_tmp_a_t; typedef b acc_tmp_b_t; \
-     __packed_struct(acc_tmp_t) acc_tmp_b_t x; acc_tmp_a_t y; acc_tmp_b_t z; __packed_struct_end() \
+     struct alignas(1) acc_tmp_t { acc_tmp_b_t x; acc_tmp_a_t y; acc_tmp_b_t z; }; \
      COMPILE_TIME_ASSERT(sizeof(struct acc_tmp_t) == 2*sizeof(b)+sizeof(a)) \
-     COMPILE_TIME_ASSERT(sizeof(((acc_tmp_t*)0)->x)+sizeof(((acc_tmp_t*)0)->y)+sizeof(((acc_tmp_t*)0)->z) == 2*sizeof(b)+sizeof(a)) \
+     COMPILE_TIME_ASSERT(sizeof(((acc_tmp_t*)nullptr)->x)+sizeof(((acc_tmp_t*)nullptr)->y)+sizeof(((acc_tmp_t*)nullptr)->z) == 2*sizeof(b)+sizeof(a)) \
    }
-#if defined(__acc_alignof)
-#  define __COMPILE_TIME_ASSERT_ALIGNOF(a,b) \
-     __COMPILE_TIME_ASSERT_ALIGNOF_SIZEOF(a,b) \
-     COMPILE_TIME_ASSERT(__acc_alignof(a) == sizeof(b))
-#else
-#  define __COMPILE_TIME_ASSERT_ALIGNOF(a,b) \
-     __COMPILE_TIME_ASSERT_ALIGNOF_SIZEOF(a,b)
-#endif
-#define COMPILE_TIME_ASSERT_ALIGNED1(a)     __COMPILE_TIME_ASSERT_ALIGNOF(a,char)
+#define COMPILE_TIME_ASSERT_ALIGNOF__(a,b) \
+   COMPILE_TIME_ASSERT_ALIGNOF_USING_SIZEOF__(a,b) \
+   COMPILE_TIME_ASSERT(__acc_alignof(a) == sizeof(b)) \
+   COMPILE_TIME_ASSERT(alignof(a) == sizeof(b))
+#define COMPILE_TIME_ASSERT_ALIGNED1(a)     COMPILE_TIME_ASSERT_ALIGNOF__(a,char)
 
 #define TABLESIZE(table)    ((sizeof(table)/sizeof((table)[0])))
 
@@ -301,13 +356,14 @@ template <class T>
 inline const T& UPX_MIN(const T& a, const T& b) { if (a < b) return a; return b; }
 
 
-// An Array allocates memory on the heap, but automatically
+// An Array allocates memory on the heap, and automatically
 // gets destructed when leaving scope or on exceptions.
 #define Array(type, var, size) \
     MemBuffer var ## _membuf(mem_size(sizeof(type), size)); \
     type * const var = ACC_STATIC_CAST(type *, var ## _membuf.getVoidPtr())
 
 #define ByteArray(var, size)    Array(unsigned char, var, size)
+
 
 class noncopyable
 {
@@ -319,6 +375,27 @@ private:
     const noncopyable& operator=(const noncopyable &); // undefined
 };
 
+
+namespace compile_time {
+constexpr bool string_eq(const char *a, const char *b) {
+    return *a == *b && (*a == '\0' || string_eq(a + 1, b + 1));
+}
+constexpr bool string_lt(const char *a, const char *b) {
+    return (unsigned char)*a < (unsigned char)*b || (*a != '\0' && *a == *b && string_lt(a + 1, b + 1));
+}
+constexpr bool string_ne(const char *a, const char *b) {
+    return !string_eq(a, b);
+}
+constexpr bool string_gt(const char *a, const char *b) {
+    return string_lt(b, a);
+}
+constexpr bool string_le(const char *a, const char *b) {
+    return !string_lt(b, a);
+}
+constexpr bool string_ge(const char *a, const char *b) {
+    return !string_lt(a, b);
+}
+}
 
 /*************************************************************************
 // constants
@@ -400,10 +477,10 @@ private:
 
 #define UPX_F_MACH_ARM64EL      37
 
-#define UPX_F_MACH_PPC64LE      38
+//#define UPX_F_MACH_PPC64LE      38            // DOES NOT EXIST
 #define UPX_F_LINUX_ELFPPC64LE  39
 #define UPX_F_VMLINUX_PPC64LE   40
-#define UPX_F_DYLIB_PPC64LE     41
+//#define UPX_F_DYLIB_PPC64LE     41            // DOES NOT EXIST
 
 #define UPX_F_LINUX_ELF64_ARM   42
 
@@ -423,12 +500,6 @@ private:
 #define UPX_F_VMLINUX_PPC64     141
 #define UPX_F_DYLIB_PPC64       142
 
-// compression methods
-#define M_ALL           (-1)
-#define M_END           (-2)
-#define M_NONE          (-3)
-#define M_SKIP          (-4)
-#define M_ULTRA_BRUTE   (-5)
 // compression methods - DO NOT CHANGE
 #define M_NRV2B_LE32    2
 #define M_NRV2B_8       3
@@ -444,6 +515,12 @@ private:
 //#define M_CL1B_LE16     13
 #define M_LZMA          14
 #define M_DEFLATE       15      /* zlib */
+// compression methods internal usage
+#define M_ALL           (-1)
+#define M_END           (-2)
+#define M_NONE          (-3)
+#define M_SKIP          (-4)
+#define M_ULTRA_BRUTE   (-5)
 
 #define M_IS_NRV2B(x)   ((x) >= M_NRV2B_LE32 && (x) <= M_NRV2B_LE16)
 #define M_IS_NRV2D(x)   ((x) >= M_NRV2D_LE32 && (x) <= M_NRV2D_LE16)
@@ -576,7 +653,7 @@ struct upx_compress_config_t
     void reset() { conf_lzma.reset(); conf_ucl.reset(); conf_zlib.reset(); }
 };
 
-#define NULL_cconf  ((upx_compress_config_t *) NULL)
+#define NULL_cconf  ((upx_compress_config_t *) nullptr)
 
 
 /*************************************************************************
@@ -635,74 +712,70 @@ struct upx_compress_result_t
 // globals
 **************************************************************************/
 
-#include "snprintf.h"   // must get included first!
-#include "stdcxx.h"
+#include "util/snprintf.h"   // must get included first!
+
+#include <exception>
+#include <new>
+#include <type_traits>
+#include <typeinfo>
+
 #include "options.h"
 #include "except.h"
 #include "bele.h"
-#include "util.h"
 #include "console.h"
-
+#include "util/util.h"
 
 // classes
 class ElfLinker;
 typedef ElfLinker Linker;
 
+// util/membuffer.h
+class MemBuffer;
+void *membuffer_get_void_ptr(MemBuffer &mb);
+unsigned membuffer_get_size(MemBuffer &mb);
+
+#include "util/xspan.h"
+
+//#define DOCTEST_CONFIG_DISABLE 1
+#include <doctest/doctest/parts/doctest_fwd.h>
+
+// util/dt_check.cpp
+void upx_compiler_sanity_check();
+int upx_doctest_check();
+int upx_doctest_check(int argc, char **argv);
 
 // main.cpp
 extern const char *progname;
-bool set_exit_code(int ec);
-#if (ACC_CC_CLANG || ACC_CC_GNUC || ACC_CC_LLVM || ACC_CC_PATHSCALE)
-void e_exit(int ec) __attribute__((__noreturn__));
-#else
-void e_exit(int ec);
-#endif
-
+bool main_set_exit_code(int ec);
+int main_get_options(int argc, char **argv);
+void main_get_envoptions();
+int upx_main(int argc, char *argv[]);
 
 // msg.cpp
 void printSetNl(int need_nl);
-void printClearLine(FILE *f = NULL);
+void printClearLine(FILE *f = nullptr);
 void printErr(const char *iname, const Throwable *e);
 void printUnhandledException(const char *iname, const std::exception *e);
-#if (ACC_CC_CLANG || ACC_CC_GNUC || ACC_CC_LLVM || ACC_CC_PATHSCALE)
-void __acc_cdecl_va printErr(const char *iname, const char *format, ...)
-        __attribute__((__format__(__printf__,2,3)));
-void __acc_cdecl_va printWarn(const char *iname, const char *format, ...)
-        __attribute__((__format__(__printf__,2,3)));
-#else
-void __acc_cdecl_va printErr(const char *iname, const char *format, ...);
-void __acc_cdecl_va printWarn(const char *iname, const char *format, ...);
-#endif
+void printErr(const char *iname, const char *format, ...) attribute_format(2, 3);
+void printWarn(const char *iname, const char *format, ...) attribute_format(2, 3);
 
-#if (ACC_CC_CLANG || ACC_CC_GNUC || ACC_CC_LLVM || ACC_CC_PATHSCALE)
-void __acc_cdecl_va infoWarning(const char *format, ...)
-        __attribute__((__format__(__printf__,1,2)));
-void __acc_cdecl_va infoHeader(const char *format, ...)
-        __attribute__((__format__(__printf__,1,2)));
-void __acc_cdecl_va info(const char *format, ...)
-        __attribute__((__format__(__printf__,1,2)));
-#else
-void __acc_cdecl_va infoWarning(const char *format, ...);
-void __acc_cdecl_va infoHeader(const char *format, ...);
-void __acc_cdecl_va info(const char *format, ...);
-#endif
+void infoWarning(const char *format, ...) attribute_format(1, 2);
+void infoHeader(const char *format, ...) attribute_format(1, 2);
+void info(const char *format, ...) attribute_format(1, 2);
 void infoHeader();
 void infoWriting(const char *what, long size);
 
-
 // work.cpp
 void do_one_file(const char *iname, char *oname);
-void do_files(int i, int argc, char *argv[]);
-
+int do_files(int i, int argc, char *argv[]);
 
 // help.cpp
 extern const char gitrev[];
-void show_head(void);
+void show_head();
 void show_help(int verbose=0);
-void show_license(void);
-void show_usage(void);
-void show_version(int);
-
+void show_license();
+void show_usage();
+void show_version(bool one_line=false);
 
 // compress.cpp
 unsigned upx_adler32(const void *buf, unsigned len, unsigned adler=1);
@@ -725,13 +798,30 @@ int upx_test_overlap       ( const upx_bytep buf,
                                    int method,
                              const upx_compress_result_t *cresult );
 
+/*************************************************************************
+// raw_bytes() - get underlying memory from checked buffers/pointers.
+// This is overloaded by various utility classes like BoundedPtr,
+// MemBuffer and Span.
+//
+// Note that the pointer type is retained, the "_bytes" hints size_in_bytes
+**************************************************************************/
+
+// default: for any regular pointer, raw_bytes() is just the pointer itself
+template <class T>
+inline T *raw_bytes(T *ptr, size_t size_in_bytes) {
+    if (size_in_bytes > 0) {
+        if __acc_very_unlikely (ptr == nullptr)
+            throwInternalError("raw_bytes unexpected NULL ptr");
+    }
+    return ptr;
+}
+
 
 #if (ACC_OS_CYGWIN || ACC_OS_DOS16 || ACC_OS_DOS32 || ACC_OS_EMX || ACC_OS_OS2 || ACC_OS_OS216 || ACC_OS_WIN16 || ACC_OS_WIN32 || ACC_OS_WIN64)
 #  if defined(INVALID_HANDLE_VALUE) || defined(MAKEWORD) || defined(RT_CURSOR)
 #    error "something pulled in <windows.h>"
 #  endif
 #endif
-
 
 #endif /* already included */
 

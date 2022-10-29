@@ -2,9 +2,9 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2020 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2020 Laszlo Molnar
-   Copyright (C) 2000-2020 John F. Reiser
+   Copyright (C) 1996-2022 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2022 Laszlo Molnar
+   Copyright (C) 2000-2022 John F. Reiser
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -90,7 +90,7 @@ fp .req x29
         mov a6,ldst  // &outSizeProcessed
         ldr a5,[a6]  // outSize
         mov a4,dst  // outp
-        add a3,sp,#8  // &inSizeProcessed
+        add a3,sp,#NBPW  // &inSizeProcessed
         sub w2,lsrc,#2  // inSize
         mov a1,src  // inp
 State= 0
@@ -104,22 +104,19 @@ State= 0
         strb t1,[a0,#1]
         and  t0,t0,#0xf  // lib_context_bits
         strb t0,[a0,#0]
-        bl 1f  // the call
+        bl ClangLzmaDecode  // the call
 
 eof_lzma:
         mov sp,fp
-        mov x4,x0  // save result value
+        mov x5,x0  // save result value
         POP4(x0,x1, fp,lr)  // x0= orig_dst; x1= plen_dst
         ldr x1,[x1]  // outSizeProcessed
 
         add x1,x1,x0  // last
 cache_lzma:
-        dc cvau,x0  // Clean by VA to point of Unification
-        ic ivau,x0  // Invalidate by VA to point of Unification
-        add x0,x0,#64  // next line
-        cmp x0,x1; blo cache_lzma
+        clear_cache  // x0= lo; x1= hi; uses x2-x4
 
-        mov x0,x4  // result value
+        mov x0,x5  // result value
         ret
 
 #undef t0
@@ -138,7 +135,7 @@ cache_lzma:
 #undef a5
 #undef a6
 
-1:  // entry to C-lang LzmaDecode
+ClangLzmaDecode:  // entry to C-lang LzmaDecode in next section
 
   section LZMA_DEC20
 #include "lzma_d_cf.S"

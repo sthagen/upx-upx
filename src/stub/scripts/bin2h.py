@@ -1,11 +1,11 @@
-#! /usr/bin/env python
+#! /usr/bin/env python2
 ## vim:set ts=4 sw=4 et: -*- coding: utf-8 -*-
 #
 #  bin2h.py --
 #
 #  This file is part of the UPX executable compressor.
 #
-#  Copyright (C) 1996-2020 Markus Franz Xaver Johannes Oberhumer
+#  Copyright (C) 1996-2022 Markus Franz Xaver Johannes Oberhumer
 #  All Rights Reserved.
 #
 #  UPX and the UCL library are free software; you can redistribute them
@@ -49,9 +49,9 @@ def w_header_c(w, ifile, ofile, n):
     w("""\n\
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2020 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2020 Laszlo Molnar
-   Copyright (C) 2000-2020 John F. Reiser
+   Copyright (C) 1996-2022 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2022 Laszlo Molnar
+   Copyright (C) 2000-2022 John F. Reiser
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them

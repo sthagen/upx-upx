@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2020 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2020 Laszlo Molnar
+   Copyright (C) 1996-2022 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2022 Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -28,34 +28,6 @@
 
 #include "conf.h"
 #include "compress.h"
-#if !(WITH_UCL)
-extern int compress_ucl_dummy;
-int compress_ucl_dummy = 0;
-#else
-
-#if 1 && !(UCL_USE_ASM) && (ACC_ARCH_I386)
-#  if (ACC_CC_CLANG || ACC_CC_GNUC || ACC_CC_INTELC || ACC_CC_MSC || ACC_CC_WATCOMC)
-#    define UCL_USE_ASM 1
-#  endif
-#endif
-#if (UCL_NO_ASM)
-#  undef UCL_USE_ASM
-#endif
-#if (ACC_CFG_NO_UNALIGNED)
-#  undef UCL_USE_ASM
-#endif
-#if 1 && (UCL_USE_ASM)
-#  include <ucl/ucl_asm.h>
-#  define ucl_nrv2b_decompress_safe_8       ucl_nrv2b_decompress_asm_safe_8
-#  define ucl_nrv2b_decompress_safe_le16    ucl_nrv2b_decompress_asm_safe_le16
-#  define ucl_nrv2b_decompress_safe_le32    ucl_nrv2b_decompress_asm_safe_le32
-#  define ucl_nrv2d_decompress_safe_8       ucl_nrv2d_decompress_asm_safe_8
-#  define ucl_nrv2d_decompress_safe_le16    ucl_nrv2d_decompress_asm_safe_le16
-#  define ucl_nrv2d_decompress_safe_le32    ucl_nrv2d_decompress_asm_safe_le32
-#  define ucl_nrv2e_decompress_safe_8       ucl_nrv2e_decompress_asm_safe_8
-#  define ucl_nrv2e_decompress_safe_le16    ucl_nrv2e_decompress_asm_safe_le16
-#  define ucl_nrv2e_decompress_safe_le32    ucl_nrv2e_decompress_asm_safe_le32
-#endif
 
 
 /*************************************************************************
@@ -106,13 +78,13 @@ int upx_ucl_compress       ( const upx_bytep src, unsigned  src_len,
                                    upx_compress_result_t *cresult )
 {
     int r;
-    assert(level > 0); assert(cresult != NULL);
+    assert(level > 0); assert(cresult != nullptr);
 
     COMPILE_TIME_ASSERT(sizeof(ucl_compress_config_t) == sizeof(REAL_ucl_compress_config_t))
 
     ucl_progress_callback_t cb;
-    cb.callback = 0;
-    cb.user = NULL;
+    cb.callback = nullptr;
+    cb.user = nullptr;
     if (cb_parm && cb_parm->nprogress) {
         cb.callback = wrap_nprogress_ucl;
         cb.user = cb_parm;
@@ -188,31 +160,31 @@ int upx_ucl_decompress     ( const upx_bytep src, unsigned  src_len,
     switch (method)
     {
     case M_NRV2B_8:
-        r = ucl_nrv2b_decompress_safe_8(src,src_len,dst,dst_len,NULL);
+        r = ucl_nrv2b_decompress_safe_8(src,src_len,dst,dst_len,nullptr);
         break;
     case M_NRV2B_LE16:
-        r = ucl_nrv2b_decompress_safe_le16(src,src_len,dst,dst_len,NULL);
+        r = ucl_nrv2b_decompress_safe_le16(src,src_len,dst,dst_len,nullptr);
         break;
     case M_NRV2B_LE32:
-        r = ucl_nrv2b_decompress_safe_le32(src,src_len,dst,dst_len,NULL);
+        r = ucl_nrv2b_decompress_safe_le32(src,src_len,dst,dst_len,nullptr);
         break;
     case M_NRV2D_8:
-        r = ucl_nrv2d_decompress_safe_8(src,src_len,dst,dst_len,NULL);
+        r = ucl_nrv2d_decompress_safe_8(src,src_len,dst,dst_len,nullptr);
         break;
     case M_NRV2D_LE16:
-        r = ucl_nrv2d_decompress_safe_le16(src,src_len,dst,dst_len,NULL);
+        r = ucl_nrv2d_decompress_safe_le16(src,src_len,dst,dst_len,nullptr);
         break;
     case M_NRV2D_LE32:
-        r = ucl_nrv2d_decompress_safe_le32(src,src_len,dst,dst_len,NULL);
+        r = ucl_nrv2d_decompress_safe_le32(src,src_len,dst,dst_len,nullptr);
         break;
     case M_NRV2E_8:
-        r = ucl_nrv2e_decompress_safe_8(src,src_len,dst,dst_len,NULL);
+        r = ucl_nrv2e_decompress_safe_8(src,src_len,dst,dst_len,nullptr);
         break;
     case M_NRV2E_LE16:
-        r = ucl_nrv2e_decompress_safe_le16(src,src_len,dst,dst_len,NULL);
+        r = ucl_nrv2e_decompress_safe_le16(src,src_len,dst,dst_len,nullptr);
         break;
     case M_NRV2E_LE32:
-        r = ucl_nrv2e_decompress_safe_le32(src,src_len,dst,dst_len,NULL);
+        r = ucl_nrv2e_decompress_safe_le32(src,src_len,dst,dst_len,nullptr);
         break;
     default:
         throwInternalError("unknown decompression method");
@@ -241,31 +213,31 @@ int upx_ucl_test_overlap   ( const upx_bytep buf,
     switch (method)
     {
     case M_NRV2B_8:
-        r = ucl_nrv2b_test_overlap_8(buf,src_off,src_len,dst_len,NULL);
+        r = ucl_nrv2b_test_overlap_8(buf,src_off,src_len,dst_len,nullptr);
         break;
     case M_NRV2B_LE16:
-        r = ucl_nrv2b_test_overlap_le16(buf,src_off,src_len,dst_len,NULL);
+        r = ucl_nrv2b_test_overlap_le16(buf,src_off,src_len,dst_len,nullptr);
         break;
     case M_NRV2B_LE32:
-        r = ucl_nrv2b_test_overlap_le32(buf,src_off,src_len,dst_len,NULL);
+        r = ucl_nrv2b_test_overlap_le32(buf,src_off,src_len,dst_len,nullptr);
         break;
     case M_NRV2D_8:
-        r = ucl_nrv2d_test_overlap_8(buf,src_off,src_len,dst_len,NULL);
+        r = ucl_nrv2d_test_overlap_8(buf,src_off,src_len,dst_len,nullptr);
         break;
     case M_NRV2D_LE16:
-        r = ucl_nrv2d_test_overlap_le16(buf,src_off,src_len,dst_len,NULL);
+        r = ucl_nrv2d_test_overlap_le16(buf,src_off,src_len,dst_len,nullptr);
         break;
     case M_NRV2D_LE32:
-        r = ucl_nrv2d_test_overlap_le32(buf,src_off,src_len,dst_len,NULL);
+        r = ucl_nrv2d_test_overlap_le32(buf,src_off,src_len,dst_len,nullptr);
         break;
     case M_NRV2E_8:
-        r = ucl_nrv2e_test_overlap_8(buf,src_off,src_len,dst_len,NULL);
+        r = ucl_nrv2e_test_overlap_8(buf,src_off,src_len,dst_len,nullptr);
         break;
     case M_NRV2E_LE16:
-        r = ucl_nrv2e_test_overlap_le16(buf,src_off,src_len,dst_len,NULL);
+        r = ucl_nrv2e_test_overlap_le16(buf,src_off,src_len,dst_len,nullptr);
         break;
     case M_NRV2E_LE32:
-        r = ucl_nrv2e_test_overlap_le32(buf,src_off,src_len,dst_len,NULL);
+        r = ucl_nrv2e_test_overlap_le32(buf,src_off,src_len,dst_len,nullptr);
         break;
     default:
         throwInternalError("unknown decompression method");
@@ -290,10 +262,8 @@ int upx_ucl_init(void)
 {
     if (ucl_init() != UCL_E_OK)
         return -1;
-#if defined(UPX_OFFICIAL_BUILD)
-    if (UCL_VERSION != ucl_version())
+    if (UCL_VERSION != ucl_version() || strcmp(UCL_VERSION_STRING, ucl_version_string()) != 0)
         return -2;
-#endif
     ucl_set_malloc_hooks(my_malloc, my_free);
     return 0;
 }
@@ -315,6 +285,60 @@ unsigned upx_ucl_crc32(const void *buf, unsigned len, unsigned crc)
 }
 #endif
 
-#endif /* WITH_UCL */
+/*************************************************************************
+// Debug checks
+**************************************************************************/
+
+#if DEBUG && 1
+
+#include "util/membuffer.h"
+
+static bool check_ucl(const int method, const unsigned expected_c_len) {
+    const unsigned u_len = 16384;
+    const unsigned c_extra = 4096;
+    MemBuffer u_buf, c_buf, d_buf;
+    unsigned c_len, d_len;
+    upx_compress_result_t cresult;
+    int r;
+    const int level = 3; // don't waste time
+
+    u_buf.alloc(u_len);
+    memset(u_buf, 0, u_len);
+    c_buf.allocForCompression(u_len, c_extra);
+    d_buf.allocForDecompression(u_len);
+
+    c_len = c_buf.getSize() - c_extra;
+    r = upx_ucl_compress(u_buf, u_len, c_buf + c_extra, &c_len, nullptr, method, level, NULL_cconf, &cresult);
+    if (r != 0 || c_len != expected_c_len) return false;
+
+    d_len = d_buf.getSize();
+    r = upx_ucl_decompress(c_buf + c_extra, c_len, d_buf, &d_len, method, nullptr);
+    if (r != 0 || d_len != u_len) return false;
+    if (memcmp(u_buf, d_buf, u_len) != 0) return false;
+
+    d_len = u_len - 1;
+    r = upx_ucl_decompress(c_buf + c_extra, c_len, d_buf, &d_len, method, nullptr);
+    if (r == 0) return false;
+
+    // TODO: rewrite Packer::findOverlapOverhead() so that we can test it here
+    //unsigned x_len = d_len;
+    //r = upx_ucl_test_overlap(c_buf, u_buf, c_extra, c_len, &x_len, method, nullptr);
+    return true;
+}
+
+TEST_CASE("compress_ucl") {
+    CHECK(check_ucl(M_NRV2B_8, 34));
+    CHECK(check_ucl(M_NRV2B_LE16, 34));
+    CHECK(check_ucl(M_NRV2B_LE32, 34));
+    CHECK(check_ucl(M_NRV2D_8, 32));
+    CHECK(check_ucl(M_NRV2D_LE16, 32));
+    CHECK(check_ucl(M_NRV2D_LE32, 34));
+    CHECK(check_ucl(M_NRV2E_8, 32));
+    CHECK(check_ucl(M_NRV2E_LE16, 32));
+    CHECK(check_ucl(M_NRV2E_LE32, 34));
+}
+
+#endif // DEBUG
+
 
 /* vim:set ts=4 sw=4 et: */

@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2020 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2020 Laszlo Molnar
+   Copyright (C) 1996-2022 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2022 Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -39,7 +39,7 @@ class OutputFile;
 
 class LeFile
 {
-public:
+protected:
     LeFile(InputFile *);
     virtual ~LeFile();
 
@@ -137,42 +137,42 @@ protected:
 
     virtual void readObjectTable();
     virtual void writeObjectTable();
-    //virtual void encodeObjectTable(){oobject_table = iobject_table; iobject_table = NULL;}
+    //virtual void encodeObjectTable(){oobject_table = iobject_table; iobject_table = nullptr;}
     //virtual void decodeObjectTable(){encodeObjectTable();}
 
     virtual void readFixupPageTable();
     virtual void writeFixupPageTable();
-    //virtual void encodeFixupPageTable(){ofpage_table = ifpage_table; ifpage_table = NULL;}
+    //virtual void encodeFixupPageTable(){ofpage_table = ifpage_table; ifpage_table = nullptr;}
     //virtual void decodeFixupPageTable(){encodeFixupPageTable();}
 
     virtual void readPageMap();
     virtual void writePageMap();
-    virtual void encodePageMap(){opm_entries = ipm_entries; ipm_entries = NULL;}
+    virtual void encodePageMap(){opm_entries = ipm_entries; ipm_entries = nullptr;}
     virtual void decodePageMap(){encodePageMap();}
 
     virtual void readResidentNames();
     virtual void writeResidentNames();
-    virtual void encodeResidentNames(){ores_names = ires_names; ires_names = NULL;}
+    virtual void encodeResidentNames(){ores_names = ires_names; ires_names = nullptr;}
     virtual void decodeResidentNames(){encodeResidentNames();}
 
     virtual void readNonResidentNames();
     virtual void writeNonResidentNames();
-    virtual void encodeNonResidentNames(){ononres_names = inonres_names; inonres_names = NULL;}
+    virtual void encodeNonResidentNames(){ononres_names = inonres_names; inonres_names = nullptr;}
     virtual void decodeNonResidentNames(){encodeNonResidentNames();}
 
     virtual void readEntryTable();
     virtual void writeEntryTable();
-    //virtual void encodeEntryTable(){oentries = ientries; ientries = NULL;}
+    //virtual void encodeEntryTable(){oentries = ientries; ientries = nullptr;}
     //virtual void decodeEntryTable(){encodeEntryTable();}
 
     virtual void readFixups();
     virtual void writeFixups();
-    //virtual void encodeFixups(){ofixups = ifixups; ifixups = NULL;}
+    //virtual void encodeFixups(){ofixups = ifixups; ifixups = nullptr;}
     //virtual void decodeFixups(){encodeFixups();}
 
     virtual void readImage();
     virtual void writeImage();
-    //virtual void encodeImage(){oimage = iimage; iimage = NULL;}
+    //virtual void encodeImage(){oimage = iimage; iimage = nullptr;}
     //virtual void decodeImage(){encodeImage();}
 
     void countFixups(unsigned *) const;
@@ -198,8 +198,10 @@ protected:
     upx_byte *ofixups;
     upx_byte *inonres_names;
     upx_byte *ononres_names;
-    MemBuffer iimage;
-    MemBuffer oimage;
+    MemBuffer mb_iimage;
+    SPAN_0(upx_byte) iimage = nullptr;
+    MemBuffer mb_oimage;
+    SPAN_0(upx_byte) oimage = nullptr;
     upx_byte *ientries;
     upx_byte *oentries;
 
@@ -214,8 +216,8 @@ protected:
 
 private:
     // disable copy and assignment
-    LeFile(const LeFile &); // {}
-    LeFile& operator= (const LeFile &); // { return *this; }
+    LeFile(const LeFile &) = delete;
+    LeFile& operator= (const LeFile &) = delete;
 };
 
 

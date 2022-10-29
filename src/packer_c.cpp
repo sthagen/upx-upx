@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2020 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2020 Laszlo Molnar
+   Copyright (C) 1996-2022 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2022 Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -38,13 +38,8 @@
 
 bool Packer::isValidCompressionMethod(int method)
 {
-    if (M_IS_LZMA(method)) {
-#if !(WITH_LZMA)
-        assert(0 && "Internal error - LZMA not compiled in");
-#else
+    if (M_IS_LZMA(method))
         return true;
-#endif
-    }
     return (method >= M_NRV2B_LE32 && method <= M_LZMA);
 }
 
@@ -219,7 +214,7 @@ const char *Packer::getDecompressorSections() const
         ||  UPX_F_VMLINUX_PPC32    ==ph.format
         ||  UPX_F_VMLINUX_PPC64LE  ==ph.format
         ||  UPX_F_MACH_PPC32       ==ph.format
-        ||  UPX_F_MACH_PPC64LE     ==ph.format
+        ||  UPX_F_MACH_PPC64       ==ph.format
         ||  UPX_F_MACH_i386        ==ph.format
         ||  UPX_F_DYLIB_i386       ==ph.format
     ) {
@@ -228,7 +223,7 @@ const char *Packer::getDecompressorSections() const
         return opt->small ? lzma_small  : lzma_fast;
     }
     throwInternalError("bad decompressor");
-    return NULL;
+    return nullptr;
 }
 
 
@@ -262,7 +257,7 @@ void Packer::defineDecompressorSymbols()
     ||  UPX_F_VMLINUX_PPC32    ==ph.format
     ||  UPX_F_VMLINUX_PPC64LE  ==ph.format
     ||  UPX_F_MACH_PPC32       ==ph.format
-    ||  UPX_F_MACH_PPC64LE     ==ph.format
+    ||  UPX_F_MACH_PPC64       ==ph.format
     ||  UPX_F_MACH_i386        ==ph.format
     ||  UPX_F_DYLIB_i386       ==ph.format
     ) {
@@ -277,7 +272,7 @@ void Packer::defineDecompressorSymbols()
             (res->lit_pos_bits << 8) |
             (res->pos_bits << 16);
         if (linker->bele->isBE()) // big endian - bswap32
-            acc_swab32s(&properties);
+            properties = bswap32(properties);
 
         linker->defineSymbol("lzma_properties", properties);
         // len - 2 because of properties

@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2020 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2020 Laszlo Molnar
+   Copyright (C) 1996-2022 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2022 Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -33,9 +33,6 @@
 
 #if (ACC_OS_DOS32) && defined(__DJGPP__)
 #define USE_FTIME 1
-#elif (ACC_OS_WIN32 && ACC_CC_MWERKS) && defined(__MSL__)
-#include <utime.h>
-#define USE_UTIME 1
 #elif ((ACC_OS_WIN32 || ACC_OS_WIN64) && (ACC_CC_INTELC || ACC_CC_MSC))
 #define USE__FUTIME 1
 #elif (HAVE_UTIME)
@@ -193,15 +190,15 @@ void do_one_file(const char *iname, char *oname) {
             r = chmod(iname, 0777);
             IGNORE_ERROR(r);
 #endif
-            File::unlink(iname);
+            FileBase::unlink(iname);
         } else {
             // make backup
             char bakname[ACC_FN_PATH_MAX + 1];
             if (!makebakname(bakname, sizeof(bakname), iname))
                 throwIOException("could not create a backup file name");
-            File::rename(iname, bakname);
+            FileBase::rename(iname, bakname);
         }
-        File::rename(oname, iname);
+        FileBase::rename(oname, iname);
     }
 
     // copy file attributes
@@ -254,7 +251,8 @@ static void unlink_ofile(char *oname) {
     }
 }
 
-void do_files(int i, int argc, char *argv[]) {
+int do_files(int i, int argc, char *argv[]) {
+    upx_compiler_sanity_check();
     if (opt->verbose >= 1) {
         show_head();
         UiPacker::uiHeader();
@@ -273,34 +271,41 @@ void do_files(int i, int argc, char *argv[]) {
             unlink_ofile(oname);
             if (opt->verbose >= 1 || (opt->verbose >= 0 && !e.isWarning()))
                 printErr(iname, &e);
-            set_exit_code(e.isWarning() ? EXIT_WARN : EXIT_ERROR);
+            main_set_exit_code(e.isWarning() ? EXIT_WARN : EXIT_ERROR);
+            // this is not fatal, continue processing more files
         } catch (const Error &e) {
             unlink_ofile(oname);
             printErr(iname, &e);
-            e_exit(EXIT_ERROR);
+            main_set_exit_code(EXIT_ERROR);
+            return -1; // fatal error
         } catch (std::bad_alloc *e) {
             unlink_ofile(oname);
             printErr(iname, "out of memory");
             UNUSED(e);
             // delete e;
-            e_exit(EXIT_ERROR);
+            main_set_exit_code(EXIT_ERROR);
+            return -1; // fatal error
         } catch (const std::bad_alloc &) {
             unlink_ofile(oname);
             printErr(iname, "out of memory");
-            e_exit(EXIT_ERROR);
+            main_set_exit_code(EXIT_ERROR);
+            return -1; // fatal error
         } catch (std::exception *e) {
             unlink_ofile(oname);
             printUnhandledException(iname, e);
             // delete e;
-            e_exit(EXIT_ERROR);
+            main_set_exit_code(EXIT_ERROR);
+            return -1; // fatal error
         } catch (const std::exception &e) {
             unlink_ofile(oname);
             printUnhandledException(iname, &e);
-            e_exit(EXIT_ERROR);
+            main_set_exit_code(EXIT_ERROR);
+            return -1; // fatal error
         } catch (...) {
             unlink_ofile(oname);
-            printUnhandledException(iname, NULL);
-            e_exit(EXIT_ERROR);
+            printUnhandledException(iname, nullptr);
+            main_set_exit_code(EXIT_ERROR);
+            return -1; // fatal error
         }
     }
 
@@ -314,6 +319,7 @@ void do_files(int i, int argc, char *argv[]) {
         UiPacker::uiTestTotal();
     else if (opt->cmd == CMD_FILEINFO)
         UiPacker::uiFileInfoTotal();
+    return 0;
 }
 
 /* vim:set ts=4 sw=4 et: */

@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2020 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2020 Laszlo Molnar
+   Copyright (C) 1996-2022 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2022 Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -63,16 +63,17 @@ const int *PackExe::getCompressionMethods(int method, int level) const
 {
     bool small = ih_imagesize <= 256*1024;
     // disable lzma for "--brute" unless explicitly given "--lzma"
-    // WARNING: this side effect persists for later files!
-    if (opt->all_methods_use_lzma && !opt->method_lzma_seen)
-        opt->all_methods_use_lzma = false;
+    // WARNING: this side effect may persists for later files;
+    //   but note that class PackMaster creates per-file local options
+    if (opt->all_methods_use_lzma == 1 && !opt->method_lzma_seen)
+        opt->all_methods_use_lzma = 0;
     return Packer::getDefaultCompressionMethods_8(method, level, small);
 }
 
 
 const int *PackExe::getFilters() const
 {
-    return NULL;
+    return nullptr;
 }
 
 
@@ -119,7 +120,7 @@ int PackExe::fillExeHeader(struct exe_header_t *eh) const
 
 void PackExe::addLoaderEpilogue(int flag)
 {
-    addLoader("EXEMAIN5", NULL);
+    addLoader("EXEMAIN5", nullptr);
     if (relocsize)
         addLoader(ph.u_len <= DI_LIMIT || (ph.u_len & 0x7fff) >= relocsize ? "EXENOADJ" : "EXEADJUS",
                   "EXERELO1",
@@ -127,19 +128,19 @@ void PackExe::addLoaderEpilogue(int flag)
                   "EXERELO2",
                   ih_exesize > 0xFE00 ? "EXEREBIG" : "",
                   "EXERELO3",
-                  NULL
+                  nullptr
                  );
     addLoader("EXEMAIN8",
               device_driver ? "DEVICEEND" : "",
               (flag & SS) ? "EXESTACK" : "",
               (flag & SP) ? "EXESTASP" : "",
               (flag & USEJUMP) ? "EXEJUMPF" : "",
-              NULL
+              nullptr
              );
     if (!(flag & USEJUMP))
         addLoader(ih.cs ? "EXERCSPO" : "",
                   "EXERETIP",
-                  NULL
+                  nullptr
                  );
 
     linker->defineSymbol("original_cs", ih.cs);
@@ -167,7 +168,7 @@ void PackExe::buildLoader(const Filter *)
                   use_clear_dirty_stack ? "LZMA_DEC31" : "",
                   "LZMA_DEC32",
                   ph.u_len > 0xffff ? "LZMA_DEC33" : "",
-                  NULL
+                  nullptr
                  );
 
         addLoaderEpilogue(flag);
@@ -196,7 +197,7 @@ void PackExe::buildLoader(const Filter *)
         compressed_lzma.allocForCompression(lsize);
         unsigned c_len_lzma = MemBuffer::getSizeForCompression(lsize);
         int r = upx_compress(loader, lsize, compressed_lzma, &c_len_lzma,
-                             NULL, M_NRV2B_LE16, 9, NULL, NULL);
+                             nullptr, M_NRV2B_LE16, 9, nullptr, nullptr);
         assert(r == UPX_E_OK); assert(c_len_lzma < lsize);
 
         info("lzma+relocator code compressed: %u -> %u", lsize, c_len_lzma);
@@ -204,15 +205,15 @@ void PackExe::buildLoader(const Filter *)
         initLoader(stub_i086_dos16_exe, sizeof(stub_i086_dos16_exe));
         // prepare loader
         if (device_driver)
-            addLoader("DEVICEENTRY,LZMADEVICE,DEVICEENTRY2", NULL);
+            addLoader("DEVICEENTRY,LZMADEVICE,DEVICEENTRY2", nullptr);
 
         linker->addSection("COMPRESSED_LZMA", compressed_lzma, c_len_lzma, 0);
         addLoader("LZMAENTRY,NRV2B160,NRVDDONE,NRVDECO1,NRVGTD00,NRVDECO2",
-                  NULL);
+                  nullptr);
 
     }
     else if (device_driver)
-        addLoader("DEVICEENTRY,DEVICEENTRY2", NULL);
+        addLoader("DEVICEENTRY,DEVICEENTRY2", nullptr);
 
     addLoader("EXEENTRY",
               M_IS_LZMA(ph.method) && device_driver ? "LONGSUB" : "SHORTSUB",
@@ -223,7 +224,7 @@ void PackExe::buildLoader(const Filter *)
               "EXEMAIN4C",
               M_IS_LZMA(ph.method) ? "COMPRESSED_LZMA_START,COMPRESSED_LZMA" : "",
               "+G5DXXXX,UPX1HEAD,EXECUTPO",
-              NULL
+              nullptr
              );
     if (ph.method == M_NRV2B_8)
         addLoader("NRV2B16S",               // decompressor
@@ -235,7 +236,7 @@ void PackExe::buildLoader(const Filter *)
                   "NRV2BEX3",
                   ph.c_len > 0xffff ? "N2B64K02" : "",
                   "NRV2BEX9",
-                  NULL
+                  nullptr
                  );
     else if (ph.method == M_NRV2D_8)
         addLoader("NRV2D16S",
@@ -247,7 +248,7 @@ void PackExe::buildLoader(const Filter *)
                   "NRV2DEX3",
                   ph.c_len > 0xffff ? "N2D64K02" : "",
                   "NRV2DEX9",
-                  NULL
+                  nullptr
                  );
     else if (ph.method == M_NRV2E_8)
         addLoader("NRV2E16S",
@@ -259,7 +260,7 @@ void PackExe::buildLoader(const Filter *)
                   "NRV2EEX3",
                   ph.c_len > 0xffff ? "N2E64K02" : "",
                   "NRV2EEX9",
-                  NULL
+                  nullptr
                  );
     else if M_IS_LZMA(ph.method)
         return;
@@ -286,10 +287,10 @@ int PackExe::readFileHeader()
     }
     ih_imagesize = ih_exesize - ih.headsize16*16;
     ih_overlay = file_size - ih_exesize;
-    if (file_size < (int)sizeof(ih)
+    if (file_size_u < sizeof(ih)
     ||  ((ih.m512 | ih.p512) && ih.m512+ih.p512*512u < sizeof (ih)))
         throwCantPack("illegal exe header");
-    if (file_size < (off_t)ih_exesize || ih_imagesize <= 0 || ih_imagesize > ih_exesize)
+    if (file_size_u < ih_exesize || ih_imagesize <= 0 || ih_imagesize > ih_exesize)
         throwCantPack("exe header corrupted");
 #if 0
     printf("dos/exe header: %d %d %d\n", ih_exesize, ih_imagesize, ih_overlay);
@@ -495,7 +496,7 @@ void PackExe::pack(OutputFile *fo)
         upx_byte out[9*relocsize/8+1024];
         unsigned in_len = relocsize;
         unsigned out_len = 0;
-        ucl_nrv2b_99_compress(w, in_len, out, &out_len, NULL, 9, NULL, NULL);
+        ucl_nrv2b_99_compress(w, in_len, out, &out_len, nullptr, 9, nullptr, nullptr);
         printf("reloc compress: %d -> %d\n", in_len, out_len);
 #endif
     }
@@ -606,8 +607,8 @@ void PackExe::pack(OutputFile *fo)
     }
 
     // g++ 3.1 does not like the following line...
-//    oh.relocoffs = offsetof(exe_header_t, firstreloc);
-    oh.relocoffs = ptr_diff(&oh.firstreloc, &oh);
+    oh.relocoffs = offsetof(exe_header_t, firstreloc);
+    //oh.relocoffs = ptr_udiff_bytes(&oh.firstreloc, &oh);
 
     linker->defineSymbol("destination_segment", oh.ss - ph.c_len / 16 - e_len / 16);
     linker->defineSymbol("source_segment", e_len / 16 + (copysize - firstcopy) / 16);
@@ -657,7 +658,7 @@ void PackExe::pack(OutputFile *fo)
     verifyOverlappingDecompression();
 
     // copy the overlay
-    copyOverlay(fo, ih_overlay, &obuf);
+    copyOverlay(fo, ih_overlay, obuf);
 //fprintf (stderr,"%x %x\n",relocsize,ph.u_len);
 
     // finally check the compression ratio
@@ -674,10 +675,10 @@ int PackExe::canUnpack()
 {
     if (!readFileHeader())
         return false;
-    const off_t off = ih.headsize16 * 16;
+    const unsigned off = ih.headsize16 * 16;
     fi->seek(off, SEEK_SET);
     bool b = readPackHeader(4096);
-    return b && (off + (off_t) ph.c_len <= file_size);
+    return b && (off + ph.c_len <= file_size_u);
 }
 
 
@@ -688,7 +689,7 @@ int PackExe::canUnpack()
 void PackExe::unpack(OutputFile *fo)
 {
     ibuf.alloc(file_size);
-    obuf.allocForUncompression(ph.u_len);
+    obuf.allocForDecompression(ph.u_len);
 
     // read the file
     fi->seek(ih.headsize16*16,SEEK_SET);
@@ -709,7 +710,7 @@ void PackExe::unpack(OutputFile *fo)
     const unsigned char flag = ibuf[imagesize];
 
     unsigned relocn = 0;
-    upx_byte *relocs = obuf + ph.u_len;
+    SPAN_S_VAR(upx_byte, relocs, obuf + ph.u_len, obuf);
 
     MemBuffer wrkmem;
     if (!(flag & NORELOC))
@@ -720,7 +721,7 @@ void PackExe::unpack(OutputFile *fo)
         wrkmem.alloc(4*MAXRELOCS);
         unsigned es = 0, ones = get_le16(relocs);
         const unsigned seghi = get_le16(relocs+2);
-        const upx_byte *p = relocs + 4;
+        SPAN_S_VAR(const upx_byte, p, relocs + 4);
 
         while (ones)
         {
@@ -738,10 +739,11 @@ void PackExe::unpack(OutputFile *fo)
                 dorel = true;
                 if (*p == 0)
                 {
-                    const upx_byte *q;
+                    SPAN_S_VAR(const upx_byte, q, obuf);
+
                     for (q = obuf+es*16+di; !(*q == 0x9a && get_le16(q+3) <= seghi); q++)
                         ;
-                    di = ptr_diff(q, obuf+es*16) + 3;
+                    di = ptr_diff_bytes(q, obuf+es*16) + 3;
                 }
                 else if (*p == 1)
                 {
@@ -767,7 +769,7 @@ void PackExe::unpack(OutputFile *fo)
             set_le32(wrkmem+4*relocn++,0);
     }
 
-    unsigned outputlen = ptr_diff(relocs, obuf) + sizeof(oh) + relocn*4;
+    unsigned outputlen = ptr_udiff_bytes(relocs, obuf) + sizeof(oh) + relocn*4;
     oh.m512 = outputlen & 511;
     oh.p512 = (outputlen + 511) >> 9;
     oh.headsize16 = 2+relocn/4;
@@ -799,10 +801,10 @@ void PackExe::unpack(OutputFile *fo)
     fo->write(&oh,sizeof(oh));
     if (relocn)
         fo->write(wrkmem,relocn*4);
-    fo->write(obuf, ptr_diff(relocs, obuf));
+    fo->write(obuf, ptr_diff_bytes(relocs, obuf));
 
     // copy the overlay
-    copyOverlay(fo, ih_overlay, &obuf);
+    copyOverlay(fo, ih_overlay, obuf);
 }
 
 

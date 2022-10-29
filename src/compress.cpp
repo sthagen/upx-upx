@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2020 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2020 Laszlo Molnar
+   Copyright (C) 1996-2022 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2022 Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -28,7 +28,7 @@
 
 #include "conf.h"
 #include "compress.h"
-#include "mem.h"
+#include "util/membuffer.h"
 
 
 /*************************************************************************
@@ -39,7 +39,7 @@ unsigned upx_adler32(const void *buf, unsigned len, unsigned adler)
 {
     if (len == 0)
         return adler;
-    assert(buf != NULL);
+    assert(buf != nullptr);
 #if 1
     return upx_ucl_adler32(buf, len, adler);
 #else
@@ -53,7 +53,7 @@ unsigned upx_crc32(const void *buf, unsigned len, unsigned crc)
 {
     if (len == 0)
         return crc;
-    assert(buf != NULL);
+    assert(buf != nullptr);
 #if 1
     return upx_ucl_crc32(buf, len, crc);
 #else
@@ -67,12 +67,12 @@ unsigned upx_crc32(const void *buf, unsigned len, unsigned crc)
 //
 **************************************************************************/
 
-int upx_compress           ( const upx_bytep src, unsigned  src_len,
-                                   upx_bytep dst, unsigned* dst_len,
-                                   upx_callback_p cb,
-                                   int method, int level,
-                             const upx_compress_config_t *cconf,
-                                   upx_compress_result_t *cresult )
+int upx_compress( const upx_bytep src, unsigned  src_len,
+                        upx_bytep dst, unsigned* dst_len,
+                        upx_callback_p cb,
+                        int method, int level,
+                  const upx_compress_config_t *cconf,
+                        upx_compress_result_t *cresult )
 {
     int r = UPX_E_ERROR;
     upx_compress_result_t cresult_buffer;
@@ -134,10 +134,10 @@ int upx_compress           ( const upx_bytep src, unsigned  src_len,
 //
 **************************************************************************/
 
-int upx_decompress         ( const upx_bytep src, unsigned  src_len,
-                                   upx_bytep dst, unsigned* dst_len,
-                                   int method,
-                             const upx_compress_result_t *cresult )
+int upx_decompress(const upx_bytep src, unsigned  src_len,
+                         upx_bytep dst, unsigned* dst_len,
+                         int method,
+                   const upx_compress_result_t *cresult )
 {
     int r = UPX_E_ERROR;
 
@@ -145,7 +145,7 @@ int upx_decompress         ( const upx_bytep src, unsigned  src_len,
     assert(src_len < *dst_len); // must be compressed
 
     if (cresult && cresult->method == 0)
-        cresult = NULL;
+        cresult = nullptr;
 
     if __acc_cte(0) {
     }
@@ -177,17 +177,17 @@ int upx_decompress         ( const upx_bytep src, unsigned  src_len,
 //
 **************************************************************************/
 
-int upx_test_overlap       ( const upx_bytep buf,
-                             const upx_bytep tbuf,
-                                   unsigned  src_off, unsigned src_len,
-                                   unsigned* dst_len,
-                                   int method,
-                             const upx_compress_result_t *cresult )
+int upx_test_overlap( const upx_bytep buf,
+                      const upx_bytep tbuf,
+                            unsigned  src_off, unsigned src_len,
+                            unsigned* dst_len,
+                            int method,
+                      const upx_compress_result_t *cresult )
 {
     int r = UPX_E_ERROR;
 
     if (cresult && cresult->method == 0)
-        cresult = NULL;
+        cresult = nullptr;
 
     assert(*dst_len > 0);
     assert(src_len < *dst_len); // must be compressed

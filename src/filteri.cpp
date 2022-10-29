@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2020 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2020 Laszlo Molnar
+   Copyright (C) 1996-2022 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2022 Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -170,7 +170,7 @@ umin(unsigned const a, unsigned const b)
 
 const FilterImp::FilterEntry FilterImp::filters[] = {
     // no filter
-    { 0x00, 0,          0, NULL, NULL, NULL },
+    { 0x00, 0,          0, nullptr, nullptr, nullptr },
 
     // 16-bit calltrick
     { 0x01, 4,          0, f_ct16_e8, u_ct16_e8, s_ct16_e8 },

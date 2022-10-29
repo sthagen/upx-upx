@@ -2,9 +2,9 @@
 *
 *  This file is part of the UPX executable compressor.
 *
-*  Copyright (C) 1996-2020 Markus Franz Xaver Johannes Oberhumer
-*  Copyright (C) 1996-2020 Laszlo Molnar
-*  Copyright (C) 2000-2020 John F. Reiser
+*  Copyright (C) 1996-2022 Markus Franz Xaver Johannes Oberhumer
+*  Copyright (C) 1996-2022 Laszlo Molnar
+*  Copyright (C) 2000-2022 John F. Reiser
 *  All Rights Reserved.
 *
 *  UPX and the UCL library are free software; you can redistribute them
@@ -277,7 +277,7 @@ hex:
 execp:
         .ascii "executable_path="  // 16 bytes
 L99:
-        bkpt
+        bkpt  // FIXME
 
 main:  // lr= &f_exp;  r7= &argc; r6= -2*NBPW + _start
         mov r_EXP,lr  // &f_decompress

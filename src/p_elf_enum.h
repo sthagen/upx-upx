@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2020 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2020 Laszlo Molnar
+   Copyright (C) 1996-2022 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2022 Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -86,11 +86,13 @@
 #ifdef WANT_PHDR_ENUM
 #undef WANT_PHDR_ENUM
     enum { // p_type
+        PT_NULL    = 0,         /* Ingore: a "comment" */
         PT_LOAD    = 1,         /* Loadable program segment */
         PT_DYNAMIC = 2,         /* Dynamic linking information */
         PT_INTERP  = 3,         /* Name of program interpreter */
         PT_NOTE    = 4,         /* Auxiliary information (esp. OpenBSD) */
         PT_PHDR    = 6          /* Entry for header table itself */
+        , PT_NUM   = 8          /* Number of defined types in low range */
         , PT_GNU_STACK = 0x6474e551      /* Indicates stack executability */
     };
 
@@ -124,6 +126,7 @@
         SHT_GROUP = 17,         /* Section group */
         SHT_SYMTAB_SHNDX = 18,  /* Extended section indeces */
         SHT_GNU_LIBLIST = 0x6ffffff7    /* Prelink library list */
+        , SHT_GNU_HASH =  0x6ffffff6    /* GNU-style hash table.  */
 
         , SHT_LOOS = 0x60000000  /* LOcal OS; SHT_ANDROID_REL{,A} is +1, +2 */
         , SHT_LOPROC = 0x70000000/* Start of processor-specific */
@@ -172,12 +175,14 @@
         DT_FINI_ARRAYSZ= 28,    /* size in bytes */
         DT_PREINIT_ARRAY  = 32, /* Array with addresses of preinit fct*/
         DT_PREINIT_ARRAYSZ= 33, /* size in bytes */
+        DT_NUM       = 35,      /* end of easy range */
+
         DT_CHECKSUM = 0x6ffffdf8,       /* Only for prelink? */
         DT_GNU_HASH = 0x6ffffef5,       /* GNU-style hash table */
         DT_VERSYM   = 0x6ffffff0,       /* version[] for each symbol */
         DT_FLAGS_1  = 0x6ffffffb,       /* DF_1_* */
         DT_VERDEF   = 0x6ffffffc,       /* version definitions[] */
-        DT_VERNEEDED= 0x6ffffffe        /* version[] needed */
+        DT_VERNEED  = 0x6ffffffe        /* version[] needed */
     };
     enum { // DT_FLAGS_1
         DF_1_NOW    = 0x00000001,  /* Set RTLD_NOW for this object.  */

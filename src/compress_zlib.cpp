@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2020 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2020 Laszlo Molnar
+   Copyright (C) 1996-2022 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2022 Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -28,7 +28,9 @@
 
 #include "conf.h"
 #include "compress.h"
-#include "mem.h"
+#include "util/membuffer.h"
+#include <zlib/zlib.h>
+#include <zlib/deflate.h>
 
 
 void zlib_compress_config_t::reset()
@@ -39,14 +41,6 @@ void zlib_compress_config_t::reset()
     window_bits.reset();
     strategy.reset();
 }
-
-
-#if !(WITH_ZLIB)
-extern int compress_zlib_dummy;
-int compress_zlib_dummy = 0;
-#else
-
-#include <zlib.h>
 
 
 static int convert_errno_from_zlib(int zr)
@@ -73,11 +67,11 @@ int upx_zlib_compress      ( const upx_bytep src, unsigned  src_len,
                                    upx_compress_result_t *cresult )
 {
     assert(method == M_DEFLATE);
-    assert(level > 0); assert(cresult != NULL);
+    assert(level > 0); assert(cresult != nullptr);
     UNUSED(cb_parm);
     int r = UPX_E_ERROR;
     int zr;
-    const zlib_compress_config_t *lcconf = cconf_parm ? &cconf_parm->conf_zlib : NULL;
+    const zlib_compress_config_t *lcconf = cconf_parm ? &cconf_parm->conf_zlib : nullptr;
     zlib_compress_result_t *res = &cresult->result_zlib;
 
     if (level == 10)
@@ -97,18 +91,19 @@ int upx_zlib_compress      ( const upx_bytep src, unsigned  src_len,
     res->dummy = 0;
 
     z_stream s;
-    s.zalloc = (alloc_func) 0;
-    s.zfree = (free_func) 0;
+    s.zalloc = (alloc_func) nullptr;
+    s.zfree = (free_func) nullptr;
     s.next_in = ACC_UNCONST_CAST(upx_bytep, src);
     s.avail_in = src_len;
     s.next_out = dst;
     s.avail_out = *dst_len;
     s.total_in = s.total_out = 0;
 
-    zr = deflateInit2(&s, level, Z_DEFLATED, 0 - (int)window_bits,
+    zr = (int)deflateInit2(&s, level, Z_DEFLATED, 0 - (int)window_bits,
                       mem_level, strategy);
     if (zr != Z_OK)
         goto error;
+    assert(s.state->level == level);
     zr = deflate(&s, Z_FINISH);
     if (zr != Z_STREAM_END)
         goto error;
@@ -151,8 +146,8 @@ int upx_zlib_decompress    ( const upx_bytep src, unsigned  src_len,
     int zr;
 
     z_stream s;
-    s.zalloc = (alloc_func) 0;
-    s.zfree = (free_func) 0;
+    s.zalloc = (alloc_func) nullptr;
+    s.zfree = (free_func) nullptr;
     s.next_in = ACC_UNCONST_CAST(upx_bytep, src);
     s.avail_in = src_len;
     s.next_out = dst;
@@ -212,7 +207,7 @@ int upx_zlib_test_overlap  ( const upx_bytep buf,
     // NOTE: there is a very tiny possibility that decompression has
     //   succeeded but the data is not restored correctly because of
     //   in-place buffer overlapping, so we use an extra memcmp().
-    if (tbuf != NULL && memcmp(tbuf, b, *dst_len) != 0)
+    if (tbuf != nullptr && memcmp(tbuf, b, *dst_len) != 0)
         return UPX_E_ERROR;
     return UPX_E_OK;
 }
@@ -224,10 +219,8 @@ int upx_zlib_test_overlap  ( const upx_bytep buf,
 
 int upx_zlib_init(void)
 {
-#if defined(UPX_OFFICIAL_BUILD)
     if (strcmp(ZLIB_VERSION, zlibVersion()) != 0)
         return -2;
-#endif
     return 0;
 }
 
@@ -250,7 +243,53 @@ unsigned upx_zlib_crc32(const void *buf, unsigned len, unsigned crc)
 }
 #endif
 
+/*************************************************************************
+// Debug checks
+**************************************************************************/
 
-#endif /* WITH_ZLIB */
+#if DEBUG && 1
+
+#include "util/membuffer.h"
+
+static bool check_zlib(const int method, const int level, const unsigned expected_c_len) {
+    const unsigned u_len = 16384;
+    const unsigned c_extra = 4096;
+    MemBuffer u_buf, c_buf, d_buf;
+    unsigned c_len, d_len;
+    upx_compress_result_t cresult;
+    int r;
+
+    u_buf.alloc(u_len);
+    memset(u_buf, 0, u_len);
+    c_buf.allocForCompression(u_len, c_extra);
+    d_buf.allocForDecompression(u_len);
+
+    c_len = c_buf.getSize() - c_extra;
+    r = upx_zlib_compress(u_buf, u_len, c_buf + c_extra, &c_len, nullptr, method, level, NULL_cconf, &cresult);
+    if (r != 0 || c_len != expected_c_len) return false;
+
+    d_len = d_buf.getSize();
+    r = upx_zlib_decompress(c_buf + c_extra, c_len, d_buf, &d_len, method, nullptr);
+    if (r != 0 || d_len != u_len) return false;
+    if (memcmp(u_buf, d_buf, u_len) != 0) return false;
+
+    d_len = u_len - 1;
+    r = upx_zlib_decompress(c_buf + c_extra, c_len, d_buf, &d_len, method, nullptr);
+    if (r == 0) return false;
+
+    // TODO: rewrite Packer::findOverlapOverhead() so that we can test it here
+    //unsigned x_len = d_len;
+    //r = upx_zlib_test_overlap(c_buf, u_buf, c_extra, c_len, &x_len, method, nullptr);
+    return true;
+}
+
+TEST_CASE("compress_zlib") {
+    CHECK(check_zlib(M_DEFLATE, 1, 89));
+    CHECK(check_zlib(M_DEFLATE, 3, 89));
+    CHECK(check_zlib(M_DEFLATE, 5, 33));
+}
+
+#endif // DEBUG
+
 
 /* vim:set ts=4 sw=4 et: */

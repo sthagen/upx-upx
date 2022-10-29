@@ -2,9 +2,9 @@
 *
 *  This file is part of the UPX executable compressor.
 *
-*  Copyright (C) 1996-2020 Markus Franz Xaver Johannes Oberhumer
-*  Copyright (C) 1996-2020 Laszlo Molnar
-*  Copyright (C) 2000-2020 John F. Reiser
+*  Copyright (C) 1996-2022 Markus Franz Xaver Johannes Oberhumer
+*  Copyright (C) 1996-2022 Laszlo Molnar
+*  Copyright (C) 2000-2022 John F. Reiser
 *  All Rights Reserved.
 *
 *  UPX and the UCL library are free software; you can redistribute them
@@ -75,7 +75,7 @@ M_NRV2E_LE32=8
 //  .long offset({l_info; p_info; b_info; compressed data})
   section ELFMAINX
 _start: .globl _start
-////  nop; int3; int3
+  nop; int3; int3
         push %rax  // space for &DT_INIT
 o_uinit= 5*8
         push %arg2; push %arg1  // save first two args to DT_INIT()

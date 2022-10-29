@@ -1,0 +1,271 @@
+# Support for GitHub Actions -- https://github.com/features/actions
+# Copyright (C) Markus Franz Xaver Johannes Oberhumer
+
+# note: GitHub Actions runner images are frequently updated, and
+# unfortunately this sometimes breaks builds in mysterious ways...
+# see https://github.com/actions/runner-images.git
+
+name: 'CI'
+
+on:
+  push:
+    branches:
+      - '*'
+      - '!appveyor*'
+      - '!gitlab*'
+      - '!travis*'
+  workflow_dispatch:
+
+env:
+  UPX_CMAKE_BUILD_FLAGS: --verbose
+
+jobs:
+  job-rebuild-and-verify-stubs:
+    name: 'Rebuild stubs'
+    runs-on: ubuntu-20.04
+    steps:
+      - name: 'Install extra packages'
+        run: |
+          uname -a; pwd; id; umask
+          cd ..; mkdir -p deps; cd deps; mkdir packages
+          # for ubuntu-22.04: install python2
+          ##export DEBIAN_FRONTEND=noninteractive
+          ##sudo apt-get install -y --no-install-recommends python2-minimal
+          # manually install compat libs from Ubuntu 16.04
+          wget -q 'http://mirror.enzu.com/ubuntu/pool/main/g/gmp/libgmp10_6.1.0+dfsg-2_amd64.deb'
+          wget -q 'http://mirror.enzu.com/ubuntu/pool/main/m/mpfr4/libmpfr4_3.1.4-1_amd64.deb'
+          for f in *.deb; do dpkg -x $f ./packages; done
+          sudo mv -v -n ./packages/usr/lib/x86_64-linux-gnu/lib* /usr/lib/x86_64-linux-gnu/
+          sudo ldconfig
+          wget -q -O - https://github.com/upx/upx-stubtools/releases/download/v20210104/bin-upx-20210104.tar.xz | tar -xJ
+      - name: 'Check out code'
+        uses: actions/checkout@v3
+        with: { submodules: true }
+      - name: 'Rebuild and verify stubs'
+        run: |
+          env C=gcc X=rebuild-stubs TRAVIS_OS_NAME=linux bash ./.github/travis_build.sh
+      - name: 'Check source code formatting'
+        run: |
+          bash ./misc/scripts/check_whitespace_git.sh
+          env UPX_CLANG_FORMAT="$PWD/../deps/bin-upx-20210104/clang-format-10.0.1" make -C src clang-format
+          if ! git diff --quiet; then git diff; exit 1; fi
+
+  job-linux-cmake:
+    needs: [ job-rebuild-and-verify-stubs ]
+    name: ${{ format('{0} cmake', matrix.os) }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-20.04 }
+          - { os: ubuntu-22.04 }
+    steps:
+      - name: 'Check out code'
+        uses: actions/checkout@v3
+        with: { submodules: true }
+      - name: 'Build cmake debug-gcc'
+        run:   'make build/debug-gcc'
+      - name: 'Build cmake release-gcc'
+        run:   'make build/release-gcc'
+      - name: 'Build cmake debug-clang'
+        run:   'make build/debug-clang'
+      - name: 'Build cmake release-clang'
+        run:   'make build/release-clang'
+      - name: 'Make artifact'
+        run: |
+          N=upx-${GITHUB_REF_NAME}-${GITHUB_SHA:0:7}-${{ matrix.os }}
+          mkdir -p "tmp/artifact/$N"
+          (cd build && cp -ai --parents */upx "../tmp/artifact/$N")
+          (cd tmp/artifact && tar --sort=name -czf "$N.tar.gz" "$N" && rm -rf "./$N")
+          # GitHub Actions magic: set "artifact_name" environment value for use in next step
+          echo "artifact_name=$N" >> $GITHUB_ENV
+      - name: ${{ format('Upload artifact {0}', env.artifact_name) }}
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ env.artifact_name }}
+          path: tmp/artifact
+      - name: 'Run basic tests'
+        run: |
+          make -C build/debug-gcc test
+          make -C build/release-gcc test
+          make -C build/debug-clang test
+          make -C build/release-clang test
+
+  job-macos-cmake:
+    needs: [ job-rebuild-and-verify-stubs ]
+    name: ${{ format('{0} cmake', matrix.os) }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: macos-11, gcc: gcc-10, gxx: 'g++-10' }
+          # { os: macos-12, gcc: gcc-11, gxx: 'g++-11' } # disable gcc - XCode 14.0 ld bug
+          - { os: macos-12 }
+    steps:
+      - name: 'Check out code'
+        uses: actions/checkout@v3
+        with: { submodules: true }
+      - name: 'Build cmake debug-gcc'
+        if: ${{ matrix.gcc != '' }}
+        run:   'make build/debug-gcc CC=${{ matrix.gcc }} CXX=${{ matrix.gxx }}'
+      - name: 'Build cmake release-gcc'
+        if: ${{ matrix.gcc != '' }}
+        run:   'make build/release-gcc CC=${{ matrix.gcc }} CXX=${{ matrix.gxx }}'
+      - name: 'Build cmake debug-clang'
+        run:   'make build/debug-clang'
+      - name: 'Build cmake release-clang'
+        run:   'make build/release-clang'
+      - name: 'Make artifact'
+        run: |
+          N=upx-${GITHUB_REF_NAME}-${GITHUB_SHA:0:7}-${{ matrix.os }}
+          mkdir -p "tmp/artifact/$N"
+          (cd build && rsync -R -a */upx "../tmp/artifact/$N/")
+          (cd tmp/artifact && gtar --sort=name -czf "$N.tar.gz" "$N" && rm -rf "./$N")
+          # GitHub Actions magic: set "artifact_name" environment value for use in next step
+          echo "artifact_name=$N" >> $GITHUB_ENV
+      - name: ${{ format('Upload artifact {0}', env.artifact_name) }}
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ env.artifact_name }}
+          path: tmp/artifact
+      - name: 'Run basic tests'
+        run: |
+          make -C build/debug-clang test
+          make -C build/release-clang test
+
+  job-windows-cmake:
+    needs: [ job-rebuild-and-verify-stubs ]
+    name: ${{ format('{0} cmake', matrix.os) }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # windows-2019 used to work but got broken with the 20220821.1
+          # runner-image update; disable for now
+          # see https://github.com/actions/runner-images.git
+          ####- { os: windows-2019 }
+          - { os: windows-2022 }
+    steps:
+      - name: 'Check out code'
+        uses: actions/checkout@v3
+        with: { submodules: true }
+      - name: 'Inspect runner-image settings'
+        # see https://github.com/actions/runner-images.git
+        if: ${{ false }}
+        run: |
+          Get-Command bash; Get-Command cmake; Get-Command make
+          bash --version; cmake --version; make --version
+          Get-Command cl -ErrorAction SilentlyContinue
+      - name: 'Build cmake debug'
+        run:   'make build/debug'
+      - name: 'Build cmake release'
+        run:   'make build/release'
+      - name: 'Make artifact'
+        shell: bash
+        run: |
+          N=upx-${GITHUB_REF_NAME}-${GITHUB_SHA:0:7}-${{ matrix.os }}
+          mkdir -p "tmp/artifact/$N"
+          (cd build && cp -ai --parents */*/upx.exe "../tmp/artifact/$N")
+          # GitHub Actions magic: set "artifact_name" environment value for use in next step
+          echo "artifact_name=$N" >> $GITHUB_ENV
+      - name: ${{ format('Upload artifact {0}', env.artifact_name) }}
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ env.artifact_name }}
+          path: tmp/artifact
+      - name: 'Run basic tests'
+        run: |
+          cmake --build build/debug   --config Debug   --target RUN_TESTS
+          cmake --build build/release --config Release --target RUN_TESTS
+
+  job-windows-toolchains:
+    needs: [ job-rebuild-and-verify-stubs ]
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    env:
+      C: ${{ matrix.C }}
+      B: release
+      H: 'd:\a\upx'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: amd64-win64-msvc-14.2, os: windows-2019, C: msvc-14.2-x64, A: x64 }
+          - { name: amd64-win64-msvc-14.3, os: windows-2022, C: msvc-14.3-x64, A: x64 }
+          - { name: i386-win32-msvc-14.2,  os: windows-2019, C: msvc-14.2-x86, A: x86 }
+          - { name: i386-win32-msvc-14.3,  os: windows-2022, C: msvc-14.3-x86, A: x86 }
+    steps:
+      - name: 'Check out code'
+        uses: actions/checkout@v3
+        with: { submodules: true }
+      - name: 'Prepare sources'
+        shell: cmd
+        run: |
+          where bash & where cat & where chmod & where cmp & where cp & where curl & where date & where file & where git & where gzip & where mkdir & where mv & where openssl & where readlink & where rm & where rmdir & where sed & where sha256sum & where sort & where ssh & where ssh-add & where ssh-agent & where ssh-keyscan & where tar & where touch
+          git config --global core.autocrlf input
+          git --version & bash --version
+          cd %H%
+          md build build\%C% deps
+          cd deps
+          git clone --depth=1 https://github.com/upx/upx-testsuite
+      - name: 'Set up Developer Command Prompt'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: ${{ matrix.A }}
+      - name: 'Build'
+        shell: cmd
+        run: |
+          @REM setup directories following the VPATH build in travis_build.sh
+          where cl & where link
+          set BDIR=%H%\build\%C%\%B%
+          md %BDIR% %BDIR%\ucl %BDIR%\upx %BDIR%\upx-testsuite %BDIR%\zlib
+          set DEFS=-D_CRT_NONSTDC_NO_WARNINGS -D_CRT_SECURE_NO_WARNINGS
+          git rev-parse --short=12 HEAD > %BDIR%\upx\.GITREV.txt
+          @REM ===== build UCL =====
+          cd %BDIR%\ucl
+          set s=%H%\upx\vendor\ucl
+          cl -MT -J -O2 -W4 %DEFS% -I%s%\include -I%s% -c %s%\src\*.c
+          link -lib -out:ucl.lib *.obj
+          @REM ===== build zlib =====
+          cd %BDIR%\zlib
+          cl -MT -J -O2 -W3 %DEFS% -c %H%\upx\vendor\zlib\*.c
+          link -lib -out:zlib.lib *.obj
+          @REM ===== build UPX =====
+          cd %BDIR%\upx
+          set s=%H%\upx\src
+          cat .GITREV.txt
+          set /p GITREV=<.GITREV.txt
+          cl -MT -EHsc -J -O2 -W4 -WX -DUPX_VERSION_GITREV="""%GITREV%""" %DEFS% -I%H%\upx\vendor -Feupx.exe %s%\*.cpp %s%\util\*.cpp %BDIR%\ucl\ucl.lib %BDIR%\zlib\zlib.lib /link setargv.obj
+      - name: 'Make artifact'
+        shell: bash
+        run: |
+          N=upx-${GITHUB_REF_NAME}-${GITHUB_SHA:0:7}-${{ matrix.name }}
+          mkdir -p "tmp/artifact/$N/$B"
+          cp -ai ../build/$C/$B/upx/upx*.exe "tmp/artifact/$N/$B"
+          # GitHub Actions magic: set "artifact_name" environment value for use in next step
+          echo "artifact_name=$N" >> $GITHUB_ENV
+      - name: ${{ format('Upload artifact {0}', env.artifact_name) }}
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ env.artifact_name }}
+          path: tmp/artifact
+      - name: 'Run basic tests'
+        run: |
+          $ErrorActionPreference = 'stop'
+          $ErrorView = 'NormalView'
+          cd $Env:H\build\$Env:C\$Env:B\upx
+          $Env:UPX = "--no-color --no-progress"
+          .\upx.exe --version
+          .\upx.exe upx.exe -o upx_packed.exe
+          dir *.exe
+          .\upx.exe -l upx_packed.exe
+          .\upx.exe -t upx_packed.exe
+          .\upx_packed.exe --version
+      - name: 'Run test suite'
+        run: |
+          bash ./.github/travis_testsuite_1.sh
+
+# vim:set ts=2 sw=2 et:

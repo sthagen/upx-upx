@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2020 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2020 Laszlo Molnar
+   Copyright (C) 1996-2022 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2022 Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -403,12 +403,11 @@ static void *mmap(
     "sysgo:"
       /*"break\n"*/  /* debug only */
         "\tsyscall\n"
-    "sysret:"
-        "\tbnez $7,sysbad\n"  /* $7 === a3 */
-        "\tjr $31\n"
-    "sysbad:"
-        "\tli $2,-1\n"  /* $2 === v0; overwrite 'errno' */
-        "\tjr $31"
+    "sysret: .set noat\n"
+        "\tsltiu $1,$7,1\n"   /* 1: no error;  0: error; $7 == a3 */
+        "\taddiu $1,$1,-1\n"  /* 0: no error; -1: error */
+        "\tor $2,$2,$1\n"     /* $2 == v0; good result, else -1 for error */
+        ".set at\n"
     : "+r"(v0), "+r"(a3)  /* "+r" ==> both read and write */
     :  "r"(a0), "r"(a1), "r"(a2),      "r"(t0), "r"(t1)
     );
@@ -425,7 +424,7 @@ static ssize_t read(int fd, void *buf, size_t len)
         "bal sysgo"
     : "+r"(v0)
     : "r"(a0), "r"(a1), "r"(a2)
-    : "a3"
+    : "a3", "ra"
     );
     return v0;
 }
@@ -439,7 +438,7 @@ static void *brk(void *addr)
         "bal sysgo"
     : "+r"(v0)
     : "r"(a0)
-    : "a3"
+    : "a3", "ra"
     );
     return v0;
 }
@@ -453,7 +452,7 @@ static int close(int fd)
         "bal sysgo"
     : "+r"(v0)
     : "r"(a0)
-    : "a3"
+    : "a3", "ra"
     );
     return v0;
 }
@@ -468,27 +467,25 @@ static void exit(int code)
         "bal sysgo"
     :
     : "r"(v0), "r"(a0)
-    : "a3"
+    : "a3", "ra"
     );
     for (;;) {}
 }
 
-#if 0  /*{ UNUSED */
 static int munmap(void *addr, size_t len)
 {
 #define __NR_munmap (91+ 4000)
     register  void *const a0 asm("a0") = addr;
-    register size_t const a1 asm("a2") = len;
-    register size_t       v0 asm("v0");
+    register size_t const a1 asm("a1") = len;
+    register size_t       v0 asm("v0") = __NR_munmap;
     __asm__ __volatile__(
         "bal sysgo"
-    :      "=r"(v0)
-    :  [v0] "r"(__NR_munmap), "r"(a0), "r"(a1)
-    : "a3"
+    : "+r"(v0)
+    : "r"(a0), "r"(a1)
+    : "a3", "ra"
     );
     return v0;
 }
-#endif  /*}*/
 
 static int mprotect(void const *addr, size_t len, int prot)
 {
@@ -501,7 +498,7 @@ static int mprotect(void const *addr, size_t len, int prot)
         "bal sysgo"
     : "+r"(v0)
     : "r"(a0), "r"(a1), "r"(a2)
-    : "a3"
+    : "a3", "ra"
     );
     return v0;
 }
@@ -517,7 +514,7 @@ static ssize_t open(char const *path, int kind, int mode)
         "bal sysgo"
     : "+r"(v0)
     : "r"(a0), "r"(a1), "r"(a2)
-    : "a3"
+    : "a3", "ra"
     );
     return v0;
 }
@@ -531,10 +528,10 @@ static ssize_t write(int fd, void const *buf, size_t len)
     register size_t       const a2 asm("a2") = len;
     register size_t             v0 asm("v0") = __NR_write;
     __asm__ __volatile__(
-        "b sysgo"
+        "bal sysgo"
     : "+r"(v0)
     : "r"(a0), "r"(a1), "r"(a2)
-    : "a3"
+    : "a3", "ra"
     );
     return v0;
 }

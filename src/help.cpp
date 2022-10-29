@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2020 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2020 Laszlo Molnar
+   Copyright (C) 1996-2022 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2022 Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -53,7 +53,6 @@ void show_head(void)
         return;
     head_done = 1;
 
-#define V(x)    (strcmp(UPX_VERSION_STRING, UPX_VERSION_STRING4) ? UPX_VERSION_STRING : UPX_VERSION_STRING x)
     fg = con_fg(f,FG_GREEN);
     con_fprintf(f,
                 "                       Ultimate Packer for eXecutables\n"
@@ -67,10 +66,6 @@ void show_head(void)
 #if defined(UPX_VERSION_GITREV)
                 gitrev,
                 (sizeof(gitrev)-1 > 6 && gitrev[sizeof(gitrev)-2] == '+') ? '+' : ' ',
-#elif (ACC_OS_DOS16 || ACC_OS_DOS32)
-                V("d"),
-#elif (ACC_OS_WIN16 || ACC_OS_WIN32 || ACC_OS_WIN64)
-                V("w"),
 #else
                 UPX_VERSION_STRING,
 #endif
@@ -112,7 +107,7 @@ struct PackerNames
     Entry names[64];
     size_t names_count;
     const options_t *o;
-    PackerNames() : names_count(0), o(NULL) { }
+    PackerNames() : names_count(0), o(nullptr) { }
     void add(const Packer *p)
     {
         p->assertPacker();
@@ -125,8 +120,8 @@ struct PackerNames
     {
         PackerNames *self = (PackerNames *) user;
         self->add(p);
-        delete p; p = NULL;
-        return NULL;
+        delete p; p = nullptr;
+        return nullptr;
     }
     static int __acc_cdecl_qsort cmp_fname(const void *a, const void *b) {
         return strcmp(((const Entry *) a)->fname, ((const Entry *) b)->fname);
@@ -140,7 +135,7 @@ static void show_all_packers(FILE *f, int verbose)
 {
     options_t o; o.reset();
     PackerNames pn; pn.o = &o;
-    PackMaster::visitAllPackers(PackerNames::visit, NULL, &o, &pn);
+    PackMaster::visitAllPackers(PackerNames::visit, nullptr, &o, &pn);
     qsort(pn.names, pn.names_count, sizeof(PackerNames::Entry), PackerNames::cmp_fname);
     size_t pos = 0;
     for (size_t i = 0; i < pn.names_count; ++i)
@@ -219,6 +214,7 @@ void show_help(int verbose)
         con_fprintf(f,"\nCompression tuning options:\n");
         fg = con_fg(f,fg);
         con_fprintf(f,
+                    "  --lzma              try LZMA [slower but tighter than NRV]\n"
                     "  --brute             try all available compression methods & filters [slow]\n"
                     "  --ultra-brute       try even more compression variants [very slow]\n"
                     "\n");
@@ -318,13 +314,13 @@ void show_help(int verbose)
 //                "\nUPX comes with ABSOLUTELY NO WARRANTY; for details type 'upx -L'.\n"
                 "");
 
-#if (DEBUG) || (TESTING)
+#if DEBUG || TESTING
     fg = con_fg(f,FG_RED);
     con_fprintf(f,"\nWARNING: this version is compiled with"
-#if (DEBUG)
+#if DEBUG
                 " -DDEBUG"
 #endif
-#if (TESTING)
+#if TESTING
                 " -DTESTING"
 #endif
                 "\n");
@@ -352,17 +348,17 @@ void show_license(void)
         "   This program is distributed in the hope that it will be useful,\n"
         "   but WITHOUT ANY WARRANTY; without even the implied warranty of\n"
         "   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n"
-        "   UPX License Agreement for more details.\n"
+        "   UPX License Agreements for more details.\n"
         "\n"
-        "   You should have received a copy of the UPX License Agreement\n"
-        "   along with this program; see the file LICENSE.\n"
+        "   You should have received a copy of the UPX License Agreements\n"
+        "   along with this program; see the files COPYING and LICENSE.\n"
         "   If not, visit one of the following pages:\n"
         "\n"
     );
     int fg = con_fg(f,FG_CYAN);
     con_fprintf(f,
         "        https://upx.github.io\n"
-        "        http://www.oberhumer.com/opensource/upx/\n"
+        "        https://www.oberhumer.com/opensource/upx/\n"
     );
     (void)con_fg(f,FG_ORANGE);
     con_fprintf(f,
@@ -380,47 +376,53 @@ void show_license(void)
 //
 **************************************************************************/
 
-void show_version(int x)
+void show_version(bool one_line)
 {
     FILE *fp = stdout;
     const char *v;
-    UNUSED(x);
-    UNUSED(v);
 
     fprintf(fp, "upx %s\n", UPX_VERSION_STRING
 #if defined(UPX_VERSION_GITREV)
             "-git-" UPX_VERSION_GITREV
 #endif
            );
+    if (one_line)
+        return;
 #if (WITH_NRV)
     v = upx_nrv_version_string();
-    if (v != NULL && v[0])
+    if (v != nullptr && v[0])
         fprintf(fp, "NRV data compression library %s\n", v);
 #endif
 #if (WITH_UCL)
     v = upx_ucl_version_string();
-    if (v != NULL && v[0])
+    if (v != nullptr && v[0])
         fprintf(fp, "UCL data compression library %s\n", v);
 #endif
 #if (WITH_ZLIB)
     v = upx_zlib_version_string();
-    if (v != NULL && v[0])
+    if (v != nullptr && v[0])
         fprintf(fp, "zlib data compression library %s\n", v);
 #endif
 #if (WITH_LZMA)
     v = upx_lzma_version_string();
-    if (v != NULL && v[0])
+    if (v != nullptr && v[0])
         fprintf(fp, "LZMA SDK version %s\n", v);
 #endif
-    fprintf(fp, "Copyright (C) 1996-2020 Markus Franz Xaver Johannes Oberhumer\n");
-    fprintf(fp, "Copyright (C) 1996-2020 Laszlo Molnar\n");
-    fprintf(fp, "Copyright (C) 2000-2020 John F. Reiser\n");
-    fprintf(fp, "Copyright (C) 2002-2020 Jens Medoch\n");
+#if !defined(DOCTEST_CONFIG_DISABLE)
+    fprintf(fp, "doctest C++ testing framework version %s\n", DOCTEST_VERSION_STR);
+#endif
+    fprintf(fp, "Copyright (C) 1996-2022 Markus Franz Xaver Johannes Oberhumer\n");
+    fprintf(fp, "Copyright (C) 1996-2022 Laszlo Molnar\n");
+    fprintf(fp, "Copyright (C) 2000-2022 John F. Reiser\n");
+    fprintf(fp, "Copyright (C) 2002-2022 Jens Medoch\n");
 #if (WITH_ZLIB)
-    fprintf(fp, "Copyright (C) 1995" "-2005 Jean-loup Gailly and Mark Adler\n");
+    fprintf(fp, "Copyright (C) 1995" "-2022 Jean-loup Gailly and Mark Adler\n");
 #endif
 #if (WITH_LZMA)
     fprintf(fp, "Copyright (C) 1999" "-2006 Igor Pavlov\n");
+#endif
+#if !defined(DOCTEST_CONFIG_DISABLE)
+    fprintf(fp, "Copyright (C) 2016" "-2021 Viktor Kirilov\n");
 #endif
     fprintf(fp, "UPX comes with ABSOLUTELY NO WARRANTY; for details type '%s -L'.\n", progname);
 }

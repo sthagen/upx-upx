@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2020 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2020 Laszlo Molnar
+   Copyright (C) 1996-2022 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2022 Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -28,12 +28,12 @@
 
 #include "conf.h"
 #include "file.h"
-#include "mem.h"
+#include "util/membuffer.h"
 #include "lefile.h"
 
 
 LeFile::LeFile(InputFile *f) :
-    fif(f), fof(NULL),
+    fif(f), fof(nullptr),
     le_offset(0), exe_offset(0)
 {
     COMPILE_TIME_ASSERT(sizeof(le_header_t) == 196);
@@ -41,13 +41,13 @@ LeFile::LeFile(InputFile *f) :
     COMPILE_TIME_ASSERT(sizeof(le_pagemap_entry_t) == 4);
     memset(&ih,0,sizeof ih);
     memset(&oh,0,sizeof oh);
-    iobject_table = oobject_table = NULL;
-    ifpage_table = ofpage_table = NULL;
-    ipm_entries = opm_entries = NULL;
-    ires_names = ores_names = NULL;
-    ifixups = ofixups = NULL;
-    inonres_names = ononres_names = NULL;
-    ientries = oentries = NULL;
+    iobject_table = oobject_table = nullptr;
+    ifpage_table = ofpage_table = nullptr;
+    ipm_entries = opm_entries = nullptr;
+    ires_names = ores_names = nullptr;
+    ifixups = ofixups = nullptr;
+    inonres_names = ononres_names = nullptr;
+    ientries = oentries = nullptr;
 }
 
 
@@ -77,7 +77,8 @@ LeFile::~LeFile()
 
 void LeFile::readObjectTable()
 {
-    iobject_table = new le_object_table_entry_t[soobject_table = objects];
+    soobject_table = objects;
+    iobject_table = New(le_object_table_entry_t, soobject_table);
     fif->seek(le_offset + ih.object_table_offset,SEEK_SET);
     fif->readx(iobject_table,sizeof(*iobject_table)*objects);
 }
@@ -92,7 +93,8 @@ void LeFile::writeObjectTable()
 
 void LeFile::readPageMap()
 {
-    ipm_entries = new le_pagemap_entry_t[sopm_entries = pages];
+    sopm_entries = pages;
+    ipm_entries = New(le_pagemap_entry_t, sopm_entries);
     fif->seek(le_offset + ih.object_pagemap_offset,SEEK_SET);
     fif->readx(ipm_entries,sizeof(*ipm_entries)*pages);
 
@@ -112,7 +114,7 @@ void LeFile::writePageMap()
 void LeFile::readResidentNames()
 {
     sores_names = ih.entry_table_offset - ih.resident_names_offset;
-    ires_names = new upx_byte[sores_names];
+    ires_names = New(upx_byte, sores_names);
     fif->seek(le_offset+ih.resident_names_offset,SEEK_SET);
     fif->readx(ires_names,sores_names);
 }
@@ -129,7 +131,7 @@ void LeFile::readEntryTable()
 {
     soentries = ih.fixup_page_table_offset - ih.entry_table_offset;
     fif->seek(le_offset + ih.entry_table_offset,SEEK_SET);
-    ientries = new upx_byte[soentries];
+    ientries = New(upx_byte, soentries);
     fif->readx(ientries,soentries);
 }
 
@@ -143,7 +145,8 @@ void LeFile::writeEntryTable()
 
 void LeFile::readFixupPageTable()
 {
-    ifpage_table = new unsigned[sofpage_table = 1+pages];
+    sofpage_table = 1+pages;
+    ifpage_table = New(unsigned, sofpage_table);
     fif->seek(le_offset + ih.fixup_page_table_offset,SEEK_SET);
     fif->readx(ifpage_table,4*sofpage_table);
 }
@@ -159,7 +162,7 @@ void LeFile::writeFixupPageTable()
 void LeFile::readFixups()
 {
     sofixups = get_le32(ifpage_table+pages)-get_le32(ifpage_table);
-    ifixups = new upx_byte[sofixups];
+    ifixups = New(upx_byte, sofixups);
     fif->seek(le_offset + ih.fixup_record_table_offset,SEEK_SET);
     fif->readx(ifixups,sofixups);
 }
@@ -187,8 +190,9 @@ unsigned LeFile::getImageSize() const
 void LeFile::readImage()
 {
     soimage = pages*mps;
-    iimage.alloc(soimage);
-    memset(iimage,0,soimage);
+    mb_iimage.alloc(soimage);
+    mb_iimage.clear();
+    iimage = mb_iimage;
 
     unsigned ic,jc;
     for (ic = jc = 0; ic < pages; ic++)
@@ -197,7 +201,8 @@ void LeFile::readImage()
         {
             fif->seek(ih.data_pages_offset + exe_offset +
                 (ipm_entries[ic].m*0x100 + ipm_entries[ic].l-1) * mps,SEEK_SET);
-            fif->readx(iimage+jc,ic != pages-1 ? mps : ih.bytes_on_last_page);
+            auto bytes = ic != pages-1 ? mps : ih.bytes_on_last_page;
+            fif->readx(raw_bytes(iimage+jc, bytes), bytes);
         }
         jc += mps;
     }
@@ -206,8 +211,8 @@ void LeFile::readImage()
 
 void LeFile::writeImage()
 {
-    if (fof && oimage != NULL)
-        fof->write(oimage, soimage);
+    if (fof && oimage != nullptr)
+        fof->write(raw_bytes(oimage, soimage), soimage);
 }
 
 
@@ -215,7 +220,8 @@ void LeFile::readNonResidentNames()
 {
     if (ih.non_resident_name_table_length)
     {
-        inonres_names = new upx_byte[sononres_names = ih.non_resident_name_table_length];
+        sononres_names = ih.non_resident_name_table_length;
+        inonres_names = New(upx_byte, sononres_names);
         fif->seek(exe_offset+ih.non_resident_name_table_offset,SEEK_SET);
         fif->readx(inonres_names,sononres_names);
     }

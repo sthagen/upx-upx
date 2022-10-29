@@ -2,9 +2,9 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2020 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2020 Laszlo Molnar
-   Copyright (C) 2001-2020 John F. Reiser
+   Copyright (C) 1996-2022 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2022 Laszlo Molnar
+   Copyright (C) 2001-2022 John F. Reiser
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -49,13 +49,15 @@
 #define DT_STRSZ    Elf32_Dyn::DT_STRSZ
 #endif
 
+#define usizeof(x)      ((unsigned) sizeof(x))
+
 
 /*************************************************************************
 // linux/386 (generic "execve" format)
 **************************************************************************/
 
 PackLinuxI386::PackLinuxI386(InputFile *f) : super(f),
-    ei_osabi(Elf32_Ehdr::ELFOSABI_LINUX), osabi_note(NULL)
+    ei_osabi(Elf32_Ehdr::ELFOSABI_LINUX), osabi_note(nullptr)
 {
     bele = &N_BELE_RTP::le_policy;
 }
@@ -307,8 +309,8 @@ PackLinuxI386::buildLinuxLoader(
     unsigned fold_hdrlen = 0;
   if (0 < szfold) {
     cprElfHdr1 const *const hf = (cprElfHdr1 const *)fold;
-    fold_hdrlen = sizeof(hf->ehdr) + hf->ehdr.e_phentsize * hf->ehdr.e_phnum +
-         sizeof(l_info);
+    fold_hdrlen = usizeof(hf->ehdr) + hf->ehdr.e_phentsize * hf->ehdr.e_phnum +
+         usizeof(l_info);
     if (0 == get_le32(fold_hdrlen + fold)) {
         // inconsistent SIZEOF_HEADERS in *.lds (ld, binutils)
         fold_hdrlen = umax(0x80, fold_hdrlen);
@@ -336,43 +338,43 @@ PackLinuxI386::buildLinuxLoader(
 //            // compressed data
 //        b_len + ph.c_len );
 //            // entry to stub
-    addLoader("LEXEC000", NULL);
+    addLoader("LEXEC000", nullptr);
 
     if (ft->id) {
         if (n_mru) {
-            addLoader("LEXEC009", NULL);
+            addLoader("LEXEC009", nullptr);
         }
     }
-    addLoader("LEXEC010", NULL);
+    addLoader("LEXEC010", nullptr);
     linker->defineSymbol("filter_cto", ft->cto);
     linker->defineSymbol("filter_length",
                          (ft->id & 0xf) % 3 == 0 ? ft->calls :
                          ft->lastcall - ft->calls * 4);
-    addLoader(getDecompressorSections(), NULL);
-    addLoader("LEXEC015", NULL);
+    addLoader(getDecompressorSections(), nullptr);
+    addLoader("LEXEC015", nullptr);
     if (ft->id) {
         {  // decompr, unfilter not separate
             if (0x80==(ft->id & 0xF0)) {
-                addLoader("LEXEC110", NULL);
+                addLoader("LEXEC110", nullptr);
                 if (n_mru) {
-                    addLoader("LEXEC100", NULL);
+                    addLoader("LEXEC100", nullptr);
                 }
                 // bug in APP: jmp and label must be in same .asx/.asy
-                addLoader("LEXEC016", NULL);
+                addLoader("LEXEC016", nullptr);
             }
         }
         addFilter32(ft->id);
         {  // decompr always unfilters
-            addLoader("LEXEC017", NULL);
+            addLoader("LEXEC017", nullptr);
         }
     }
     else {
-        addLoader("LEXEC017", NULL);
+        addLoader("LEXEC017", nullptr);
     }
 
-    addLoader("IDENTSTR", NULL);
-    addLoader("LEXEC020", NULL);
-    addLoader("FOLDEXEC", NULL);
+    addLoader("IDENTSTR", nullptr);
+    addLoader("LEXEC020", nullptr);
+    addLoader("FOLDEXEC", nullptr);
     if (M_IS_LZMA(ph.method)) {
         const lzma_compress_result_t *res = &ph.compress_result.result_lzma;
         upx_uint32_t properties = // lc, lp, pb, dummy
@@ -380,7 +382,7 @@ PackLinuxI386::buildLinuxLoader(
             (res->lit_pos_bits << 8) |
             (res->pos_bits << 16);
         if (linker->bele->isBE()) // big endian - bswap32
-            acc_swab32s(&properties);
+            properties = bswap32(properties);
         linker->defineSymbol("lzma_properties", properties);
         // -2 for properties
         linker->defineSymbol("lzma_c_len", ph.c_len - 2);
@@ -408,7 +410,7 @@ PackLinuxI386::buildLoader(Filter const *ft)
     // patch loader
     // note: we only can use /proc/<pid>/fd when exetype > 0.
     //   also, we sleep much longer when compressing a script.
-    checkPatch(NULL, 0, 0, 0);  // reset
+    checkPatch(nullptr, 0, 0, 0);  // reset
     patch_le32(buf,sz_fold,"UPX4",exetype > 0 ? 3 : 15);   // sleep time
     patch_le32(buf,sz_fold,"UPX3",progid);
     patch_le32(buf,sz_fold,"UPX2",exetype > 0 ? 0 : 0x7fffffff);
@@ -428,7 +430,7 @@ PackBSDI386::buildLoader(Filter const *ft)
     // patch loader
     // note: we only can use /proc/<pid>/fd when exetype > 0.
     //   also, we sleep much longer when compressing a script.
-    checkPatch(NULL, 0, 0, 0);  // reset
+    checkPatch(nullptr, 0, 0, 0);  // reset
     patch_le32(buf,sz_fold,"UPX4",exetype > 0 ? 3 : 15);   // sleep time
     patch_le32(buf,sz_fold,"UPX3",progid);
     patch_le32(buf,sz_fold,"UPX2",exetype > 0 ? 0 : 0x7fffffff);

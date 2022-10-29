@@ -2,9 +2,9 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2020 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2020 Laszlo Molnar
-   Copyright (C) 2000-2020 John F. Reiser
+   Copyright (C) 1996-2022 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2022 Laszlo Molnar
+   Copyright (C) 2000-2022 John F. Reiser
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -93,9 +93,9 @@ void PackUnix::writePackHeader(OutputFile *fo)
     set_le32(buf+0, UPX_MAGIC_LE32);
     set_le32(buf+4, UPX_MAGIC2_LE32);
 
-    checkPatch(NULL, 0, 0, 0);  // reset
+    checkPatch(nullptr, 0, 0, 0);  // reset
     patchPackHeader(buf, hsize);
-    checkPatch(NULL, 0, 0, 0);  // reset
+    checkPatch(nullptr, 0, 0, 0);  // reset
 
     fo->write(buf, hsize);
 }
@@ -137,8 +137,8 @@ int PackUnix::getStrategy(Filter &/*ft*/)
 int PackUnix::pack2(OutputFile *fo, Filter &ft)
 {
     // compress blocks
-    unsigned total_in = 0;
-    unsigned total_out = 0;
+    total_in = 0;
+    total_out = 0;
 
 // FIXME: ui_total_passes is not correct with multiple blocks...
 //    ui_total_passes = (file_size + blocksize - 1) / blocksize;
@@ -179,7 +179,7 @@ int PackUnix::pack2(OutputFile *fo, Filter &ft)
             !!n_block++);  // check compression ratio only on first block
 
         if (ph.c_len < ph.u_len) {
-            const upx_bytep tbuf = NULL;
+            const upx_bytep tbuf = nullptr;
             if (ft.id == 0) tbuf = ibuf;
             ph.overlap_overhead = OVERHEAD;
             if (!testOverlappingDecompression(obuf, tbuf, ph.overlap_overhead)) {
@@ -248,7 +248,7 @@ PackUnix::patchLoaderChecksum()
 
 off_t PackUnix::pack3(OutputFile *fo, Filter &ft)
 {
-    if (0==linker) {
+    if (nullptr==linker) {
         // If no filter, then linker is not constructed by side effect
         // of packExtent calling compressWithFilters.
         // This is typical after "/usr/bin/patchelf --set-rpath".
@@ -318,11 +318,11 @@ void PackUnix::pack(OutputFile *fo)
 
 void PackUnix::packExtent(
     const Extent &x,
-    unsigned &total_in,
-    unsigned &total_out,
     Filter *ft,
     OutputFile *fo,
-    unsigned hdr_u_len
+    unsigned hdr_u_len,
+    unsigned b_extra,
+    bool inhibit_compression_check
 )
 {
     unsigned const init_u_adler = ph.u_adler;
@@ -364,15 +364,15 @@ void PackUnix::packExtent(
             ft->cto = 0;
 
             compressWithFilters(ft, OVERHEAD, NULL_cconf, filter_strategy,
-                                0, 0, 0, hdr_ibuf, hdr_u_len);
+                                0, 0, 0, hdr_ibuf, hdr_u_len, inhibit_compression_check);
         }
         else {
             (void) compress(ibuf, ph.u_len, obuf);    // ignore return value
         }
 
         if (ph.c_len < ph.u_len) {
-            const upx_bytep tbuf = NULL;
-            if (ft == NULL || ft->id == 0) tbuf = ibuf;
+            const upx_bytep tbuf = nullptr;
+            if (ft == nullptr || ft->id == 0) tbuf = ibuf;
             ph.overlap_overhead = OVERHEAD;
             if (!testOverlappingDecompression(obuf, tbuf, ph.overlap_overhead)) {
                 // not in-place compressible
@@ -384,7 +384,7 @@ void PackUnix::packExtent(
             ph.c_len = ph.u_len;
             memcpy(obuf, ibuf, ph.c_len);
             // must update checksum of compressed data
-            ph.c_adler = upx_adler32(ibuf, ph.u_len, ph.saved_c_adler);
+            ph.c_adler = upx_adler32(ibuf, ph.u_len, ph.c_adler);
         }
 
         // write block sizes
@@ -393,8 +393,8 @@ void PackUnix::packExtent(
             unsigned hdr_c_len = 0;
             MemBuffer hdr_obuf;
             hdr_obuf.allocForCompression(hdr_u_len);
-            int r = upx_compress(hdr_ibuf, hdr_u_len, hdr_obuf, &hdr_c_len, 0,
-                ph.method, 10, NULL, NULL);
+            int r = upx_compress(hdr_ibuf, hdr_u_len, hdr_obuf, &hdr_c_len, nullptr,
+                forced_method(ph.method), 10, nullptr, nullptr);
             if (r != UPX_E_OK)
                 throwInternalError("header compression failed");
             if (hdr_c_len >= hdr_u_len)
@@ -407,7 +407,8 @@ void PackUnix::packExtent(
             memset(&tmp, 0, sizeof(tmp));
             set_te32(&tmp.sz_unc, hdr_u_len);
             set_te32(&tmp.sz_cpr, hdr_c_len);
-            tmp.b_method = (unsigned char) ph.method;
+            tmp.b_method = (unsigned char) forced_method(ph.method);
+            tmp.b_extra = b_extra;
             fo->write(&tmp, sizeof(tmp));
             b_len += sizeof(b_info);
             fo->write(hdr_obuf, hdr_c_len);
@@ -425,6 +426,7 @@ void PackUnix::packExtent(
                 tmp.b_cto8 = ft->cto;
             }
         }
+        tmp.b_extra = b_extra;
         fo->write(&tmp, sizeof(tmp));
         b_len += sizeof(b_info);
 
@@ -447,7 +449,6 @@ void PackUnix::packExtent(
 }
 
 void PackUnix::unpackExtent(unsigned wanted, OutputFile *fo,
-    unsigned &total_in, unsigned &total_out,
     unsigned &c_adler, unsigned &u_adler,
     bool first_PF_X, unsigned szb_info, bool is_rewrite
 )
@@ -470,6 +471,7 @@ void PackUnix::unpackExtent(unsigned wanted, OutputFile *fo,
 
         int j = blocksize + OVERHEAD - sz_cpr;
         fi->readx(ibuf+j, sz_cpr);
+        total_in  += sz_cpr;
         // update checksum of compressed data
         c_adler = upx_adler32(ibuf + j, sz_cpr, c_adler);
         // decompress
@@ -499,8 +501,6 @@ void PackUnix::unpackExtent(unsigned wanted, OutputFile *fo,
         }
         // update checksum of uncompressed data
         u_adler = upx_adler32(ibuf + j, sz_unc, u_adler);
-        total_in  += sz_cpr;
-        total_out += sz_unc;
         // write block
         if (fo) {
             if (is_rewrite) {
@@ -508,6 +508,7 @@ void PackUnix::unpackExtent(unsigned wanted, OutputFile *fo,
             }
             else {
                 fo->write(ibuf + j, sz_unc);
+                total_out += sz_unc;
             }
         }
         if (wanted < (unsigned)sz_unc)
@@ -520,6 +521,7 @@ void PackUnix::unpackExtent(unsigned wanted, OutputFile *fo,
 // Generic Unix canUnpack().
 **************************************************************************/
 
+// The prize is the value of overlay_offset: the offset of compressed data
 int PackUnix::canUnpack()
 {
     int const small = 32 + sizeof(overlay_offset);
@@ -531,6 +533,13 @@ int PackUnix::canUnpack()
 
     fi->seek(-(off_t)bufsize, SEEK_END);
     fi->readx(buf, bufsize);
+    return find_overlay_offset(buf);
+}
+
+int PackUnix::find_overlay_offset(MemBuffer const &buf)
+{
+    int const small = 32 + sizeof(overlay_offset);
+    int const bufsize = buf.getSize();
     int i = bufsize;
     while (i > small && 0 == buf[--i]) { }
     i -= small;
@@ -548,7 +557,6 @@ int PackUnix::canUnpack()
     return true;
 }
 
-
 /*************************************************************************
 // Generic Unix unpack().
 //
@@ -563,8 +571,8 @@ void PackUnix::unpack(OutputFile *fo)
         ? sizeof(bhdr.sz_unc) + sizeof(bhdr.sz_cpr)  // old style
         : sizeof(bhdr);
 
-    unsigned c_adler = upx_adler32(NULL, 0);
-    unsigned u_adler = upx_adler32(NULL, 0);
+    unsigned c_adler = upx_adler32(nullptr, 0);
+    unsigned u_adler = upx_adler32(nullptr, 0);
 
     // defaults for ph.version == 8
     unsigned orig_file_size = 0;
@@ -592,8 +600,8 @@ void PackUnix::unpack(OutputFile *fo)
     ibuf.alloc(blocksize + OVERHEAD);
 
     // decompress blocks
-    unsigned total_in = 0;
-    unsigned total_out = 0;
+    total_in = 0;
+    total_out = 0;
     memset(&bhdr, 0, sizeof(bhdr));
     for (;;)
     {

@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2020 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2020 Laszlo Molnar
+   Copyright (C) 1996-2022 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2022 Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -38,7 +38,7 @@ class OutputFile;
 
 class PackMaster {
 public:
-    PackMaster(InputFile *f, options_t *o = NULL);
+    PackMaster(InputFile *f, options_t *o = nullptr);
     virtual ~PackMaster();
 
     void pack(OutputFile *fo);

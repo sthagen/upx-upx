@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2020 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2020 Laszlo Molnar
+   Copyright (C) 1996-2022 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2022 Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -143,7 +143,7 @@ void PackCom::buildLoader(const Filter *ft)
               "NRVDECO1",
               ph.max_offset_found <= 0xd00 ? "NRVLED00" : "NRVGTD00",
               "NRVDECO2",
-              NULL
+              nullptr
              );
     if (ft->id)
     {
@@ -164,7 +164,7 @@ void PackCom::addFilter16(int filter_id)
                   filter_id < 4 ? "" : (opt->cpu == opt->CPU_8086 ? "CT16I086" : "CT16I286,CT16SUB0"),
                   "CALLTRI2",
                   getFormat() == UPX_F_DOS_COM ? "CORETURN" : "",
-                  NULL
+                  nullptr
                  );
     else
         addLoader(filter_id%3 == 1 ? "CT16E800" : "CT16E900",
@@ -173,7 +173,7 @@ void PackCom::addFilter16(int filter_id)
                   filter_id < 4 ? "CT16SUB1" : "",
                   filter_id < 4 ? "" : (opt->cpu == opt->CPU_8086 ? "CT16I087" : "CT16I287,CT16SUB1"),
                   "CALLTRI6",
-                  NULL
+                  nullptr
                  );
 }
 
@@ -223,7 +223,7 @@ int PackCom::canUnpack()
 {
     if (!readPackHeader(128))
         return false;
-    if (file_size <= (off_t) ph.c_len)
+    if (file_size_u <= ph.c_len)
         return false;
     return true;
 }
@@ -236,15 +236,15 @@ int PackCom::canUnpack()
 void PackCom::unpack(OutputFile *fo)
 {
     ibuf.alloc(file_size);
-    obuf.allocForUncompression(ph.u_len);
+    obuf.allocForDecompression(ph.u_len);
 
     // read whole file
     fi->seek(0,SEEK_SET);
     fi->readx(ibuf,file_size);
 
     // get compressed data offset
-    int e_len = ph.buf_offset + ph.getPackHeaderSize();
-    if (file_size <= e_len + (off_t)ph.c_len)
+    unsigned e_len = ph.buf_offset + ph.getPackHeaderSize();
+    if (file_size_u <= e_len + ph.c_len)
         throwCantUnpack("file damaged");
 
     // decompress

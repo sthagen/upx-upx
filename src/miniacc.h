@@ -2,7 +2,7 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2020 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2022 Markus Franz Xaver Johannes Oberhumer
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -27,7 +27,7 @@
 
 #ifndef __ACC_H_INCLUDED
 #define __ACC_H_INCLUDED 1
-#define ACC_VERSION     20200116L
+#define ACC_VERSION     20220904L
 #if defined(__CYGWIN32__) && !defined(__CYGWIN__)
 #  define __CYGWIN__ __CYGWIN32__
 #endif
@@ -434,6 +434,14 @@
 #  define ACC_EXTERN_C          extern
 #  define ACC_EXTERN_C_BEGIN    /*empty*/
 #  define ACC_EXTERN_C_END      /*empty*/
+#endif
+#if !defined(ACC_nullptr)
+#if defined(__cplusplus) && (__cplusplus-0 >= 201103L)
+#  define ACC_nullptr           nullptr
+#endif
+#endif
+#if !defined(ACC_nullptr)
+#  define ACC_nullptr           NULL
 #endif
 #if !defined(__ACC_OS_OVERRIDE)
 #if (ACC_OS_FREESTANDING)
@@ -1674,7 +1682,11 @@ extern "C" {
 #  define __acc_forceinline     __acc_inline
 #endif
 #if !defined(__acc_noinline)
-#if 1 && (ACC_ARCH_I386) && (ACC_CC_GNUC >= 0x040000ul) && (ACC_CC_GNUC < 0x040003ul)
+#if (ACC_CC_GNUC >= 0x080000ul)
+#  define __acc_noinline        __attribute__((__noinline__,__noipa__))
+#elif (ACC_CC_GNUC >= 0x050000ul)
+#  define __acc_noinline        __attribute__((__noinline__,__noclone__,__no_icf__))
+#elif 1 && (ACC_ARCH_I386) && (ACC_CC_GNUC >= 0x040000ul) && (ACC_CC_GNUC < 0x040003ul)
 #  define __acc_noinline        __attribute__((__noinline__,__used__))
 #elif (ACC_CC_GNUC >= 0x030200ul)
 #  define __acc_noinline        __attribute__((__noinline__))
@@ -3840,7 +3852,7 @@ ACC_COMPILE_TIME_ASSERT_HEADER(sizeof(acc_int_fast64_t) == sizeof(acc_uint_fast6
 #  if (ACC_CC_GNUC < 0x025f00ul)
 #    undef HAVE_SNPRINTF
 #    undef HAVE_VSNPRINTF
-#  else
+#  elif 0
 #    define snprintf _snprintf
 #    define vsnprintf _vsnprintf
 #  endif
@@ -4782,6 +4794,8 @@ void __ACC_UA_SET_LE32(__acc_ua_volatile void* pp, unsigned long v) {
 #define __ACC_FALLBACK_STDDEF_H_INCLUDED 1
 #if defined(__PTRDIFF_TYPE__)
 typedef __PTRDIFF_TYPE__ acc_fallback_ptrdiff_t;
+#elif defined(_WIN64)
+typedef long long acc_fallback_ptrdiff_t;
 #elif defined(__MIPS_PSX2__)
 typedef int acc_fallback_ptrdiff_t;
 #else
@@ -4789,8 +4803,10 @@ typedef long acc_fallback_ptrdiff_t;
 #endif
 #if defined(__SIZE_TYPE__)
 typedef __SIZE_TYPE__ acc_fallback_size_t;
+#elif defined(_WIN64)
+typedef unsigned long long acc_fallback_ptrdiff_t;
 #elif defined(__MIPS_PSX2__)
-typedef unsigned int acc_fallback_size_t;
+typedef unsigned acc_fallback_size_t;
 #else
 typedef unsigned long acc_fallback_size_t;
 #endif
@@ -4813,7 +4829,9 @@ typedef unsigned short wchar_t;
 #endif
 #endif
 #ifndef NULL
-#if defined(__cplusplus) && defined(__GNUC__) && (__GNUC__ >= 4)
+#if defined(__cplusplus) && (__cplusplus-0 >= 201103L)
+#define NULL    nullptr
+#elif defined(__cplusplus) && defined(__GNUC__) && (__GNUC__ >= 4)
 #define NULL    __null
 #elif defined(__cplusplus)
 #define NULL    0
@@ -4822,7 +4840,7 @@ typedef unsigned short wchar_t;
 #endif
 #endif
 #ifndef offsetof
-#define offsetof(s,m)   ((size_t)((ptrdiff_t)&(((s*)0)->m)))
+#define offsetof(s,m)   ((size_t)((ptrdiff_t)&(((s*)NULL)->m)))
 #endif
 #endif
 #elif (ACC_LIBC_FREESTANDING)
@@ -5536,7 +5554,7 @@ ACCLIB_EXTERN(int, acc_spawnve) (int mode, const char* fn, const char* const * a
 #if defined(ACC_CXX_TRIGGER_FUNCTION_IMPL)
 #else
 #  define ACC_CXX_TRIGGER_FUNCTION_IMPL(klass) \
-        const void* klass::acc_cxx_trigger_function() const { return ACC_STATIC_CAST(const void *, 0); }
+        const void* klass::acc_cxx_trigger_function() const { return ACC_STATIC_CAST(const void *, ACC_nullptr); }
 #endif
 #endif
 #endif
@@ -5736,8 +5754,8 @@ ACCLIB_EXTERN(int, acc_spawnve) (int mode, const char* fn, const char* const * a
     ACCCHK_ASSERT(sizeof(short) == ACC_SIZEOF_SHORT)
 #endif
     ACCCHK_ASSERT_IS_SIGNED_T(int)
-    ACCCHK_ASSERT_IS_UNSIGNED_T(unsigned int)
-    ACCCHK_ASSERT(sizeof(int) == sizeof(unsigned int))
+    ACCCHK_ASSERT_IS_UNSIGNED_T(unsigned)
+    ACCCHK_ASSERT(sizeof(int) == sizeof(unsigned))
 #if !(ACC_ABI_I8LP16)
     ACCCHK_ASSERT(sizeof(int) >= 2)
 #endif
@@ -5771,7 +5789,11 @@ ACCLIB_EXTERN(int, acc_spawnve) (int mode, const char* fn, const char* const * a
     ACCCHK_ASSERT(sizeof(ptrdiff_t) >= sizeof(int))
     ACCCHK_ASSERT(sizeof(ptrdiff_t) >= sizeof(size_t))
 #if !(ACC_BROKEN_SIZEOF)
-    ACCCHK_ASSERT(sizeof(ptrdiff_t) == sizeof(ACC_STATIC_CAST(char*, 0) - ACC_STATIC_CAST(char*, 0)))
+#if (ACC_CC_CLANG) && !defined(__cplusplus)
+    ACCCHK_ASSERT(sizeof(ptrdiff_t) == sizeof(ACC_REINTERPRET_CAST(char*, 1) - ACC_REINTERPRET_CAST(char*, 1)))
+#else
+    ACCCHK_ASSERT(sizeof(ptrdiff_t) == sizeof(ACC_STATIC_CAST(char*, ACC_nullptr) - ACC_STATIC_CAST(char*, ACC_nullptr)))
+#endif
 # if (ACC_HAVE_MM_HUGE_PTR)
     ACCCHK_ASSERT(4 == sizeof(ACC_STATIC_CAST(char __huge*, 0) - ACC_STATIC_CAST(char __huge*, 0)))
 # endif
@@ -6316,13 +6338,13 @@ ACCLIB_PUBLIC(void, acc_ua_set_le64) (acc_hvoid_p p, acc_uint64l_t v)
 #endif
 extern void* volatile acc_vget_ptr__;
 #if (ACC_CC_CLANG || (ACC_CC_GNUC >= 0x030400ul) || ACC_CC_LLVM)
-void* volatile __attribute__((__used__)) acc_vget_ptr__ = ACC_STATIC_CAST(void *, 0);
+void* volatile __attribute__((__used__)) acc_vget_ptr__ = ACC_STATIC_CAST(void *, ACC_nullptr);
 #else
-void* volatile acc_vget_ptr__ = ACC_STATIC_CAST(void *, 0);
+void* volatile acc_vget_ptr__ = ACC_STATIC_CAST(void *, ACC_nullptr);
 #endif
 #ifndef __ACCLIB_VGET_BODY
 #define __ACCLIB_VGET_BODY(T) \
-    if __acc_unlikely(acc_vget_ptr__) { \
+    if __acc_very_unlikely(acc_vget_ptr__) { \
         typedef T __acc_may_alias TT; \
         unsigned char e; expr &= 255; e = ACC_STATIC_CAST(unsigned char, expr); \
         * ACC_STATIC_CAST(TT *, acc_vget_ptr__) = v; \
@@ -6749,6 +6771,7 @@ static int __ACCLIB_FUNCNAME(acc_getopt_rotate) (char **p, int first, int middle
 }
 static int __ACCLIB_FUNCNAME(acc_getopt_perror) (acc_getopt_p g, int ret, const char *f, ...)
 {
+    ++g->errcount;
     if (g->opterr) {
 #if defined(HAVE_STDARG_H) && (HAVE_STDARG_H)
         struct { va_list ap; } s;
@@ -6756,10 +6779,9 @@ static int __ACCLIB_FUNCNAME(acc_getopt_perror) (acc_getopt_p g, int ret, const 
         g->opterr(g, f, &s);
         va_end(s.ap);
 #else
-        g->opterr(g, f, NULL);
+        g->opterr(g, f, ACC_nullptr);
 #endif
     }
-    ++g->errcount;
     return ret;
 }
 ACCLIB_PUBLIC(int, acc_getopt) (acc_getopt_p g,
@@ -6777,7 +6799,7 @@ ACCLIB_PUBLIC(int, acc_getopt) (acc_getopt_p g,
         if (*shortopts == ':')
             missing_arg_ret = *shortopts++;
     }
-    g->optarg = NULL;
+    g->optarg = ACC_nullptr;
     if (g->optopt == -1)
         g->optopt = g->bad_option;
     if (longind)
@@ -6801,8 +6823,8 @@ ACCLIB_PUBLIC(int, acc_getopt) (acc_getopt_p g,
     if (a[0] == '-' && a[1] == '-') {
         size_t l = 0;
         const acc_getopt_longopt_p o;
-        const acc_getopt_longopt_p o1 = NULL;
-        const acc_getopt_longopt_p o2 = NULL;
+        const acc_getopt_longopt_p o1 = ACC_nullptr;
+        const acc_getopt_longopt_p o2 = ACC_nullptr;
         int need_exact = 0;
         ++g->optind;
         if (!a[2])
@@ -6864,7 +6886,7 @@ ACCLIB_PUBLIC(int, acc_getopt) (acc_getopt_p g,
         const char *s;
     acc_label_next_shortopt:
         a = g->argv[g->optind] + ++g->shortpos;
-        c = (unsigned char) *a++; s = NULL;
+        c = (unsigned char) *a++; s = ACC_nullptr;
         if (c != ':' && shortopts)
             s = strchr(shortopts, c);
         if (!s || s[1] != ':') {
@@ -6890,8 +6912,8 @@ ACCLIB_PUBLIC(int, acc_getopt) (acc_getopt_p g,
         return c;
     }
     if (ordering == ACC_GETOPT_RETURN_IN_ORDER) {
-        ++g->optind;
         g->optarg = a;
+        ++g->optind;
         return 1;
     }
 acc_label_eof:
@@ -6943,13 +6965,13 @@ ACC_EXTERN_C int __far __pascal GlobalUnlock(const void __near*);
 #endif
 ACCLIB_PUBLIC(acc_hvoid_p, acc_halloc) (acc_hsize_t size)
 {
-    acc_hvoid_p p = ACC_STATIC_CAST(acc_hvoid_p, 0);
+    acc_hvoid_p p = ACC_STATIC_CAST(acc_hvoid_p, ACC_nullptr);
     if (!(size > 0))
         return p;
 #if 0 && defined(__palmos__)
     p = MemPtrNew(size);
 #elif !(ACC_HAVE_MM_HUGE_PTR)
-    if (size < ACC_STATIC_CAST(size_t, -1))
+    if (size < (~(ACC_STATIC_CAST(size_t, 0)) & ~(ACC_STATIC_CAST(acc_hsize_t, 0))))
         p = malloc(ACC_STATIC_CAST(size_t, size));
 #else
     if (ACC_STATIC_CAST(long, size) <= 0)
@@ -7199,6 +7221,7 @@ ACCLIB_PUBLIC(long, acc_safe_hwrite) (int fd, const acc_hvoid_p buf, long size)
 __acc_static_noinline long acc_pclock_syscall_clock_gettime(long clockid, struct timespec *ts)
 {
     unsigned long r = 228;
+    ACC_COMPILE_TIME_ASSERT(sizeof(*ts) == 16);
     __asm__ __volatile__("syscall\n" : "=a" (r), "=m" (*ts) : "0" (r), "D" (clockid), "S" (ts) __ACC_ASM_CLOBBER_LIST_CC);
     return ACC_ICAST(long, r);
 }
@@ -7209,7 +7232,7 @@ __acc_static_noinline long acc_pclock_syscall_clock_gettime(long clockid, struct
 #endif
 __acc_static_noinline long acc_pclock_syscall_clock_gettime(long clockid, struct timespec *ts)
 {
-    unsigned long r = 265;
+    unsigned long r = 265 + ((sizeof(*ts) > 8) * (403 - 265));
     __asm__ __volatile__("pushl %%ebx\n pushl %%edx\n popl %%ebx\n int $0x80\n popl %%ebx\n": "=a" (r), "=m" (*ts) : "0" (r), "d" (clockid), "c" (ts) __ACC_ASM_CLOBBER_LIST_CC);
     return ACC_ICAST(long, r);
 }
@@ -7235,7 +7258,7 @@ static int acc_pclock_read_clock_gettime_r_syscall(acc_pclock_handle_p h, acc_pc
 static int acc_pclock_read_gettimeofday(acc_pclock_handle_p h, acc_pclock_p c)
 {
     struct timeval tv;
-    if (gettimeofday(&tv, NULL) != 0)
+    if (gettimeofday(&tv, ACC_nullptr) != 0)
         return -1;
 #if defined(acc_int64l_t)
     c->tv_sec = tv.tv_sec;
@@ -7428,8 +7451,8 @@ ACCLIB_PUBLIC(int, acc_pclock_open) (acc_pclock_handle_p h, int mode)
     h->h = ACC_STATIC_CAST(acclib_handle_t, 0);
     h->mode = -1;
     h->read_error = 2;
-    h->name = NULL;
-    h->gettime = ACC_STATIC_CAST(acc_pclock_gettime_t, 0);
+    h->name = ACC_nullptr;
+    h->gettime = ACC_STATIC_CAST(acc_pclock_gettime_t, ACC_nullptr);
 #if defined(acc_int64l_t)
     h->ticks_base = 0;
 #endif
@@ -7556,8 +7579,8 @@ ACCLIB_PUBLIC(int, acc_pclock_close) (acc_pclock_handle_p h)
 {
     h->h = ACC_STATIC_CAST(acclib_handle_t, 0);
     h->mode = -1;
-    h->name = NULL;
-    h->gettime = ACC_STATIC_CAST(acc_pclock_gettime_t, 0);
+    h->name = ACC_nullptr;
+    h->gettime = ACC_STATIC_CAST(acc_pclock_gettime_t, ACC_nullptr);
     return 0;
 }
 ACCLIB_PUBLIC(void, acc_pclock_read) (acc_pclock_handle_p h, acc_pclock_p c)

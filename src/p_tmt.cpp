@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2020 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2020 Laszlo Molnar
+   Copyright (C) 1996-2022 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2022 Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -93,22 +93,22 @@ void PackTmt::buildLoader(const Filter *ft)
               "TMTMAIN1B",
               ft->id ? "TMTCALT1" : "",
               "TMTMAIN2,UPX1HEAD,TMTCUTPO",
-              NULL);
+              nullptr);
 
     // fake alignment for the start of the decompressor
     linker->defineSymbol("TMTCUTPO", 0x1000);
 
-    addLoader(getDecompressorSections(), "TMTMAIN5", NULL);
+    addLoader(getDecompressorSections(), "TMTMAIN5", nullptr);
     if (ft->id)
     {
         assert(ft->calls > 0);
-        addLoader("TMTCALT2",NULL);
+        addLoader("TMTCALT2",nullptr);
         addFilter32(ft->id);
     }
     addLoader("TMTRELOC,RELOC320",
               big_relocs ? "REL32BIG" : "",
               "RELOC32J,TMTJUMP1",
-              NULL
+              nullptr
              );
 }
 
@@ -172,7 +172,18 @@ int PackTmt::readFileHeader()
 
     fi->seek(adam_offset,SEEK_SET);
     fi->readx(&ih,sizeof(ih));
-    // FIXME: should add some checks for the values in 'ih'
+    // FIXME: should add more checks for the values in 'ih'
+    unsigned const imagesize = get_le32(&ih.imagesize);
+    unsigned const entry     = get_le32(&ih.entry);
+    unsigned const relocsize = get_le32(&ih.relocsize);
+    if (!imagesize
+    ||  file_size <= imagesize
+    ||  file_size <= entry
+    ||  file_size <= relocsize) {
+        printWarn(getName(), "bad header; imagesize=%#x  entry=%#x  relocsize=%#x",
+            imagesize, entry, relocsize);
+        return 0;
+    }
 
     return UPX_F_TMT_ADAM;
 #undef H4
@@ -224,7 +235,7 @@ void PackTmt::pack(OutputFile *fo)
     {
         for (unsigned ic=4; ic<=rsize; ic+=4)
             set_le32(wrkmem+ic,get_le32(wrkmem+ic)-4);
-        relocsize = ptr_diff(optimizeReloc32(wrkmem+4,rsize/4,wrkmem,ibuf,1,&big_relocs), wrkmem);
+        relocsize = optimizeReloc32(wrkmem+4,rsize/4,wrkmem,ibuf,file_size,1,&big_relocs);
     }
 
     wrkmem[relocsize++] = 0;
@@ -287,7 +298,7 @@ void PackTmt::pack(OutputFile *fo)
     verifyOverlappingDecompression();
 
     // copy the overlay
-    copyOverlay(fo, overlay, &obuf);
+    copyOverlay(fo, overlay, obuf);
 
     // finally check the compression ratio
     if (!checkFinalCompressionRatio(fo))
@@ -309,7 +320,7 @@ void PackTmt::unpack(OutputFile *fo)
     Packer::handleStub(fi,fo,adam_offset);
 
     ibuf.alloc(ph.c_len);
-    obuf.allocForUncompression(ph.u_len);
+    obuf.allocForDecompression(ph.u_len);
 
     fi->seek(adam_offset + ph.buf_offset + ph.getPackHeaderSize(),SEEK_SET);
     fi->readx(ibuf,ph.c_len);
@@ -319,7 +330,7 @@ void PackTmt::unpack(OutputFile *fo)
 
     // decode relocations
     const unsigned osize = ph.u_len - get_le32(obuf+ph.u_len-4);
-    upx_byte *relocs = obuf + osize;
+    SPAN_P_VAR(upx_byte, relocs, obuf + osize);
     const unsigned origstart = get_le32(obuf+ph.u_len-8);
 
     // unfilter
@@ -330,12 +341,13 @@ void PackTmt::unpack(OutputFile *fo)
         ft.cto = (unsigned char) ph.filter_cto;
         if (ph.version < 11)
             ft.cto = (unsigned char) (get_le32(obuf+ph.u_len-12) >> 24);
-        ft.unfilter(obuf, ptr_diff(relocs, obuf));
+        ft.unfilter(obuf, ptr_udiff_bytes(relocs, obuf));
     }
 
     // decode relocations
-    MemBuffer wrkmem;
-    unsigned relocn = unoptimizeReloc32(&relocs,obuf,&wrkmem,1);
+    MemBuffer mb_wrkmem;
+    unsigned relocn = unoptimizeReloc32(relocs, obuf, mb_wrkmem, true);
+    SPAN_S_VAR(upx_byte, wrkmem, mb_wrkmem);
     for (unsigned ic = 0; ic < relocn; ic++)
         set_le32(wrkmem+ic*4,get_le32(wrkmem+ic*4)+4);
 
@@ -353,11 +365,11 @@ void PackTmt::unpack(OutputFile *fo)
     {
         fo->write(&oh,sizeof(oh));
         fo->write(obuf,osize);
-        fo->write(wrkmem,relocn*4);
+        fo->write(raw_bytes(wrkmem,relocn*4), relocn*4);
     }
 
     // copy the overlay
-    copyOverlay(fo, overlay, &obuf);
+    copyOverlay(fo, overlay, obuf);
 }
 
 /* vim:set ts=4 sw=4 et: */

@@ -1,7 +1,8 @@
 ## vim:set ts=4 sw=4 et:
 
-# Support for Travis CI -- https://travis-ci.org/upx/upx/builds
 # Copyright (C) Markus Franz Xaver Johannes Oberhumer
+
+# ...lots of outdated/unneeded stuff from the old Travis/Circle/AppVeyor CI days...
 
 #set -x # debug
 umask 022
@@ -75,7 +76,7 @@ if [[ -n $BM_CROSS ]]; then
         export upx_EXTRA_LDFLAGS="-static-libgcc -static-libstdc++"
     fi
     cat /etc/os-release || true
-    if egrep -q '^PRETTY_NAME="?Ubuntu .*12\.04' /etc/os-release; then
+    if grep -E -q '^PRETTY_NAME="?Ubuntu .*12\.04' /etc/os-release; then
         case $BM_CROSS-$BM_C in
             arm-linux-gnueabi-gcc | arm-linux-gnueabi-gcc-4.6)
                 [[ -z $upx_qemu ]] && upx_qemu="qemu-arm -L /usr/arm-linux-gnueabi"
@@ -92,7 +93,7 @@ if [[ -n $BM_CROSS ]]; then
                 [[ -z $upx_wine ]] && upx_wine="wine"
                 x=x86_64-w64-mingw32; AR="$x-ar"; CC="$x-gcc -m64"; CXX="$x-g++ -m64" ;;
         esac
-    elif egrep -q '^PRETTY_NAME="?Ubuntu 16\.04' /etc/os-release; then
+    elif grep -E -q '^PRETTY_NAME="?Ubuntu 16\.04' /etc/os-release; then
         case $BM_CROSS-$BM_C in
             aarch64-linux-gnu-gcc-5)
                 [[ -z $upx_qemu ]] && upx_qemu="qemu-aarch64 -L /usr/aarch64-linux-gnu"
@@ -130,9 +131,18 @@ if [[ -n $BM_CROSS ]]; then
                 [[ -z $upx_wine ]] && upx_wine="wine"
                 x=x86_64-w64-mingw32; AR="$x-ar"; CC="$x-gcc -m64"; CXX="$x-g++ -m64" ;;
         esac
+    elif grep -E -q '^PRETTY_NAME="?Ubuntu 20\.04' /etc/os-release; then
+        case $BM_CROSS-$BM_C in
+            x86_64-w64-mingw32-gcc-9)
+                export upx_EXTRA_CPPFLAGS="-D__USE_MINGW_ANSI_STDIO=1"
+                export upx_EXTRA_LDFLAGS="-static"
+                upx_exeext=.exe
+                [[ -z $upx_wine ]] && upx_wine="wine64"
+                x=x86_64-w64-mingw32; AR="$x-ar"; CC="$x-gcc -m64"; CXX="$x-g++ -m64" ;;
+        esac
     fi
 fi # BM_CROSS
-if [[ "$CC" == "false" ]]; then # generic
+if [[ $CC == "false" ]]; then # generic
 if [[ -z $BM_CROSS ]]; then
     if [[ $TRAVIS_OS_NAME == osx ]]; then
         case $BM_C in
@@ -147,12 +157,16 @@ if [[ -z $BM_CROSS ]]; then
                 v=${BM_C:6:3}; CC="clang-$v"; CXX="clang++-$v"; SCAN_BUILD="scan-build-$v" ;;
             clang-[789]-m??)
                 v=${BM_C:6:1}; CC="clang-$v"; CXX="clang++-$v"; SCAN_BUILD="scan-build-$v" ;;
+            clang-1[0-9]-m??)
+                v=${BM_C:6:2}; CC="clang-$v"; CXX="clang++-$v"; SCAN_BUILD="scan-build-$v" ;;
             gcc | gcc-m?? | gcc-mx32)
                 CC="gcc"; CXX="g++" ;; # standard system compiler
             gcc-[34].[0-9]-m?? | gcc-[34].[0-9]-mx32)
                 v=${BM_C:4:3}; CC="gcc-$v"; CXX="g++-$v" ;;
             gcc-[56789]-m?? | gcc-[56789]-mx32)
                 v=${BM_C:4:1}; CC="gcc-$v"; CXX="g++-$v" ;;
+            gcc-1[0-9]-m?? | gcc-1[0-9]-mx32)
+                v=${BM_C:4:2}; CC="gcc-$v"; CXX="g++-$v" ;;
         esac
     fi
 fi
@@ -175,7 +189,7 @@ fi # CC_OVERRIDE
 [[ -z $upx_SRCDIR ]] && upx_SRCDIR=$(readlink -mn -- $argv0dir/..)
 [[ -z $ucl_SRCDIR ]] && ucl_SRCDIR=$(readlink -mn -- $upx_SRCDIR/../deps/ucl-1.03)
 [[ -z $upx_testsuite_SRCDIR ]] && upx_testsuite_SRCDIR=$(readlink -mn -- $upx_SRCDIR/../deps/upx-testsuite)
-[[ -z $zlib_SRCDIR ]] && zlib_SRCDIR=$(readlink -mn -- $upx_SRCDIR/../deps/zlib-1.2.8)
+[[ -z $zlib_SRCDIR ]] && zlib_SRCDIR=$(readlink -mn -- $upx_SRCDIR/../deps/zlib-1.2.11)
 
 # build dirs
 mkbuilddirs() {
@@ -187,8 +201,8 @@ mkbuilddirs() {
 }
 # search for an existing $toptop_builddir
 if [[ -z $toptop_builddir ]]; then
-    for d in . ..;  do
-        for subdir in "local" appveyor circle gitlab travis .; do
+    for d in . ..; do
+        for subdir in "local" appveyor circle github gitlab travis .; do
             dd=$d/build/$subdir
             if [[ -d $dd ]]; then
                 toptop_builddir=$(readlink -en -- "$dd")
@@ -203,7 +217,7 @@ fi
 [[ -z $upx_BUILDDIR ]] && upx_BUILDDIR=$(readlink -mn -- "$toptop_bdir/upx")
 [[ -z $ucl_BUILDDIR ]] && ucl_BUILDDIR=$(readlink -mn -- "$toptop_bdir/ucl-1.03")
 [[ -z $upx_testsuite_BUILDDIR ]] && upx_testsuite_BUILDDIR=$(readlink -mn -- "$toptop_bdir/upx-testsuite")
-[[ -z $zlib_BUILDDIR ]] && zlib_BUILDDIR=$(readlink -mn -- "$toptop_bdir/zlib-1.2.8")
+[[ -z $zlib_BUILDDIR ]] && zlib_BUILDDIR=$(readlink -mn -- "$toptop_bdir/zlib-1.2.11")
 [[ -z $lcov_OUTPUTDIR ]] && lcov_OUTPUTDIR=$(readlink -mn -- "$toptop_bdir/.lcov-results")
 unset toptop_builddir toptop_bdir
 
@@ -227,7 +241,7 @@ make_absolute lcov_OUTPUTDIR
 unset var_prefix var_suffix
 
 print_header() {
-    local x="==========="; x="$x$x$x$x$x$x$x"
+    local x='==========='; x="$x$x$x$x$x$x$x"
     echo -e "\n${x}\n${1}\n${x}\n"
 }
 
@@ -254,15 +268,6 @@ print_settings() {
     done
     done
     ##env | LC_ALL=C sort
-}
-
-fix_home_ssh_perms() {
-    if [[ -d ~/.ssh ]]; then
-        if [[ -x /usr/sbin/restorecon ]]; then
-            /usr/sbin/restorecon -v -R ~/.ssh || true
-        fi
-        chmod -c -R go-rwx ~/.ssh || true
-    fi
 }
 
 true

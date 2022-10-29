@@ -2,7 +2,7 @@
 //
 //  This file is part of the UPX executable compressor.
 //
-//  Copyright (C) 2000-2020 John F. Reiser
+//  Copyright (C) 2000-2022 John F. Reiser
 //  All Rights Reserved.
 //
 //  UPX and the UCL library are free software; you can redistribute them
@@ -328,7 +328,7 @@ bswap9:
         ret
 
 bad__udivsi3:
-        bkpt
+        bkpt  // bad__udivsi3
 __udivsi3: .globl __udivsi3
         cmp r1,#10
         bne bad__udivsi3

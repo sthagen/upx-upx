@@ -1,9 +1,9 @@
-/.bzr*
 /.hg*
 /.vscode*
 /Makevars.global*
 /build*
 /maint*
+/vendor*
 
 .depend
 GNUmakefile
@@ -12,31 +12,22 @@ Makevars.local*
 tmp-testsuite*
 
 *.a
+*.d
 *.dll
+*.exe
 *.lib
+*.map
+*.o
+*.obj
+*.out
 *.py[cdo]
 *.so
 *.swp
+*.ttp
 
-doc/*.1
-doc/*.doc
-doc/*.html
 doc/*.man
 doc/*.ps
 doc/*.tex
-
-src/compress_nrv*
-src/*.mft
-src/*.rc
-
-src/*.d
-src/*.exe
-src/*.map
-src/*.o
-src/*.obj
-src/*.out
-src/*.res
-src/*.ttp
 
 src/stub/**/.*-stamp
 src/stub/**/MMakefile

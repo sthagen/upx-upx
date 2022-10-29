@@ -2,7 +2,7 @@
 //
 //  This file is part of the UPX executable compressor.
 //
-//  Copyright (C) 2000-2020 John F. Reiser
+//  Copyright (C) 2000-2022 John F. Reiser
 //  All Rights Reserved.
 //
 //  UPX and the UCL library are free software; you can redistribute them
@@ -28,11 +28,17 @@
 //
 
 NBPW= 8
+#define call bl
+
 #define ARM_OLDABI 1
 #include "arch/arm64/v8/macros.S"
 
-sz_Elf64_Ehdr= 64
-sz_Elf64_Phdr= 56
+sz_Ehdr= 8*NBPW
+sz_Phdr= 7*NBPW
+  p_vaddr= 4+4+8
+  p_filesz= 4+4+8+8+8
+  p_memsz=  4+4+8+8+8+8
+
 sz_l_info = 12
 sz_p_info = 12
 sz_b_info = 12
@@ -59,7 +65,7 @@ PATH_MAX= 4096
 #endif  /*}*/
 #if DEBUG  //{
 #define TRACE(arg) \
-        stp lr,x0,[sp,#-2*NBPW]!; mov x0,arg; bl trace; \
+        stp lr,x0,[sp,#-2*NBPW]!; mov x0,arg; call trace; \
         ldp lr,x0,[sp],#2*NBPW
 #else  //}{
 #define TRACE(arg) /*empty*/
@@ -82,15 +88,16 @@ fold_begin:
 
 // In:  sp/ PMASK,fd,ADRU,LENU, argc,argv,...
 //lr   .req x30
-wLENX  .req w29
-xADRX  .req x28
+wLENC  .req w29  // compressed input
+  xLENC  .req x29
+xADRC  .req x28
 
-wLENU  .req w27
+wLENU  .req w27  // unfolded fold_begin and upx_main
   xLENU  .req x27
 xADRU  .req x26
 
-xelfa  .req x25
-xfexp  .req x24
+xelfa  .req x25  // hi &Elf64_Ehdr
+xfexp  .req x24  // de-compressor
 xauxe  .req x23  // past new auxv
 xauxv  .req x22
 
@@ -146,7 +153,7 @@ xPMASK .req x20
 
         mov w2,#PATH_MAX-1  // buffer length and null terminator
         adr x0,proc_self_exe
-        bl readlink
+        call readlink
         cmn x0,#4096; bcs 0f  // error
         strb wzr,[x2,x0]  // null terminate pathname (x2 is old x1)
 0:
@@ -159,11 +166,16 @@ xPMASK .req x20
         mov x4,xfexp  // &f_decompress
         mov x3,xauxv  // new &Elf64_auxv_t
         mov x2,sp  // ehdr
-        mov w1,wLENX  // total size of compressed data
-        mov x0,xADRX  // &b_info
-        bl upx_main
+        mov w1,wLENC  // total size of compressed data
+        mov x0,xADRC  // &b_info
+        call upx_main
           add sp,sp,#MAX_ELF_HDR + OVERHEAD  // un-alloca
         mov xfexp,x0  // entry address
+
+// Discard pages of compressed input data (includes [ADRC,+LENC) )
+        ldr x1,[xelfa,#p_memsz+sz_Phdr+sz_Ehdr]  // Phdr[C_TEXT= 1].p_memsz
+        mov x0,xelfa  // hi &Elf64_Ehdr
+        call munmap  // discard C_TEXT compressed data
 
 // Map 1 page of /proc/self/exe so that munmap does not remove all references
         mov x5,#0  // offset
@@ -172,23 +184,76 @@ xPMASK .req x20
         mov w2,#PROT_READ
         mov x1,#PAGE_SIZE
         mov x0,#0  // addr
-        bl mmap
+        call mmap
 
         mov w0,wfd  // fd
-        bl close
+        call close
 
         mov lr,xfexp  // entry
         mov x0,xADRU
         mov w1,wLENU
         ldr x2,[xauxe,#NBPW - sz_auxv]  // Elf64_auxv_t[AT_NULL@.a_type].a_val
-        mov w8,#__NR_munmap
+
+                // paranoia: zero used registers except x0,x1,x2,x30(lr)
+        stp xzr,xzr,[sp,#-2*NBPW]!
+        mov x16,xzr
+        ldp x3,x4,[sp,#0]
+        ldp x6,x7,[sp,#0]
+        ldp x8,x9,[sp,#0]
+        ldp x20,x21,[sp,#0]
+        ldp x22,x23,[sp,#0]
+        ldp x24,x25,[sp,#0]
+        ldp x26,x27,[sp,#0]
+        ldp x28,x29,[sp],#2*NBPW
+
 #if DEBUG  //{
         ldr w3,[x2,#0]  // 1st instr
         ldr w4,[x2,#4]  // 2nd instr
         TRACE(4)
 #endif  //}
 
+#if 1  //{
+// This is a workaround for an intermittent problem. The "svc #0" in the escape hatch
+// to invoke munmap() on the unfolded stub, sometimes (20% ?) gets SIGILL despite
+// apparent good environment.  So do not unmap, which will waste 1 page.
+// Example:
+//     Program received signal SIGILL, Illegal instruction.
+// 0x0000fffff7fde974 in ?? ()
+// (gdb) info proc
+// process 748
+// cmdline = '/home/jreiser/611/hello.packed'
+// (gdb) shell cat /proc/748/maps
+// fffff7faa000-fffff7fcb000 r-xp 00000000 b3:02 8845                       /usr/lib/aarch64-linux-gnu/ld-2.31.so
+// fffff7fcb000-fffff7fdb000 ---p 00000000 00:00 0
+// fffff7fdb000-fffff7fde000 rw-p 00021000 b3:02 8845                       /usr/lib/aarch64-linux-gnu/ld-2.31.so
+// fffff7fde000-fffff7fdf000 r-xp 00000000 00:00 0   ## pc in this page; has 'r-x' permission
+// fffff7fdf000-fffff7fee000 ---p 00000000 00:00 0
+// fffff7fee000-fffff7ff0000 rw-p 00000000 00:00 0
+// fffff7ffa000-fffff7ffb000 r-xp 00000000 00:00 0   ## target of munmap [x0, +x1)
+// fffff7ffb000-fffff7ffd000 r--p 00000000 00:00 0                          [vvar]
+// fffff7ffd000-fffff7ffe000 r-xp 00000000 00:00 0                          [vdso]
+// fffff7fff000-fffff8000000 r--p 00000000 b3:02 126504                     /home/jreiser/611/hello.packed
+// fffffffdf000-1000000000000 rw-p 00000000 00:00 0                         [stack]
+// (gdb) x/2i $pc
+// => 0xfffff7fde974:   svc #0x0
+//    0xfffff7fde978:   ret
+// (gdb) info reg
+// x0             0xfffff7ffa000      0xfffff7ffa000  ## address to unmap
+// x1             0xa10               0xa10  # length to unmap
+// x2             0xfffff7fde974      0xfffff7fde974  ## address of escape hatch
+// x3 - x29       0x0                 0x0
+// x30            0xfffff7fab140      0xfffff7fab140  ## entry to ld-linux
+// sp             0xffffffffd7b0      0xffffffffd7b0
+// pc             0xfffff7fde974      0xfffff7fde974
+// cpsr           0x60000000          [ EL=0 C Z ]
+// fpsr           0x0                 0x0
+// fpcr           0x0                 0x0
+// (gdb)
+        ret  // "br lr"; just enter ld-linux, omitting the munmap of unfolded stub
+#else  //}{  This should work, but fails intermittently
+        mov w8,#__NR_munmap  // munmap(ADRU, LENU)  unfolded stub
         br x2  // goto escape hatch
+#endif  //}
 
 space3eq:
         .ascii "   ="
@@ -256,18 +321,18 @@ trace:  // preserves condition code (thank you, CBNZ) [if write() does!]
         sub sp,sp,#TRACE_BUFLEN
         mov x2,sp  // output string
 
-        mov w1,#'\n'; bl trace_hex  // In: r0 as label
+        mov w1,#'\n'; call trace_hex  // In: r0 as label
         mov w1,#'>';  strb w1,[x2],#1
 
         mov w5,#10  // nrows to print
 L600:  // each row
         add x1,sp,#TRACE_BUFLEN
         sub x0,x4,x1
-        lsr x0,x0,#3; mov w1,#'\n'; bl trace_hex2  // which block of 4
+        lsr x0,x0,#3; mov w1,#'\n'; call trace_hex2  // which block of 4
 
         mov w6,#4  // 64-bit words per row
 L610:  // each word
-        ldr x0,[x4],#8; mov w1,#(' '<<8)|' '; bl trace_hex  // next word
+        ldr x0,[x4],#8; mov w1,#(' '<<8)|' '; call trace_hex  // next word
         sub w6,w6,#1; cbnz w6,L610
 
         sub w5,w5,#1; cbnz w5,L600
@@ -343,7 +408,7 @@ __NR_munmap   = 0xd7 + __NR_SYSCALL_BASE  // 215
 
         .globl my_bkpt
 my_bkpt:
-        brk #0
+        brk #0  // my_bkpt
         ret
 
         .globl exit

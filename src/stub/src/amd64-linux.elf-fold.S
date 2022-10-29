@@ -2,7 +2,7 @@
 *
 *  This file is part of the UPX executable compressor.
 *
-*  Copyright (C) 2000-2020 John F. Reiser
+*  Copyright (C) 2000-2022 John F. Reiser
 *  All Rights Reserved.
 *
 *  UPX and the UCL library are free software; you can redistribute them
@@ -67,8 +67,8 @@ __NR_brk=      12
 __NR_exit= 60
 __NR_readlink= 89
 
-// IN:
-// %rbx= &O_BINFO; %rbp= f_exp; %r14= ADRX; %r15= LENX;
+// IN: [ADRX,+LENX): compressed data; [ADRU,+LENU): expanded fold (w/ upx_main)
+// %rbx= 4+ &O_BINFO; %rbp= f_exp; %r14= ADRX; %r15= LENX;
 // rsp/ elfaddr,fd,ADRU,LENU,rdx,%entry,  argc,argv,0,envp,0,auxv,0,strings
 
 fold_begin:
@@ -119,15 +119,15 @@ L90:
 
         mov %ecx,%eax
         xor %edi,%eax
-        xor   $8,%eax
-        and   $8,%eax
+        xor   $NBPW,%eax
+        and   $NBPW,%eax
         sub %rax,%rdi  # keep 16-byte alignment of %rsp
 
         mov %rdi,%r14  # end of new auxv
-        sub $8,%rdi        # &last qword of new auxv
-        lea -8(%r15),%rsi  # &last qword of old auxv
+        sub $NBPW,%rdi        # &last qword of new auxv
+        lea -NBPW(%r15),%rsi  # &last qword of old auxv
         shr   $3,%rcx; rep movsq
-        lea 8(%rdi),%rsp
+        lea NBPW(%rdi),%rsp
      cld
 
         lea (%r14,%r12),%arg4  # &new Elf64_auxv
@@ -139,7 +139,7 @@ L90:
         pop %rax  # elfaddr
         subq $ OVERHEAD,%rsp
         movq %rsp,%arg3  # &ELf64_Ehdr temporary space
-        push %rax  # elfaddr  7th arg
+        push %rax; mov %rax,%r13  # elfaddr  7th arg
 
         movq %rbp,%arg5  # &decompress: f_expand
         call upx_main  # Out: %rax= entry
@@ -147,30 +147,38 @@ L90:
                 Elf32_Auxv_t *arg4, f_decompr arg5, f_unf arg6,
                 Elf64_Addr elfaddr )
 */
-        addq $1*NBPW+OVERHEAD,%rsp  # toss elfaddr, too
+// rsp/ elfaddr,{OVERHEAD},fd,ADRU,LENU,rdx,%entry,  argc,argv,0,envp,0,auxv,0,strings
+        addq $1*NBPW+OVERHEAD,%rsp  # also discard elfaddr
         movq %rax,4*NBPW(%rsp)  # entry
         pop %rbx  # fd
 
-// Map 1 page of /proc/self/exe so that it does not disappear.
-        sub %arg6l,%arg6l  # 0 offset
+sz_Ehdr= 8*NBPW
+sz_Phdr= 7*NBPW
+p_memsz= 4+4+ 4*NBPW
+// Discard pages of compressed data (includes [ADRX,+LENX) )
+        movq p_memsz+sz_Phdr+sz_Ehdr(%r13),%arg2  #   Phdr[C_TEXT= 1].p_memsz
+        movq %r13,%arg1  # hi elfaddr
+        call munmap  # discard C_TEXT compressed data
+
+// Map 1 page of /proc/self/exe so that the symlink does not disappear.
+        subq %arg6,%arg6  # 0 offset
         mov %ebx,%arg5l  # fd
-        push $MAP_PRIVATE; pop %sys4  # BEWARE:  %sys4
+        push $MAP_PRIVATE; pop %arg4
         push $PROT_READ; pop %arg3
         mov $PAGE_SIZE,%arg2l
-        push $0; pop %arg1
-        push $__NR_mmap; pop %rax; syscall
+        subl %arg1l,%arg1l  # 0
+        call mmap
 
         mov %ebx,%edi  # fd
-        push $__NR_close; pop %rax; syscall
+        call close
 
-        pop %arg1  # ADRU
+        pop %arg1  # ADRU: unfolded upx_main etc.
         pop %arg2  # LENU
-        push $ __NR_munmap; pop %rax
-        jmp *-8(%r14)  # goto: syscall; pop %rdx; ret
+        push $__NR_munmap; pop %rax
+        jmp *-NBPW(%r14)  # goto: syscall; pop %rdx; ret
 
 mmap: .globl mmap
         movb $ __NR_mmap,%al
-sysarg4:
         movq %arg4,%sys4
 sysgo:  # NOTE: kernel demands 4th arg in %sys4, NOT %arg4
         movzbl %al,%eax

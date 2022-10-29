@@ -1,8 +1,8 @@
-#define UPX_VERSION_HEX         0x036000        /* 03.96.00 */
-#define UPX_VERSION_STRING      "3.96"
-#define UPX_VERSION_STRING4     "3.96"
-#define UPX_VERSION_DATE        "Jan 23rd 2020"
-#define UPX_VERSION_DATE_ISO    "2020-01-23"
-#define UPX_VERSION_YEAR        "2020"
+#define UPX_VERSION_HEX         0x040000        /* 04.00.00 */
+#define UPX_VERSION_STRING      "4.0.0"
+#define UPX_VERSION_STRING4     "4.00"
+#define UPX_VERSION_DATE        "Oct 28th 2022"
+#define UPX_VERSION_DATE_ISO    "2022-10-28"
+#define UPX_VERSION_YEAR        "2022"
 
 /* vim:set ts=4 sw=4 et: */

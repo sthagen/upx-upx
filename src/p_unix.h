@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2020 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2020 Laszlo Molnar
+   Copyright (C) 1996-2022 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2022 Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -41,15 +41,16 @@ class PackUnix : public Packer
 protected:
     PackUnix(InputFile *f);
 public:
-    virtual int getVersion() const { return 13; }
-    virtual const int *getFilters() const { return NULL; }
+    virtual int getVersion() const override { return 13; }
+    virtual const int *getFilters() const override { return nullptr; }
     virtual int getStrategy(Filter &);
 
-    virtual void pack(OutputFile *fo);
-    virtual void unpack(OutputFile *fo);
+    virtual void pack(OutputFile *fo) override;
+    virtual void unpack(OutputFile *fo) override;
 
-    virtual bool canPack();
-    virtual int canUnpack();
+    virtual bool canPack() override;
+    virtual int  canUnpack() override;  // really 'bool'
+    int find_overlay_offset(MemBuffer const &buf);
 
 protected:
     // called by the generic pack()
@@ -64,7 +65,7 @@ protected:
 
     virtual void writePackHeader(OutputFile *fo);
 
-    virtual bool checkCompressionRatio(unsigned, unsigned) const;
+    virtual bool checkCompressionRatio(unsigned, unsigned) const override;
 
 protected:
     struct Extent {
@@ -72,12 +73,13 @@ protected:
         off_t size;
     };
     virtual void packExtent(const Extent &x,
-        unsigned &total_in, unsigned &total_out, Filter *, OutputFile *,
-        unsigned hdr_len = 0);
+        Filter *, OutputFile *,
+        unsigned hdr_len = 0, unsigned b_extra = 0 ,
+        bool inhibit_compression_check = false);
     virtual void unpackExtent(unsigned wanted, OutputFile *fo,
-        unsigned &total_in, unsigned &total_out,
         unsigned &c_adler, unsigned &u_adler,
         bool first_PF_X, unsigned szb_info, bool is_rewrite = false);
+    unsigned total_in, total_out;  // unpack
 
     int exetype;
     unsigned blocksize;
@@ -93,12 +95,12 @@ protected:
 
     // must agree with stub/linux.hh
     __packed_struct(b_info) // 12-byte header before each compressed block
-        unsigned sz_unc;  // uncompressed_size
-        unsigned sz_cpr;  //   compressed_size
+        NE32 sz_unc;  // uncompressed_size
+        NE32 sz_cpr;  //   compressed_size
         unsigned char b_method;  // compression algorithm
         unsigned char b_ftid;  // filter id
         unsigned char b_cto8;  // filter parameter
-        unsigned char b_unused;
+        unsigned char b_extra;
     __packed_struct_end()
 
     __packed_struct(l_info) // 12-byte trailer in header for loader
@@ -110,9 +112,9 @@ protected:
     __packed_struct_end()
 
     __packed_struct(p_info) // 12-byte packed program header
-        unsigned p_progid;
-        unsigned p_filesize;
-        unsigned p_blocksize;
+        NE32 p_progid;
+        NE32 p_filesize;
+        NE32 p_blocksize;
     __packed_struct_end()
 
     struct l_info linfo;
@@ -139,7 +141,7 @@ protected:
         unsigned char b_method;  // compression algorithm
         unsigned char b_ftid;  // filter id
         unsigned char b_cto8;  // filter parameter
-        unsigned char b_unused;
+        unsigned char b_extra;
     __packed_struct_end()
 
     __packed_struct(l_info) // 12-byte trailer in header for loader
@@ -171,7 +173,7 @@ protected:
         unsigned char b_method;  // compression algorithm
         unsigned char b_ftid;  // filter id
         unsigned char b_cto8;  // filter parameter
-        unsigned char b_unused;
+        unsigned char b_extra;
     __packed_struct_end()
 
     __packed_struct(l_info) // 12-byte trailer in header for loader

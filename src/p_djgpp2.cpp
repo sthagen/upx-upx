@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2020 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2020 Laszlo Molnar
+   Copyright (C) 1996-2022 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2022 Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -103,15 +103,15 @@ void PackDjgpp2::buildLoader(const Filter *ft)
               getDecompressorSections(),
               M_IS_LZMA(ph.method) ? "LZMA_DONE_STACK" : "",
               "DJ2BSS00",
-              NULL
+              nullptr
              );
     if (ft->id)
     {
         assert(ft->calls > 0);
-        addLoader("DJCALLT2", NULL);
+        addLoader("DJCALLT2", nullptr);
         addFilter32(ft->id);
     }
-    addLoader("DJRETURN,+40C,UPX1HEAD", NULL);
+    addLoader("DJRETURN,+40C,UPX1HEAD", nullptr);
 }
 
 
@@ -161,24 +161,25 @@ static bool is_dlm(InputFile *fi, unsigned coff_offset)
 
 static void handle_allegropak(InputFile *fi, OutputFile *fo)
 {
-    unsigned char buf[0x4000];
+    unsigned char b[8];
     int pfsize = 0;
 
     try {
         fi->seek(-8, SEEK_END);
-        fi->readx(buf, 8);
-        if (memcmp(buf, "slh+", 4) != 0)
+        fi->readx(b, 8);
+        if (memcmp(b, "slh+", 4) != 0)
             return;
-        pfsize = get_be32_signed(buf+4);
-        if (pfsize <= 8 || pfsize >= (off_t) fi->st.st_size)
+        pfsize = get_be32_signed(b+4);
+        if (pfsize <= 8 || pfsize >= fi->st.st_size)
             return;
-        fi->seek(-(off_t)pfsize, SEEK_END);
+        fi->seek(-pfsize, SEEK_END);
     } catch (const IOException&) {
         return;
     }
+    MemBuffer buf(0x4000);
     while (pfsize > 0)
     {
-        const int len = UPX_MIN(pfsize, (int)sizeof(buf));
+        const int len = UPX_MIN(pfsize, (int)buf.getSize());
         fi->readx(buf, len);
         fo->write(buf, len);
         pfsize -= len;
@@ -250,14 +251,25 @@ bool PackDjgpp2::canPack()
     if (opt->force == 0)
         if (text->size != coff_hdr.a_tsize || data->size != coff_hdr.a_dsize)
             throwAlreadyPacked();
+
+    // Check for gap in vaddr between text and data, or between data and bss.
     if (text->vaddr + text->size != data->vaddr
         || data->vaddr + data->size != bss->vaddr)
     {
-        if (text->vaddr + text->size < data->vaddr &&
-            data->vaddr - text->vaddr == data->scnptr - text->scnptr)
+        // "Non-standard" layout of text,data,bss: not contiguous in vaddr.
+        // But should be OK if no overlap.
+
+        // Check for no overlap of text and data:
+        // neither by vaddr, nor by image data
+        if (text->vaddr + text->size <= data->vaddr &&
+            data->scnptr - text->scnptr <= data->vaddr - text->vaddr)
         {
-            // This hack is needed to compress Quake 1!
-            text->size = coff_hdr.a_tsize = data->vaddr - text->vaddr;
+            // Examples: Quake1; FreePascal(DOS) install.exe (github-issue45)
+            // Hack: enlarge text image data to eliminate the gap.
+            text->size = coff_hdr.a_tsize = data->scnptr - text->scnptr;
+            // But complain if this causes overlap in vaddr
+            if (text->vaddr + text->size > data->vaddr)
+                throwAlreadyPacked();
         }
         else
             throwAlreadyPacked();
@@ -325,7 +337,8 @@ void PackDjgpp2::pack(OutputFile *fo)
     linker->defineSymbol("original_entry", coff_hdr.a_entry);
     linker->defineSymbol("length_of_bss", ph.overlap_overhead / 4);
     defineDecompressorSymbols();
-    assert(bss->vaddr == ((size + 0x1ff) &~ 0x1ff) + (text->vaddr &~ 0x1ff));
+    // Just need no overlap; non-contiguous (gap length > 0)) is OK
+    assert(bss->vaddr >= ((size + 0x1ff) &~ 0x1ff) + (text->vaddr &~ 0x1ff));
     linker->defineSymbol("stack_for_lzma", bss->vaddr + bss->size);
     linker->defineSymbol("start_of_uncompressed", text->vaddr - hdrsize);
     linker->defineSymbol("start_of_compressed", data->vaddr);
@@ -403,7 +416,7 @@ void PackDjgpp2::unpack(OutputFile *fo)
     handleStub(fo);
 
     ibuf.alloc(ph.c_len);
-    obuf.allocForUncompression(ph.u_len);
+    obuf.allocForDecompression(ph.u_len);
 
     fi->seek(coff_offset + ph.buf_offset + ph.getPackHeaderSize(), SEEK_SET);
     fi->readx(ibuf, ph.c_len);

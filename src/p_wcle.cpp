@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2020 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2020 Laszlo Molnar
+   Copyright (C) 1996-2022 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2022 Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -95,16 +95,16 @@ void PackWcle::buildLoader(const Filter *ft)
     initLoader(stub_i386_dos32_watcom_le, sizeof(stub_i386_dos32_watcom_le));
     addLoader("IDENTSTR,WCLEMAIN",
               ph.first_offset_found == 1 ? "WCLEMAIN02" : "",
-              "WCLEMAIN03,UPX1HEAD,WCLECUTP", NULL);
+              "WCLEMAIN03,UPX1HEAD,WCLECUTP", nullptr);
 
     // fake alignment for the start of the decompressor
     linker->defineSymbol("WCLECUTP", 0x1000);
 
-    addLoader(getDecompressorSections(), "WCLEMAI2", NULL);
+    addLoader(getDecompressorSections(), "WCLEMAI2", nullptr);
     if (ft->id)
     {
         assert(ft->calls > 0);
-        addLoader(ft->addvalue ? "WCCTTPOS" : "WCCTTNUL", NULL);
+        addLoader(ft->addvalue ? "WCCTTPOS" : "WCCTTNUL", nullptr);
         addFilter32(ft->id);
     }
 #if 1
@@ -113,13 +113,13 @@ void PackWcle::buildLoader(const Filter *ft)
         addLoader("WCRELOC1,RELOC320",
                   big_relocs ? "REL32BIG" : "",
                   "RELOC32J",
-                  NULL
+                  nullptr
                  );
     }
 #endif
     addLoader(has_extra_code ? "WCRELSEL" : "",
               "WCLEMAI4",
-              NULL
+              nullptr
              );
 }
 
@@ -176,9 +176,9 @@ void PackWcle::encodeEntryTable()
     //if (Opt_debug) printf("%d entries encoded.\n",n);
     UNUSED(n);
 
-    soentries = ptr_diff(p, ientries) + 1;
+    soentries = ptr_udiff_bytes(p, ientries) + 1;
     oentries = ientries;
-    ientries = NULL;
+    ientries = nullptr;
 }
 
 
@@ -290,12 +290,13 @@ void PackWcle::preprocessFixups()
         throwCantPack("files without relocations are not supported");
     }
 
-    ByteArray(rl, jc);
+    MemBuffer rl_membuf(jc);
     ByteArray(srf, counts[objects+0]+1);
     ByteArray(slf, counts[objects+1]+1);
 
-    upx_byte *selector_fixups = srf;
-    upx_byte *selfrel_fixups = slf;
+    SPAN_S_VAR(upx_byte, rl, rl_membuf);
+    SPAN_S_VAR(upx_byte, selector_fixups, srf_membuf);
+    SPAN_S_VAR(upx_byte, selfrel_fixups, slf_membuf);
     unsigned rc = 0;
 
     upx_byte *fix = ifixups;
@@ -399,20 +400,20 @@ void PackWcle::preprocessFixups()
         delete[] ifixups;
         ifixups = new upx_byte[1000];
     }
-    fix = optimizeReloc32 (rl,rc,ifixups,iimage,1,&big_relocs);
-    has_extra_code = srf != selector_fixups;
+    fix = ifixups + optimizeReloc32 (rl,rc,ifixups,iimage,file_size,1,&big_relocs);
+    has_extra_code = ptr_udiff_bytes(selector_fixups, srf) != 0;
     // FIXME: this could be removed if has_extra_code = false
     // but then we'll need a flag
     *selector_fixups++ = 0xC3; // ret
-    memcpy(fix,srf,selector_fixups-srf); // copy selector fixup code
-    fix += selector_fixups-srf;
+    memcpy(fix,srf,ptr_udiff_bytes(selector_fixups, srf)); // copy selector fixup code
+    fix += ptr_udiff_bytes(selector_fixups, srf);
 
-    memcpy(fix,slf,selfrel_fixups-slf); // copy self-relative fixup positions
-    fix += selfrel_fixups-slf;
+    memcpy(fix,slf,ptr_udiff_bytes(selfrel_fixups,slf)); // copy self-relative fixup positions
+    fix += ptr_udiff_bytes(selfrel_fixups, slf);
     set_le32(fix,0xFFFFFFFFUL);
     fix += 4;
 
-    sofixups = ptr_diff(fix, ifixups);
+    sofixups = ptr_udiff_bytes(fix, ifixups);
 }
 
 
@@ -425,9 +426,10 @@ void PackWcle::encodeImage(Filter *ft)
     memcpy(ibuf,iimage,soimage);
     memcpy(ibuf+soimage,ifixups,sofixups);
 
-    delete[] ifixups; ifixups = NULL;
+    delete[] ifixups; ifixups = nullptr;
 
-    oimage.allocForCompression(isize, RESERVED+512);
+    mb_oimage.allocForCompression(isize, RESERVED+512);
+    oimage = mb_oimage;
     // prepare packheader
     ph.u_len = isize;
     // prepare filter [already done]
@@ -435,9 +437,9 @@ void PackWcle::encodeImage(Filter *ft)
     upx_compress_config_t cconf; cconf.reset();
     cconf.conf_lzma.max_num_probs = 1846 + (768 << 4); // ushort: ~28 KiB stack
     compressWithFilters(ibuf, isize,
-                        oimage + RESERVED,
+                        raw_bytes(oimage + RESERVED, mb_oimage.getSize() - RESERVED),
                         ibuf + ft->addvalue, ft->buf_len,
-                        NULL, 0,
+                        nullptr, 0,
                         ft, 512, &cconf, 0);
 
     ibuf.dealloc();
@@ -473,7 +475,7 @@ void PackWcle::pack(OutputFile *fo)
     readNonResidentNames();
 
 //    if (find_le32(iimage,20,get_le32("UPX ")) >= 0)
-    if (find_le32(iimage,UPX_MIN(soimage,256u),UPX_MAGIC_LE32) >= 0)
+    if (find_le32(raw_bytes(iimage, soimage) ,UPX_MIN(soimage,256u),UPX_MAGIC_LE32) >= 0)
         throwAlreadyPacked();
 
     if (ih.init_ss_object != objects)
@@ -556,14 +558,14 @@ void PackWcle::pack(OutputFile *fo)
     writeFile(fo, opt->watcom_le.le);
 
     // verify
-    verifyOverlappingDecompression(oimage + e_len, oimage.getSize() - e_len);
+    verifyOverlappingDecompression(mb_oimage + e_len, mb_oimage.getSize() - e_len);
 
     // copy the overlay
     const unsigned overlaystart = ih.data_pages_offset + exe_offset
         + getImageSize();
     const unsigned overlay = file_size - overlaystart - ih.non_resident_name_table_length;
     checkOverlay(overlay);
-    copyOverlay(fo, overlay, &oimage);
+    copyOverlay(fo, overlay, mb_oimage);
 
     // finally check the compression ratio
     if (!checkFinalCompressionRatio(fo))
@@ -577,12 +579,14 @@ void PackWcle::pack(OutputFile *fo)
 
 void PackWcle::decodeFixups()
 {
-    upx_byte *p = oimage + soimage;
+    SPAN_P_VAR(upx_byte, p, oimage + soimage);
+//    assert(p.raw_size_in_bytes() == mb_oimage.getSize()); // Span sanity check
 
-    iimage.dealloc();
+    mb_iimage.dealloc();
+    iimage = nullptr;
 
     MemBuffer tmpbuf;
-    unsigned fixupn = unoptimizeReloc32(&p,oimage,&tmpbuf,1);
+    unsigned const fixupn = unoptimizeReloc32(p,oimage,tmpbuf,true);
 
     MemBuffer wrkmem(8*fixupn+8);
     unsigned ic,jc,o,r;
@@ -599,17 +603,44 @@ void PackWcle::decodeFixups()
     set_le32(wrkmem+ic*8,0xFFFFFFFF);     // end of 32-bit offset fixups
     tmpbuf.dealloc();
 
-    // selector fixups and self-relative fixups
-    const upx_byte *selector_fixups = p;
-    const upx_byte *selfrel_fixups = p;
+    // selector fixups then self-relative fixups
+    SPAN_P_VAR(const upx_byte, selector_fixups, p);
 
-    while (*selfrel_fixups != 0xC3)
-        selfrel_fixups += 9;
-    selfrel_fixups++;
-    unsigned selectlen = ptr_diff(selfrel_fixups, selector_fixups)/9;
+    // Find selfrel_fixups by skipping over selector_fixups.
+    SPAN_P_VAR(const upx_byte, q, selector_fixups);
+    // The code is a subroutine that ends in RET (0xC3).
+    while (*q != 0xC3) {
+        // Defend against tampered selector_fixups; see PackWcle::preprocessFixups().
+        // selector_fixups[] is x386 code with 9-byte blocks of 2 instructions each:
+        // "\x8C\xCB\x66\x89\x9D"  // mov bx, cs ; mov [xxx+ebp], bx
+        // "\x8C\xCA\x66\x89\x95"
+        // and where byte [+1] also can be '\xDA' or '\xDB'.
+        if (0x8C != q[0]
+        ||  0x66 != q[2]
+        ||  0x89 != q[3]) { // Unexpected; tampering?
+            // Try to recover by looking for the RET.
+            upx_byte const *q2 = (upx_byte const *)memchr(q, 0xC3, 9);
+            if (q2) { // Assume recovery
+                 q = q2; break;
+            }
+        }
+        // Guard against run-away.
+        static unsigned char const blank[9] = {0};
+        if (ptr_diff_bytes(oimage + ph.u_len - sizeof(blank), raw_bytes(q,0)) < 0  // catastrophic worst case
+        ||  !memcmp(blank, q, sizeof(blank))  // no-good early warning
+        ) {
+            char msg[50]; snprintf(msg, sizeof(msg),
+                "bad selector_fixups %d", ptr_diff_bytes(q, selector_fixups));
+            throwCantPack(msg);
+        }
+        q += 9;
+    }
+    unsigned selectlen = ptr_udiff_bytes(q, selector_fixups)/9;
+    SPAN_P_VAR(const upx_byte, selfrel_fixups, q + 1);  // Skip the 0xC3
 
-    ofixups = New(upx_byte, fixupn*9+1000+selectlen*5);
-    upx_bytep fp = ofixups;
+    const unsigned fbytes = fixupn*9+1000+selectlen*5;
+    ofixups = New(upx_byte, fbytes);
+    SPAN_S_VAR(upx_byte, fp, ofixups, fbytes, ofixups);
 
     for (ic = 1, jc = 0; ic <= opages; ic++)
     {
@@ -672,11 +703,11 @@ void PackWcle::decodeFixups()
             fp += fp[1] ? 9 : 7;
             jc += 2;
         }
-        set_le32(ofpage_table+ic,ptr_diff(fp,ofixups));
+        set_le32(ofpage_table+ic,ptr_udiff_bytes(fp,ofixups));
     }
     for (ic=0; ic < FIXUP_EXTRA; ic++)
         *fp++ = 0;
-    sofixups = ptr_diff(fp, ofixups);
+    sofixups = ptr_udiff_bytes(fp, ofixups);
 }
 
 
@@ -725,7 +756,8 @@ void PackWcle::decodeObjectTable()
 
 void PackWcle::decodeImage()
 {
-    oimage.allocForUncompression(ph.u_len);
+    mb_oimage.allocForDecompression(ph.u_len);
+    oimage = mb_oimage;
 
     decompress(iimage + ph.buf_offset + ph.getPackHeaderSize(),oimage);
     soimage = get_le32(oimage + ph.u_len - 5);
@@ -737,7 +769,7 @@ void PackWcle::decodeImage()
 void PackWcle::decodeEntryTable()
 {
     unsigned count,object,n,r;
-    upx_byte *p = ientries;
+    SPAN_S_VAR(upx_byte, p, ientries, soentries);
     n = 0;
     while (*p)
     {
@@ -763,10 +795,11 @@ void PackWcle::decodeEntryTable()
     }
 
     //if (Opt_debug) printf("\n%d entries decoded.\n",n);
+    UNUSED(n);
 
-    soentries = ptr_diff(p, ientries) + 1;
+    soentries = ptr_udiff_bytes(p, ientries) + 1;
     oentries = ientries;
-    ientries = NULL;
+    ientries = nullptr;
 }
 
 
@@ -828,7 +861,7 @@ void PackWcle::unpack(OutputFile *fo)
         ft.cto = (unsigned char) ph.filter_cto;
         if (ph.version < 11)
             ft.cto = (unsigned char) (get_le32(oimage+ph.u_len-9) >> 24);
-        ft.unfilter(oimage+text_vaddr, text_size);
+        ft.unfilter(raw_bytes(oimage+text_vaddr, text_size), text_size);
     }
 
     decodeFixupPageTable();
@@ -854,7 +887,7 @@ void PackWcle::unpack(OutputFile *fo)
         + getImageSize();
     const unsigned overlay = file_size - overlaystart - ih.non_resident_name_table_length;
     checkOverlay(overlay);
-    copyOverlay(fo, overlay, &oimage);
+    copyOverlay(fo, overlay, mb_oimage);
 }
 
 /* vim:set ts=4 sw=4 et: */

@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2020 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2020 Laszlo Molnar
+   Copyright (C) 1996-2022 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2022 Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -111,7 +111,7 @@ void PackSys::buildLoader(const Filter *ft)
               "SYSMAIN3,UPX1HEAD,SYSCUTPO,NRV2B160,NRVDDONE,NRVDECO1",
               ph.max_offset_found <= 0xd00 ? "NRVLED00" : "NRVGTD00",
               "NRVDECO2",
-              NULL
+              nullptr
              );
     if (ft->id)
     {
@@ -121,7 +121,7 @@ void PackSys::buildLoader(const Filter *ft)
     addLoader("SYSMAIN5",
               opt->cpu == opt->CPU_8086 ? "SYSI0862" : "SYSI2862",
               "SYSJUMP1",
-              NULL
+              nullptr
              );
 }
 

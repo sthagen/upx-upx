@@ -3,8 +3,8 @@
 ;
 ;  This file is part of the UPX executable compressor.
 ;
-;  Copyright (C) 1996-2020 Markus Franz Xaver Johannes Oberhumer
-;  Copyright (C) 1996-2020 Laszlo Molnar
+;  Copyright (C) 1996-2022 Markus Franz Xaver Johannes Oberhumer
+;  Copyright (C) 1996-2022 Laszlo Molnar
 ;  All Rights Reserved.
 ;
 ;  UPX and the UCL library are free software; you can redistribute them
@@ -40,7 +40,14 @@ section         PEISDLL1
                 jnz     reloc_end_jmp
 section         PEMAIN01
                 pusha
+section         PESOCREL
                 mov     esi, offset start_of_compressed       // relocated
+section         PESOCPIC
+                call    get_eip
+get_eip:
+                pop     eax
+                lea     esi, [eax + start_of_compressed - get_eip]
+section         PESOUNC0
                 lea     edi, [esi + start_of_uncompressed]
 section         PEICONS1
                 incw    [edi + icon_offset]

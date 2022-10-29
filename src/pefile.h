@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2020 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2020 Laszlo Molnar
+   Copyright (C) 1996-2022 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2022 Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -29,6 +29,8 @@
 #ifndef __UPX_PEFILE_H
 #define __UPX_PEFILE_H 1
 
+#include "util/membuffer.h"
+
 
 /*************************************************************************
 // general/pe handling
@@ -38,7 +40,7 @@ class PeFile : public Packer
 {
     typedef Packer super;
 public:
-    virtual int getVersion() const { return 13; }
+    virtual int getVersion() const override { return 13; }
 protected:
     class Interval;
     class Reloc;
@@ -57,7 +59,7 @@ protected:
                            unsigned ih_entry, unsigned ih_filealign);
     unsigned handleStripRelocs(upx_uint64_t ih_imagebase,
                                upx_uint64_t default_imagebase,
-                               unsigned dllflags);
+                               LE16 &dllflags);
 
     virtual bool handleForceOption() = 0;
     virtual void callCompressWithFilters(Filter &, int filter_strategy,
@@ -82,7 +84,7 @@ protected:
                  ord_mask_t ord_mask, bool set_oft);
 
     // unpacker capabilities
-    virtual bool canUnpackVersion(int version) const
+    virtual bool canUnpackVersion(int version) const override
         {  return (version >= 12 && version <= 13); }
 
     int canUnpack0(unsigned max_sections, LE16 &ih_objects,
@@ -90,7 +92,7 @@ protected:
 
 protected:
     virtual int readFileHeader();
-    virtual bool testUnpackVersion(int version) const;
+    virtual bool testUnpackVersion(int version) const override;
     virtual void readPeHeader() = 0;
 
     unsigned pe_offset;
@@ -99,11 +101,12 @@ protected:
     unsigned processImports0(ord_mask_t ord_mask);
 
     template <typename LEXX, typename ord_mask_t>
-    void rebuildImports(upx_byte *& extrainfo,
+    void rebuildImports(SPAN_S(upx_byte) & extrainfo,
                         ord_mask_t ord_mask, bool set_oft);
     virtual unsigned processImports() = 0;
     virtual void processImports2(unsigned, unsigned);
-    upx_byte *oimport;
+    MemBuffer mb_oimport;
+    SPAN_0(upx_byte) oimport = nullptr;
     unsigned soimport;
     upx_byte *oimpdlls;
     unsigned soimpdlls;
@@ -115,23 +118,26 @@ protected:
 
     virtual void processRelocs() = 0;
     void processRelocs(Reloc *);
-    void rebuildRelocs(upx_byte *&, unsigned bits,
+    void rebuildRelocs(SPAN_S(upx_byte) &, unsigned bits,
                        unsigned flags, upx_uint64_t imagebase);
-    upx_byte *orelocs;
+    MemBuffer mb_orelocs;
+    SPAN_0(upx_byte) orelocs = nullptr;
     unsigned sorelocs;
-    upx_byte *oxrelocs;
+    upx_byte *oxrelocs = nullptr;
     unsigned soxrelocs;
 
     void processExports(Export *);
     void processExports(Export *,unsigned);
     void rebuildExports();
-    upx_byte *oexport;
+    MemBuffer mb_oexport;
+    SPAN_0(upx_byte) oexport = nullptr;
     unsigned soexport;
 
     void processResources(Resource *);
     void processResources(Resource *, unsigned);
-    void rebuildResources(upx_byte *&, unsigned);
-    upx_byte *oresources;
+    void rebuildResources(SPAN_S(upx_byte) &, unsigned);
+    MemBuffer mb_oresources;
+    SPAN_0(upx_byte) oresources = nullptr;
     unsigned soresources;
 
     template <typename>
@@ -147,7 +153,8 @@ protected:
     virtual void processTls(Reloc *r, const Interval *iv, unsigned a) = 0;
 
     void rebuildTls();
-    upx_byte *otls;
+    MemBuffer mb_otls;
+    SPAN_0(upx_byte) otls = nullptr;
     unsigned sotls;
     unsigned tlsindex;
     unsigned tlscb_ptr;
@@ -156,6 +163,7 @@ protected:
 
     void processLoadConf(Reloc *, const Interval *, unsigned);
     void processLoadConf(Interval *);
+    MemBuffer mb_oloadconf;
     upx_byte *oloadconf;
     unsigned soloadconf;
 
@@ -200,11 +208,14 @@ protected:
         LE32    flags;
     __packed_struct_end()
 
+    MemBuffer mb_isection;
     pe_section_t *isection;
     bool isdll;
     bool isrtm;
+    bool isefi;
     bool use_dep_hack;
     bool use_clear_dirty_stack;
+    bool use_stub_relocs;
 
 
     static unsigned virta2objnum (unsigned, pe_section_t *, unsigned);
@@ -261,14 +272,32 @@ protected:
 
     //NEW: DLL characteristics definition for ASLR, ... - Stefan Widmann
     enum {
-        IMAGE_DLL_CHARACTERISTICS_DYNAMIC_BASE         = 0x0040,
-        IMAGE_DLL_CHARACTERISTICS_FORCE_INTEGRITY      = 0x0080,
-        IMAGE_DLL_CHARACTERISTICS_NX_COMPAT            = 0x0100,
+        IMAGE_DLLCHARACTERISTICS_HIGH_ENTROPY_VA       = 0x0020,
+        IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE          = 0x0040,
+        IMAGE_DLLCHARACTERISTICS_FORCE_INTEGRITY       = 0x0080,
+        IMAGE_DLLCHARACTERISTICS_NX_COMPAT             = 0x0100,
         IMAGE_DLLCHARACTERISTICS_NO_ISOLATION          = 0x0200,
         IMAGE_DLLCHARACTERISTICS_NO_SEH                = 0x0400,
         IMAGE_DLLCHARACTERISTICS_NO_BIND               = 0x0800,
         IMAGE_DLLCHARACTERISTICS_WDM_DRIVER            = 0x2000,
+        IMAGE_DLLCHARACTERISTICS_CONTROL_FLOW_GUARD    = 0x4000,
         IMAGE_DLLCHARACTERISTICS_TERMINAL_SERVER_AWARE = 0x8000
+    };
+
+    enum {
+        IMAGE_SUBSYSTEM_UNKNOWN = 0,
+        IMAGE_SUBSYSTEM_NATIVE  = 1,
+        IMAGE_SUBSYSTEM_WINDOWS_GUI  = 2,  // Grapical
+        IMAGE_SUBSYSTEM_WINDOWS_CUI  = 3,  // Character-mode
+        IMAGE_SUBSYSTEM_WINDOWS_OS2_CUI  = 5,
+        IMAGE_SUBSYSTEM_WINDOWS_POSIX_CUI  = 7,
+        IMAGE_SUBSYSTEM_WINDOWS_CE_GUI  = 9,
+        IMAGE_SUBSYSTEM_EFI_APPLICATION  = 10,
+        IMAGE_SUBSYSTEM_EFI_BOOT_SERVICE_DRIVER  = 11,
+        IMAGE_SUBSYSTEM_EFI_RUNTIME_DRIVER  = 12,
+        IMAGE_SUBSYSTEM_EFI_ROM  = 13,
+        IMAGE_SUBSYSTEM_XBOX  = 14,
+        IMAGE_SUBSYSTEM_WINDOWS_BOOT_APPLICATION  = 16
     };
 
     // predefined resource types
@@ -328,7 +357,7 @@ protected:
         const unsigned *getcounts() const { return counts; }
         //
         void add(unsigned pos,unsigned type);
-        void finish(upx_byte *&p,unsigned &size);
+        void finish(upx_byte* &p,unsigned &size);
     };
 
     class Resource : private noncopyable
@@ -340,6 +369,7 @@ protected:
         struct upx_rbranch;
         struct upx_rleaf;
 
+        MemBuffer mb_start;
         const upx_byte *start;
         upx_byte   *newstart;
         upx_rnode  *root;
@@ -430,15 +460,15 @@ protected:
     virtual ~PeFile32();
     void pack0(OutputFile *fo, unsigned subsystem_mask,
                upx_uint64_t default_imagebase, bool last_section_rsrc_only);
-    virtual void unpack(OutputFile *fo);
-    virtual int canUnpack();
+    virtual void unpack(OutputFile *fo) override;
+    virtual int canUnpack() override;
 
-    virtual void readPeHeader();
+    virtual void readPeHeader() override;
 
-    virtual unsigned processImports();
-    virtual void processRelocs();
-    virtual void processTls(Interval *);
-    virtual void processTls(Reloc *, const Interval *, unsigned);
+    virtual unsigned processImports() override;
+    virtual void processRelocs() override;
+    virtual void processTls(Interval *) override;
+    virtual void processTls(Reloc *, const Interval *, unsigned) override;
 
     __packed_struct(pe_header_t)
         // 0x0
@@ -492,15 +522,15 @@ protected:
     void pack0(OutputFile *fo, unsigned subsystem_mask,
                upx_uint64_t default_imagebase);
 
-    virtual void unpack(OutputFile *fo);
-    virtual int canUnpack();
+    virtual void unpack(OutputFile *fo) override;
+    virtual int canUnpack() override;
 
-    virtual void readPeHeader();
+    virtual void readPeHeader() override;
 
-    virtual unsigned processImports();
-    virtual void processRelocs();
-    virtual void processTls(Interval *);
-    virtual void processTls(Reloc *, const Interval *, unsigned);
+    virtual unsigned processImports() override;
+    virtual void processRelocs() override;
+    virtual void processTls(Interval *) override;
+    virtual void processTls(Reloc *, const Interval *, unsigned) override;
 
     __packed_struct(pe_header_t)
         // 0x0

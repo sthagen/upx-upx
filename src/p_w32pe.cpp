@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2020 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2020 Laszlo Molnar
+   Copyright (C) 1996-2022 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2022 Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -78,10 +78,12 @@ Linker* PackW32Pe::newLinker() const
 
 int PackW32Pe::readFileHeader()
 {
-    char buf[6];
-    fi->seek(0x200, SEEK_SET);
-    fi->readx(buf, 6);
-    isrtm = memcmp(buf, "32STUB" ,6) == 0;
+    if (fi->st_size() >= 0x206) {
+        char buf[6];
+        fi->seek(0x200, SEEK_SET);
+        fi->readx(buf, 6);
+        isrtm = memcmp(buf, "32STUB" ,6) == 0;
+    }
     return super::readFileHeader();
 }
 
@@ -108,22 +110,25 @@ void PackW32Pe::buildLoader(const Filter *ft)
 
     // prepare loader
     initLoader(stub_i386_win32_pe, sizeof(stub_i386_win32_pe), 2);
-    addLoader(isdll ? "PEISDLL1" : "",
-              "PEMAIN01",
+    if (isdll)
+        addLoader("PEISDLL1");
+    addLoader("PEMAIN01",
+              use_stub_relocs ? "PESOCREL" : "PESOCPIC",
+              "PESOUNC0",
               icondir_count > 1 ? (icondir_count == 2 ? "PEICONS1" : "PEICONS2") : "",
               tmp_tlsindex ? "PETLSHAK" : "",
               "PEMAIN02",
               ph.first_offset_found == 1 ? "PEMAIN03" : "",
               getDecompressorSections(),
-              /*multipass ? "PEMULTIP" :  */  "",
+              //multipass ? "PEMULTIP" : "",
               "PEMAIN10",
-              NULL
+              nullptr
              );
     if (ft->id)
     {
         const unsigned texv = ih.codebase - rvamin;
         assert(ft->calls > 0);
-        addLoader(texv ? "PECTTPOS" : "PECTTNUL",NULL);
+        addLoader(texv ? "PECTTPOS" : "PECTTNUL",nullptr);
         addFilter32(ft->id);
     }
     if (soimport)
@@ -134,7 +139,7 @@ void PackW32Pe::buildLoader(const Filter *ft)
                   "PEIMPOR2",
                   isdll ? "PEIERDLL" : "PEIEREXE",
                   "PEIMDONE",
-                  NULL
+                  nullptr
                  );
     if (sorelocs)
     {
@@ -142,34 +147,34 @@ void PackW32Pe::buildLoader(const Filter *ft)
                   "PERELOC3,RELOC320",
                   big_relocs ? "REL32BIG" : "",
                   "RELOC32J",
-                  NULL
+                  nullptr
                  );
         //FIXME: the following should be moved out of the above if
         addLoader(big_relocs&6 ? "PERLOHI0" : "",
                   big_relocs&4 ? "PERELLO0" : "",
                   big_relocs&2 ? "PERELHI0" : "",
-                  NULL
+                  nullptr
                  );
     }
     if (use_dep_hack)
-        addLoader("PEDEPHAK", NULL);
+        addLoader("PEDEPHAK", nullptr);
 
     //NEW: TLS callback support PART 1, the callback handler installation - Stefan Widmann
     if(use_tls_callbacks)
-        addLoader("PETLSC", NULL);
+        addLoader("PETLSC", nullptr);
 
-    addLoader("PEMAIN20", NULL);
+    addLoader("PEMAIN20", nullptr);
     if (use_clear_dirty_stack)
-        addLoader("CLEARSTACK", NULL);
-    addLoader("PEMAIN21", NULL);
+        addLoader("CLEARSTACK", nullptr);
+    addLoader("PEMAIN21", nullptr);
     //NEW: last loader sections split up to insert TLS callback handler - Stefan Widmann
-    addLoader(ih.entry ? "PEDOJUMP" : "PERETURN", NULL);
+    addLoader(ih.entry || !ilinker ? "PEDOJUMP" : "PERETURN", nullptr);
 
     //NEW: TLS callback support PART 2, the callback handler - Stefan Widmann
     if(use_tls_callbacks)
-        addLoader("PETLSC2", NULL);
+        addLoader("PETLSC2", nullptr);
 
-    addLoader("IDENTSTR,UPX1HEAD", NULL);
+    addLoader("IDENTSTR,UPX1HEAD", nullptr);
 
 }
 
@@ -227,16 +232,19 @@ void PackW32Pe::defineSymbols(unsigned ncsection, unsigned upxsection,
     }
     linker->defineSymbol("reloc_delt", 0u - (unsigned) ih.imagebase - rvamin);
     linker->defineSymbol("start_of_relocs", crelocs);
-    if (!isdll)
-        linker->defineSymbol("ExitProcess", 0u-rvamin +
-                             ilinkerGetAddress("kernel32.dll", "ExitProcess"));
-    linker->defineSymbol("GetProcAddress", 0u-rvamin +
-                         ilinkerGetAddress("kernel32.dll", "GetProcAddress"));
-    linker->defineSymbol("kernel32_ordinals", myimport);
-    linker->defineSymbol("LoadLibraryA", 0u-rvamin +
-                         ilinkerGetAddress("kernel32.dll", "LoadLibraryA"));
-    linker->defineSymbol("start_of_imports", myimport);
-    linker->defineSymbol("compressed_imports", cimports);
+
+    if (ilinker) {
+        if (!isdll)
+            linker->defineSymbol("ExitProcess", 0u-rvamin +
+                                 ilinkerGetAddress("kernel32.dll", "ExitProcess"));
+        linker->defineSymbol("GetProcAddress", 0u-rvamin +
+                             ilinkerGetAddress("kernel32.dll", "GetProcAddress"));
+        linker->defineSymbol("kernel32_ordinals", myimport);
+        linker->defineSymbol("LoadLibraryA", 0u-rvamin +
+                             ilinkerGetAddress("kernel32.dll", "LoadLibraryA"));
+        linker->defineSymbol("start_of_imports", myimport);
+        linker->defineSymbol("compressed_imports", cimports);
+    }
 
     defineDecompressorSymbols();
     linker->defineSymbol("filter_buffer_start", ih.codebase - rvamin);
@@ -253,7 +261,7 @@ void PackW32Pe::defineSymbols(unsigned ncsection, unsigned upxsection,
 
     const unsigned esi0 = s1addr + ic;
     linker->defineSymbol("start_of_uncompressed", 0u - esi0 + rvamin);
-    linker->defineSymbol("start_of_compressed", esi0 + ih.imagebase);
+    linker->defineSymbol("start_of_compressed", use_stub_relocs ? esi0 + ih.imagebase : esi0);
 
     if (use_tls_callbacks)
     {
@@ -268,7 +276,8 @@ void PackW32Pe::defineSymbols(unsigned ncsection, unsigned upxsection,
 
 void PackW32Pe::addNewRelocations(Reloc &rel, unsigned base)
 {
-    rel.add(base + linker->getSymbolOffset("PEMAIN01") + 2, 3);
+    if (use_stub_relocs)
+        rel.add(base + linker->getSymbolOffset("PESOCREL") + 1, 3);
 }
 
 void PackW32Pe::setOhDataBase(const pe_section_t *osection)
@@ -276,14 +285,22 @@ void PackW32Pe::setOhDataBase(const pe_section_t *osection)
     oh.database = osection[2].vaddr;
 }
 
-void PackW32Pe::setOhHeaderSize(const pe_section_t *)
+void PackW32Pe::setOhHeaderSize(const pe_section_t *osection)
 {
-    oh.headersize = rvamin; // FIXME
+    oh.headersize = ALIGN_UP(pe_offset + sizeof(oh) + sizeof(*osection) * oh.objects, oh.filealign);
 }
 
 void PackW32Pe::pack(OutputFile *fo)
 {
-    super::pack0(fo, 0x0c, 0x400000, false);
+    super::pack0(fo
+        , (1u<<IMAGE_SUBSYSTEM_WINDOWS_GUI)
+        | (1u<<IMAGE_SUBSYSTEM_WINDOWS_CUI)
+        | (1u<<IMAGE_SUBSYSTEM_EFI_APPLICATION)
+        | (1u<<IMAGE_SUBSYSTEM_EFI_BOOT_SERVICE_DRIVER)
+        | (1u<<IMAGE_SUBSYSTEM_EFI_RUNTIME_DRIVER)
+        | (1u<<IMAGE_SUBSYSTEM_EFI_ROM)
+        , 0x400000
+        , false);
 }
 
 /* vim:set ts=4 sw=4 et: */

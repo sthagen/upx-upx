@@ -2,9 +2,9 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 2004-2020 John Reiser
-   Copyright (C) 1996-2020 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2020 Laszlo Molnar
+   Copyright (C) 2004-2022 John Reiser
+   Copyright (C) 1996-2022 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2022 Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -61,10 +61,10 @@ PackVmlinuxBase<T>::PackVmlinuxBase(InputFile *f,
     super(f),
     my_e_machine(e_machine), my_elfclass(elfclass), my_elfdata(elfdata),
     my_boot_label(boot_label),
-    n_ptload(0), phdri(NULL), shdri(NULL), shstrtab(NULL)
+    n_ptload(0), phdri(nullptr), shdri(nullptr), shstrtab(nullptr)
 {
     ElfClass::compileTimeAssertions();
-    bele = N_BELE_CTP::getRTP((const BeLePolicy*) NULL);
+    bele = N_BELE_CTP::getRTP((const BeLePolicy*) nullptr);
 }
 
 template <class T>
@@ -104,31 +104,43 @@ PackVmlinuxBase<T>::compare_Phdr(void const *aa, void const *bb)
 template <class T>
 typename T::Shdr const *PackVmlinuxBase<T>::getElfSections()
 {
-    Shdr const *p, *shstrsec=0;
-    shdri = new Shdr[(unsigned) ehdri.e_shnum];
+    unsigned const e_shnum = ehdri.e_shnum;
+    if (ehdri.e_shentsize != sizeof(*shdri)
+    ||  file_size_u < ehdri.e_shoff
+    ||  file_size_u < ehdri.e_shoff + mem_size(ehdri.e_shentsize, e_shnum)) {
+        throwCantPack("bad ElfXX_Shdrs");
+    }
+    shdri = new Shdr[(unsigned) e_shnum];
     fi->seek(ehdri.e_shoff, SEEK_SET);
-    fi->readx(shdri, ehdri.e_shnum * sizeof(*shdri));
-    int j;
-    for (p = shdri, j= ehdri.e_shnum; --j>=0; ++p) {
-        if (Shdr::SHT_STRTAB==p->sh_type
-        &&  p->sh_offset  <   (unsigned long)file_size
-        &&  p->sh_size    <= ((unsigned long)file_size - p->sh_offset)
-        &&  p->sh_name    <   (unsigned long)file_size
-        &&  10            <= ((unsigned long)file_size - p->sh_name)
-            // 10 == (1+ strlen(".shstrtab"))
-        ) {
-            delete [] shstrtab;
-            shstrtab = new char[1+ p->sh_size];
-            fi->seek(p->sh_offset, SEEK_SET);
-            fi->readx(shstrtab, p->sh_size);
-            shstrtab[p->sh_size] = '\0';
-            if (0==strcmp(".shstrtab", shstrtab + p->sh_name)) {
-                shstrsec = p;
-                break;
-            }
+    fi->readx(shdri, e_shnum * sizeof(*shdri));
+    unsigned const e_shstrndx = ehdri.e_shstrndx;
+    if (e_shnum <= e_shstrndx) {
+        char msg[50]; snprintf(msg, sizeof(msg),
+                "bad .e_shstrndx %#x", e_shstrndx);
+        throwCantPack(msg);
+    }
+    Shdr const *p = &shdri[e_shstrndx];
+    if (Shdr::SHT_STRTAB==p->sh_type
+    &&  p->sh_offset  <= (file_size_u - sizeof(*shdri))
+    &&  p->sh_size    <= (file_size_u - p->sh_offset)
+    &&  p->sh_name    <= (file_size_u - p->sh_offset)
+    &&  10            <= (file_size_u - p->sh_name)
+        // 10 == (1+ strlen(".shstrtab"))
+    ) {
+        if (p->sh_size <= p->sh_name) {
+            char msg[50]; snprintf(msg, sizeof(msg),
+                "bad .shstrtab _Shdr[%u]", (unsigned)ehdri.e_shstrndx);
+            throwCantPack(msg);
+        }
+        shstrtab = new char[1+ p->sh_size];
+        fi->seek(p->sh_offset, SEEK_SET);
+        fi->readx(shstrtab, p->sh_size);
+        shstrtab[p->sh_size] = '\0';
+        if (0==strcmp(".shstrtab", shstrtab + p->sh_name)) {
+            return p;
         }
     }
-    return shstrsec;
+    return nullptr;
 }
 
 template <class T>
@@ -161,14 +173,14 @@ bool PackVmlinuxBase<T>::canPack()
 
     // A Linux kernel must have a __ksymtab section. [??]
     Shdr const *p, *const shstrsec = getElfSections();
-    if (0==shstrsec) {
+    if (nullptr==shstrsec) {
         return false;
     }
     {
         int j;
         for (p = shdri, j= ehdri.e_shnum; --j>=0; ++p) {
             if (Shdr::SHT_PROGBITS==p->sh_type
-            && (p->sh_name  + shstrsec->sh_offset) < (unsigned)file_size
+            && p->sh_name < shstrsec->sh_size
             && 0==strcmp("__ksymtab", p->sh_name + shstrtab)) {
                 break;
             }
@@ -218,7 +230,7 @@ void PackVmlinuxBase<T>::pack(OutputFile *fo)
     Ehdr ehdro;
     TE32 tmp_u32;
 
-    // NULL
+    // nullptr
     // .text(PT_LOADs) .note(1st page) .note(rest)
     // .shstrtab .symtab .strtab
     Shdr shdro[1+3+3];
@@ -301,18 +313,18 @@ void PackVmlinuxBase<T>::pack(OutputFile *fo)
         memcpy(&unc_hdr[sizeof(ehdri)],  phdri, sizeof(Phdr) * ehdri.e_phnum);
         unsigned len_cpr = 0;
         int const r = upx_compress(unc_hdr, len_unc, cpr_hdr, &len_cpr,
-            NULL, ph.method, 10, NULL, NULL );
+            nullptr, ph.method, 10, nullptr, nullptr );
         if (UPX_E_OK!=r || len_unc<=len_cpr)  // FIXME: allow no compression
             throwInternalError("Ehdr compression failed");
 
         __packed_struct(b_info) // 12-byte header before each compressed block
-            unsigned sz_unc;  // uncompressed_size
-            unsigned sz_cpr;  //   compressed_size
+            NE32 sz_unc;  // uncompressed_size
+            NE32 sz_cpr;  //   compressed_size
             unsigned char b_method;  // compression algorithm
             unsigned char b_ftid;  // filter id
             unsigned char b_cto8;  // filter parameter
             unsigned char b_unused;  // FIXME: !=0  for partial-block unfilter
-            // unsigned f_offset, f_len;  // only if    partial-block unfilter
+            // NE32 f_offset, f_len;  // only if    partial-block unfilter
         __packed_struct_end()
 
         struct b_info hdr_info;
@@ -359,7 +371,7 @@ void PackVmlinuxBase<T>::pack(OutputFile *fo)
         }
         compressWithFilters(ibuf, ph.u_len, obuf,
             f_ptr, f_len,  // filter range
-            NULL, 0,  // hdr_ptr, hdr_len
+            nullptr, 0,  // hdr_ptr, hdr_len
             &ft, 512, &cconf, getStrategy(ft));
 
         set_be32(&hdr_info.sz_unc, ph.u_len);
@@ -569,12 +581,12 @@ int PackVmlinuxBase<T>::canUnpack()
 
     // find the .shstrtab section
     Shdr const *const shstrsec = getElfSections();
-    if (0==shstrsec) {
+    if (nullptr==shstrsec) {
         return false;
     }
 
     // check for .text .note .note  and sane (.sh_size + .sh_offset)
-    p_note0 = p_note1 = p_text = 0;
+    p_note0 = p_note1 = p_text = nullptr;
     int j;
     Shdr *p;
     for (p= shdri, j= ehdri.e_shnum; --j>=0; ++p) {
@@ -587,15 +599,15 @@ int PackVmlinuxBase<T>::canUnpack()
             p_text = p;
         }
         if (0==strcmp(".note", shstrtab + p->sh_name)) {
-            if (0==p_note0) {
+            if (nullptr==p_note0) {
                 p_note0 = p;
             } else
-            if (0==p_note1) {
+            if (nullptr==p_note1) {
                 p_note1 = p;
             }
         }
     }
-    if (0==p_text || 0==p_note0 || 0==p_note1) {
+    if (nullptr==p_text || nullptr==p_note0 || nullptr==p_note1) {
         return false;
     }
 
@@ -620,7 +632,7 @@ void PackVmlinuxBase<T>::unpack(OutputFile *fo)
     ph.c_len = p_note0->sh_size - sizeof(word);
     ibuf.alloc(ph.c_len);
     fi->readx(ibuf, ph.c_len);
-    obuf.allocForUncompression(ph.u_len);
+    obuf.allocForDecompression(ph.u_len);
     decompress(ibuf, obuf, false);
     fo->write(obuf, ph.u_len);
     obuf.dealloc();
@@ -632,7 +644,7 @@ void PackVmlinuxBase<T>::unpack(OutputFile *fo)
     }
     ibuf.alloc(ph.c_len);
     fi->readx(ibuf, ph.c_len);
-    obuf.allocForUncompression(ph.u_len);
+    obuf.allocForDecompression(ph.u_len);
     decompress(ibuf, obuf);
 
     Filter ft(ph.level);
@@ -649,7 +661,7 @@ void PackVmlinuxBase<T>::unpack(OutputFile *fo)
     ph.c_len = p_note1->sh_size - sizeof(word);
     ibuf.alloc(ph.c_len);
     fi->readx(ibuf, p_note1->sh_size - sizeof(ph.u_len));
-    obuf.allocForUncompression(ph.u_len);
+    obuf.allocForDecompression(ph.u_len);
     decompress(ibuf, obuf, false);
     fo->write(obuf, ph.u_len);
     obuf.dealloc();
@@ -769,21 +781,21 @@ void PackVmlinuxI386::buildLoader(const Filter *ft)
               (0x40==(0xf0 & ft->id)) ? "LXCKLLT1" : (ft->id ? "LXCALLT1" : ""),
               "LXMOVEUP",
               getDecompressorSections(),
-              NULL
+              nullptr
              );
     if (ft->id) {
         assert(ft->calls > 0);
         if (0x40==(0xf0 & ft->id)) {
-            addLoader("LXCKLLT9", NULL);
+            addLoader("LXCKLLT9", nullptr);
         }
         else {
-            addLoader("LXCALLT9", NULL);
+            addLoader("LXCALLT9", nullptr);
         }
         addFilter32(ft->id);
     }
     addLoader("LINUX990",
               ((ph.first_offset_found == 1) ? "LINUX991" : ""),
-              "LINUX992,IDENTSTR,UPX1HEAD", NULL);
+              "LINUX992,IDENTSTR,UPX1HEAD", nullptr);
 }
 
 void PackVmlinuxAMD64::buildLoader(const Filter *ft)
@@ -794,21 +806,21 @@ void PackVmlinuxAMD64::buildLoader(const Filter *ft)
               (0x40==(0xf0 & ft->id)) ? "LXCKLLT1" : (ft->id ? "LXCALLT1" : ""),
               "LXMOVEUP",
               getDecompressorSections(),
-              NULL
+              nullptr
              );
     if (ft->id) {
         assert(ft->calls > 0);
         if (0x40==(0xf0 & ft->id)) {
-            addLoader("LXCKLLT9", NULL);
+            addLoader("LXCKLLT9", nullptr);
         }
         else {
-            addLoader("LXCALLT9", NULL);
+            addLoader("LXCALLT9", nullptr);
         }
         addFilter32(ft->id);
     }
     addLoader("LINUX990",
               ((ph.first_offset_found == 1) ? "LINUX991" : ""),
-              "LINUX992,IDENTSTR,UPX1HEAD", NULL);
+              "LINUX992,IDENTSTR,UPX1HEAD", nullptr);
 }
 
 bool PackVmlinuxARMEL::is_valid_e_entry(Addr e_entry)
@@ -856,69 +868,69 @@ void PackVmlinuxARMEL::buildLoader(const Filter *ft)
 {
     // prepare loader
     initLoader(stub_arm_v5a_linux_kernel_vmlinux, sizeof(stub_arm_v5a_linux_kernel_vmlinux));
-    addLoader("LINUX000", NULL);
+    addLoader("LINUX000", nullptr);
     if (ft->id) {
         assert(ft->calls > 0);
-        addLoader("LINUX010", NULL);
+        addLoader("LINUX010", nullptr);
     }
-    addLoader("LINUX020", NULL);
+    addLoader("LINUX020", nullptr);
     if (ft->id) {
         addFilter32(ft->id);
     }
-    addLoader("LINUX030", NULL);
-         if (ph.method == M_NRV2E_8) addLoader("NRV2E", NULL);
-    else if (ph.method == M_NRV2B_8) addLoader("NRV2B", NULL);
-    else if (ph.method == M_NRV2D_8) addLoader("NRV2D", NULL);
-    else if (M_IS_LZMA(ph.method))   addLoader("LZMA_ELF00,LZMA_DEC10,LZMA_DEC30", NULL);
+    addLoader("LINUX030", nullptr);
+         if (ph.method == M_NRV2E_8) addLoader("NRV2E", nullptr);
+    else if (ph.method == M_NRV2B_8) addLoader("NRV2B", nullptr);
+    else if (ph.method == M_NRV2D_8) addLoader("NRV2D", nullptr);
+    else if (M_IS_LZMA(ph.method))   addLoader("LZMA_ELF00,LZMA_DEC10,LZMA_DEC30", nullptr);
     else throwBadLoader();
-    addLoader("IDENTSTR,UPX1HEAD", NULL);
+    addLoader("IDENTSTR,UPX1HEAD", nullptr);
 }
 
 void PackVmlinuxARMEB::buildLoader(const Filter *ft)
 {
     // prepare loader
     initLoader(stub_armeb_v5a_linux_kernel_vmlinux, sizeof(stub_armeb_v5a_linux_kernel_vmlinux));
-    addLoader("LINUX000", NULL);
+    addLoader("LINUX000", nullptr);
     if (ft->id) {
         assert(ft->calls > 0);
-        addLoader("LINUX010", NULL);
+        addLoader("LINUX010", nullptr);
     }
-    addLoader("LINUX020", NULL);
+    addLoader("LINUX020", nullptr);
     if (ft->id) {
         addFilter32(ft->id);
     }
-    addLoader("LINUX030", NULL);
-         if (ph.method == M_NRV2E_8) addLoader("NRV2E", NULL);
-    else if (ph.method == M_NRV2B_8) addLoader("NRV2B", NULL);
-    else if (ph.method == M_NRV2D_8) addLoader("NRV2D", NULL);
-    else if (M_IS_LZMA(ph.method))   addLoader("LZMA_ELF00,LZMA_DEC10,LZMA_DEC30", NULL);
+    addLoader("LINUX030", nullptr);
+         if (ph.method == M_NRV2E_8) addLoader("NRV2E", nullptr);
+    else if (ph.method == M_NRV2B_8) addLoader("NRV2B", nullptr);
+    else if (ph.method == M_NRV2D_8) addLoader("NRV2D", nullptr);
+    else if (M_IS_LZMA(ph.method))   addLoader("LZMA_ELF00,LZMA_DEC10,LZMA_DEC30", nullptr);
     else throwBadLoader();
-    addLoader("IDENTSTR,UPX1HEAD", NULL);
+    addLoader("IDENTSTR,UPX1HEAD", nullptr);
 }
 
 void PackVmlinuxPPC32::buildLoader(const Filter *ft)
 {
     // prepare loader
     initLoader(stub_powerpc_linux_kernel_vmlinux, sizeof(stub_powerpc_linux_kernel_vmlinux));
-    addLoader("LINUX000", NULL);
+    addLoader("LINUX000", nullptr);
     if (ft->id) {
         assert(ft->calls > 0);
-        addLoader("LINUX010", NULL);
+        addLoader("LINUX010", nullptr);
     }
-    addLoader("LINUX020", NULL);
+    addLoader("LINUX020", nullptr);
     if (ft->id) {
         addFilter32(ft->id);
     }
-    addLoader("LINUX030", NULL);
-         if (ph.method == M_NRV2E_LE32) addLoader("NRV2E,NRV_TAIL", NULL);
-    else if (ph.method == M_NRV2B_LE32) addLoader("NRV2B,NRV_TAIL", NULL);
-    else if (ph.method == M_NRV2D_LE32) addLoader("NRV2D,NRV_TAIL", NULL);
-    else if (M_IS_LZMA(ph.method))   addLoader("LZMA_ELF00,LZMA_DEC10,LZMA_DEC30", NULL);
+    addLoader("LINUX030", nullptr);
+         if (ph.method == M_NRV2E_LE32) addLoader("NRV2E,NRV_TAIL", nullptr);
+    else if (ph.method == M_NRV2B_LE32) addLoader("NRV2B,NRV_TAIL", nullptr);
+    else if (ph.method == M_NRV2D_LE32) addLoader("NRV2D,NRV_TAIL", nullptr);
+    else if (M_IS_LZMA(ph.method))   addLoader("LZMA_ELF00,LZMA_DEC10,LZMA_DEC30", nullptr);
     else throwBadLoader();
     if (hasLoaderSection("CFLUSH"))
         addLoader("CFLUSH");
 
-    addLoader("IDENTSTR,UPX1HEAD", NULL);
+    addLoader("IDENTSTR,UPX1HEAD", nullptr);
 }
 
 static const
@@ -927,25 +939,25 @@ void PackVmlinuxPPC64LE::buildLoader(const Filter *ft)
 {
     // prepare loader
     initLoader(stub_powerpc64le_linux_kernel_vmlinux, sizeof(stub_powerpc64le_linux_kernel_vmlinux));
-    addLoader("LINUX000", NULL);
+    addLoader("LINUX000", nullptr);
     if (ft->id) {
         assert(ft->calls > 0);
-        addLoader("LINUX010", NULL);
+        addLoader("LINUX010", nullptr);
     }
-    addLoader("LINUX020", NULL);
+    addLoader("LINUX020", nullptr);
     if (ft->id) {
         addFilter32(ft->id);
     }
-    addLoader("LINUX030", NULL);
-         if (ph.method == M_NRV2E_LE32) addLoader("NRV2E,NRV_TAIL", NULL);
-    else if (ph.method == M_NRV2B_LE32) addLoader("NRV2B,NRV_TAIL", NULL);
-    else if (ph.method == M_NRV2D_LE32) addLoader("NRV2D,NRV_TAIL", NULL);
-    else if (M_IS_LZMA(ph.method))   addLoader("LZMA_ELF00,LZMA_DEC10,LZMA_DEC30", NULL);
+    addLoader("LINUX030", nullptr);
+         if (ph.method == M_NRV2E_LE32) addLoader("NRV2E,NRV_TAIL", nullptr);
+    else if (ph.method == M_NRV2B_LE32) addLoader("NRV2B,NRV_TAIL", nullptr);
+    else if (ph.method == M_NRV2D_LE32) addLoader("NRV2D,NRV_TAIL", nullptr);
+    else if (M_IS_LZMA(ph.method))   addLoader("LZMA_ELF00,LZMA_DEC10,LZMA_DEC30", nullptr);
     else throwBadLoader();
     if (hasLoaderSection("CFLUSH"))
         addLoader("CFLUSH");
 
-    addLoader("IDENTSTR,UPX1HEAD", NULL);
+    addLoader("IDENTSTR,UPX1HEAD", nullptr);
 }
 
 

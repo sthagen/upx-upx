@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2020 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2020 Laszlo Molnar
+   Copyright (C) 1996-2022 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2022 Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -28,7 +28,7 @@
 
 #include "conf.h"
 #include "compress.h"
-#include "mem.h"
+#include "util/membuffer.h"
 
 #if (ACC_CC_CLANG)
 #  pragma clang diagnostic ignored "-Wshadow"
@@ -187,7 +187,7 @@ static int prepare(lzma_compress_result_t *res,
     {
         for (;;)
         {
-            unsigned n = 1846 + (768 << (res->lit_context_bits + res->lit_pos_bits));
+            unsigned n = 1846 + (768u << (res->lit_context_bits + res->lit_pos_bits));
             if (n <= lcconf->max_num_probs)
                 break;
             if (res->lit_pos_bits > res->lit_context_bits)
@@ -211,7 +211,7 @@ static int prepare(lzma_compress_result_t *res,
     lzma_compress_config_t::dict_size_t::assertValue(res->dict_size);
     lzma_compress_config_t::num_fast_bytes_t::assertValue(res->num_fast_bytes);
 
-    res->num_probs = 1846 + (768 << (res->lit_context_bits + res->lit_pos_bits));
+    res->num_probs = 1846 + (768u << (res->lit_context_bits + res->lit_pos_bits));
     //printf("\nlzma_compress config: %u %u %u %u %u\n", res->pos_bits, res->lit_pos_bits, res->lit_context_bits, res->dict_size, res->num_probs);
     return 0;
 
@@ -230,9 +230,11 @@ error:
 #undef _WIN32_WCE
 #undef COMPRESS_MF_MT
 #undef _NO_EXCEPTIONS
-#include "C/Common/MyInitGuid.h"
-//#include "C/7zip/Compress/LZMA/LZMADecoder.h"
-#include "C/7zip/Compress/LZMA/LZMAEncoder.h"
+#undef NULL
+#define NULL nullptr
+#include <lzma-sdk/C/Common/MyInitGuid.h>
+//#include <lzma-sdk/C/7zip/Compress/LZMA/LZMADecoder.h>
+#include <lzma-sdk/C/7zip/Compress/LZMA/LZMAEncoder.h>
 
 namespace MyLzma {
 
@@ -244,7 +246,7 @@ struct InStream: public ISequentialInStream, public CMyUnknownImp
     void Init(const Byte *data, size_t size) {
         b_buf = data; b_size = size; b_pos = 0;
     }
-    STDMETHOD(Read)(void *data, UInt32 size, UInt32 *processedSize);
+    STDMETHOD(Read)(void *data, UInt32 size, UInt32 *processedSize) override;
 };
 
 STDMETHODIMP InStream::Read(void *data, UInt32 size, UInt32 *processedSize)
@@ -253,7 +255,7 @@ STDMETHODIMP InStream::Read(void *data, UInt32 size, UInt32 *processedSize)
     if (size > remain) size = (UInt32) remain;
     memmove(data, b_buf + b_pos, size);
     b_pos += size;
-    if (processedSize != NULL) *processedSize = size;
+    if (processedSize != nullptr) *processedSize = size;
     return S_OK;
 }
 
@@ -270,7 +272,7 @@ struct OutStream : public ISequentialOutStream, public CMyUnknownImp
         b_buf[b_pos++] = c;
         return S_OK;
     }
-    STDMETHOD(Write)(const void *data, UInt32 size, UInt32 *processedSize);
+    STDMETHOD(Write)(const void *data, UInt32 size, UInt32 *processedSize) override;
 };
 
 STDMETHODIMP OutStream::Write(const void *data, UInt32 size, UInt32 *processedSize)
@@ -279,7 +281,7 @@ STDMETHODIMP OutStream::Write(const void *data, UInt32 size, UInt32 *processedSi
     if (size > remain) size = (UInt32) remain, overflow = true;
     memmove(b_buf + b_pos, data, size);
     b_pos += size;
-    if (processedSize != NULL) *processedSize = size;
+    if (processedSize != nullptr) *processedSize = size;
     return overflow ? E_FAIL : S_OK;
 }
 
@@ -287,7 +289,7 @@ struct ProgressInfo : public ICompressProgressInfo, public CMyUnknownImp
 {
     virtual ~ProgressInfo() { }
     MY_UNKNOWN_IMP
-    STDMETHOD(SetRatioInfo)(const UInt64 *inSize, const UInt64 *outSize);
+    STDMETHOD(SetRatioInfo)(const UInt64 *inSize, const UInt64 *outSize) override;
     upx_callback_p cb;
 };
 
@@ -300,16 +302,16 @@ STDMETHODIMP ProgressInfo::SetRatioInfo(const UInt64 *inSize, const UInt64 *outS
 
 } // namespace
 
-#include "C/Common/Alloc.cpp"
-#include "C/Common/CRC.cpp"
-//#include "C/7zip/Common/InBuffer.cpp"
-#include "C/7zip/Common/OutBuffer.cpp"
-#include "C/7zip/Common/StreamUtils.cpp"
-#include "C/7zip/Compress/LZ/LZInWindow.cpp"
-//#include "C/7zip/Compress/LZ/LZOutWindow.cpp"
-//#include "C/7zip/Compress/LZMA/LZMADecoder.cpp"
-#include "C/7zip/Compress/LZMA/LZMAEncoder.cpp"
-#include "C/7zip/Compress/RangeCoder/RangeCoderBit.cpp"
+#include <lzma-sdk/C/Common/Alloc.cpp>
+#include <lzma-sdk/C/Common/CRC.cpp>
+//#include <lzma-sdk/C/7zip/Common/InBuffer.cpp>
+#include <lzma-sdk/C/7zip/Common/OutBuffer.cpp>
+#include <lzma-sdk/C/7zip/Common/StreamUtils.cpp>
+#include <lzma-sdk/C/7zip/Compress/LZ/LZInWindow.cpp>
+//#include <lzma-sdk/C/7zip/Compress/LZ/LZOutWindow.cpp>
+//#include <lzma-sdk/C/7zip/Compress/LZMA/LZMADecoder.cpp>
+#include <lzma-sdk/C/7zip/Compress/LZMA/LZMAEncoder.cpp>
+#include <lzma-sdk/C/7zip/Compress/RangeCoder/RangeCoderBit.cpp>
 #undef RC_NORMALIZE
 
 
@@ -321,11 +323,11 @@ int upx_lzma_compress      ( const upx_bytep src, unsigned  src_len,
                                    upx_compress_result_t *cresult )
 {
     assert(M_IS_LZMA(method));
-    assert(level > 0); assert(cresult != NULL);
+    assert(level > 0); assert(cresult != nullptr);
 
     int r = UPX_E_ERROR;
     HRESULT rh;
-    const lzma_compress_config_t *lcconf = cconf_parm ? &cconf_parm->conf_lzma : NULL;
+    const lzma_compress_config_t *lcconf = cconf_parm ? &cconf_parm->conf_lzma : nullptr;
     lzma_compress_result_t *res = &cresult->result_lzma;
 
     MyLzma::InStream is; is.AddRef();
@@ -382,7 +384,7 @@ int upx_lzma_compress      ( const upx_bytep src, unsigned  src_len,
     os.WriteByte(Byte((t << 3) | res->pos_bits));
     os.WriteByte(Byte((res->lit_pos_bits << 4) | (res->lit_context_bits)));
 
-    rh = enc.Code(&is, &os, NULL, NULL, &progress);
+    rh = enc.Code(&is, &os, nullptr, nullptr, &progress);
 
     } catch (...) {
         rh = E_OUTOFMEMORY;
@@ -420,8 +422,8 @@ error:
 #undef _LZMA_OUT_READ
 #undef _LZMA_PROB32
 #undef _LZMA_LOC_OPT
-#include "C/7zip/Compress/LZMA_C/LzmaDecode.h"
-#include "C/7zip/Compress/LZMA_C/LzmaDecode.c"
+#include <lzma-sdk/C/7zip/Compress/LZMA_C/LzmaDecode.h>
+#include <lzma-sdk/C/7zip/Compress/LZMA_C/LzmaDecode.c>
 
 int upx_lzma_decompress    ( const upx_bytep src, unsigned  src_len,
                                    upx_bytep dst, unsigned* dst_len,
@@ -509,7 +511,7 @@ int upx_lzma_test_overlap  ( const upx_bytep buf,
     // NOTE: there is a very tiny possibility that decompression has
     //   succeeded but the data is not restored correctly because of
     //   in-place buffer overlapping, so we use an extra memcmp().
-    if (tbuf != NULL && memcmp(tbuf, b, *dst_len) != 0)
+    if (tbuf != nullptr && memcmp(tbuf, b, *dst_len) != 0)
         return UPX_E_ERROR;
     return UPX_E_OK;
 }
@@ -530,7 +532,7 @@ const char *upx_lzma_version_string(void)
     return "4.43";
 #else
 #   error "unknown WITH_LZMA version"
-    return NULL;
+    return nullptr;
 #endif
 }
 

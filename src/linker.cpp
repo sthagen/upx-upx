@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2020 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2020 Laszlo Molnar
+   Copyright (C) 1996-2022 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2022 Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -40,12 +40,13 @@ static bool update_capacity(unsigned size, unsigned *capacity) {
     return true;
 }
 
-static void __acc_cdecl_va internal_error(const char *format, ...) {
+static void internal_error(const char *format, ...) attribute_format(1, 2);
+static void internal_error(const char *format, ...) {
     static char buf[1024];
     va_list ap;
 
     va_start(ap, format);
-    vsnprintf(buf, sizeof(buf), format, ap);
+    upx_safe_vsnprintf(buf, sizeof(buf), format, ap);
     va_end(ap);
 
     throwInternalError(buf);
@@ -56,11 +57,11 @@ static void __acc_cdecl_va internal_error(const char *format, ...) {
 **************************************************************************/
 
 ElfLinker::Section::Section(const char *n, const void *i, unsigned s, unsigned a)
-    : name(NULL), output(NULL), size(s), offset(0), p2align(a), next(NULL) {
+    : name(nullptr), output(nullptr), size(s), offset(0), p2align(a), next(nullptr) {
     name = strdup(n);
-    assert(name != NULL);
+    assert(name != nullptr);
     input = malloc(s + 1);
-    assert(input != NULL);
+    assert(input != nullptr);
     if (s != 0)
         memcpy(input, i, s);
     ((char *) input)[s] = 0;
@@ -76,10 +77,10 @@ ElfLinker::Section::~Section() {
 **************************************************************************/
 
 ElfLinker::Symbol::Symbol(const char *n, Section *s, upx_uint64_t o)
-    : name(NULL), section(s), offset(o) {
+    : name(nullptr), section(s), offset(o) {
     name = strdup(n);
-    assert(name != NULL);
-    assert(section != NULL);
+    assert(name != nullptr);
+    assert(section != nullptr);
 }
 
 ElfLinker::Symbol::~Symbol() { free(name); }
@@ -91,7 +92,7 @@ ElfLinker::Symbol::~Symbol() { free(name); }
 ElfLinker::Relocation::Relocation(const Section *s, unsigned o, const char *t, const Symbol *v,
                                   upx_uint64_t a)
     : section(s), offset(o), type(t), value(v), add(a) {
-    assert(section != NULL);
+    assert(section != nullptr);
 }
 
 /*************************************************************************
@@ -99,10 +100,10 @@ ElfLinker::Relocation::Relocation(const Section *s, unsigned o, const char *t, c
 **************************************************************************/
 
 ElfLinker::ElfLinker()
-    : bele(&N_BELE_RTP::le_policy), input(NULL), output(NULL), head(NULL), tail(NULL),
-      sections(NULL), symbols(NULL), relocations(NULL), nsections(0), nsections_capacity(0),
-      nsymbols(0), nsymbols_capacity(0), nrelocations(0), nrelocations_capacity(0),
-      reloc_done(false) {}
+    : bele(&N_BELE_RTP::le_policy), input(nullptr), output(nullptr), head(nullptr), tail(nullptr),
+      sections(nullptr), symbols(nullptr), relocations(nullptr), nsections(0),
+      nsections_capacity(0), nsymbols(0), nsymbols_capacity(0), nrelocations(0),
+      nrelocations_capacity(0), reloc_done(false) {}
 
 ElfLinker::~ElfLinker() {
     delete[] input;
@@ -120,7 +121,7 @@ ElfLinker::~ElfLinker() {
     free(relocations);
 }
 
-void ElfLinker::init(const void *pdata_v, int plen) {
+void ElfLinker::init(const void *pdata_v, int plen, unsigned pxtra) {
     const upx_byte *pdata = (const upx_byte *) pdata_v;
     if (plen >= 16 && memcmp(pdata, "UPX#", 4) == 0) {
         // decompress pre-compressed stub-loader
@@ -143,7 +144,7 @@ void ElfLinker::init(const void *pdata_v, int plen) {
         inputlen = u_len;
         input = new upx_byte[inputlen + 1];
         unsigned new_len = u_len;
-        int r = upx_decompress(pdata, c_len, input, &new_len, method, NULL);
+        int r = upx_decompress(pdata, c_len, input, &new_len, method, nullptr);
         if (r == UPX_E_OUT_OF_MEMORY)
             throwOutOfMemoryException();
         if (r != UPX_E_OK || new_len != u_len)
@@ -156,34 +157,38 @@ void ElfLinker::init(const void *pdata_v, int plen) {
     }
     input[inputlen] = 0; // NUL terminate
 
-    output = new upx_byte[inputlen ? inputlen : 0x4000];
+    output = new upx_byte[inputlen ? (inputlen + pxtra) : 0x4000];
     outputlen = 0;
 
+    // FIXME: bad compare when either symbols or relocs are absent
     if ((int) strlen("Sections:\n"
                      "SYMBOL TABLE:\n"
                      "RELOCATION RECORDS FOR ") < inputlen) {
+        char const *const eof = (char const *) &input[inputlen];
         int pos = find(input, inputlen, "Sections:\n", 10);
         assert(pos != -1);
-        char *psections = (char *) input + pos;
+        char *const psections = (char *) input + pos;
 
-        char *psymbols = strstr(psections, "SYMBOL TABLE:\n");
-        assert(psymbols != NULL);
+        char *const psymbols = strstr(psections, "SYMBOL TABLE:\n");
+        // assert(psymbols != nullptr);
 
-        char *prelocs = strstr(psymbols, "RELOCATION RECORDS FOR ");
-        assert(prelocs != NULL);
+        char *const prelocs = strstr((psymbols ? psymbols : psections), "RELOCATION RECORDS FOR ");
+        // assert(prelocs != nullptr);
 
-        preprocessSections(psections, psymbols);
-        preprocessSymbols(psymbols, prelocs);
-        preprocessRelocations(prelocs, (char *) input + inputlen);
+        preprocessSections(psections, (psymbols ? psymbols : (prelocs ? prelocs : eof)));
+        if (psymbols)
+            preprocessSymbols(psymbols, (prelocs ? prelocs : eof));
+        if (prelocs)
+            preprocessRelocations(prelocs, eof);
         addLoader("*UND*");
     }
 }
 
-void ElfLinker::preprocessSections(char *start, char *end) {
+void ElfLinker::preprocessSections(char *start, char const *end) {
     char *nextl;
     for (nsections = 0; start < end; start = 1 + nextl) {
         nextl = strchr(start, '\n');
-        assert(nextl != NULL);
+        assert(nextl != nullptr);
         *nextl = '\0'; // a record is a line
 
         unsigned offset, size, align;
@@ -197,15 +202,15 @@ void ElfLinker::preprocessSections(char *start, char *end) {
             // printf("section %s preprocessed\n", n);
         }
     }
-    addSection("*ABS*", NULL, 0, 0);
-    addSection("*UND*", NULL, 0, 0);
+    addSection("*ABS*", nullptr, 0, 0);
+    addSection("*UND*", nullptr, 0, 0);
 }
 
-void ElfLinker::preprocessSymbols(char *start, char *end) {
+void ElfLinker::preprocessSymbols(char *start, char const *end) {
     char *nextl;
     for (nsymbols = 0; start < end; start = 1 + nextl) {
         nextl = strchr(start, '\n');
-        assert(nextl != NULL);
+        assert(nextl != nullptr);
         *nextl = '\0'; // a record is a line
 
         unsigned value, offset;
@@ -237,12 +242,12 @@ void ElfLinker::preprocessSymbols(char *start, char *end) {
     }
 }
 
-void ElfLinker::preprocessRelocations(char *start, char *end) {
-    Section *section = NULL;
+void ElfLinker::preprocessRelocations(char *start, char const *end) {
+    Section *section = nullptr;
     char *nextl;
     for (nrelocations = 0; start < end; start = 1 + nextl) {
         nextl = strchr(start, '\n');
-        assert(nextl != NULL);
+        assert(nextl != nullptr);
         *nextl = '\0'; // a record is a line
 
         {
@@ -261,7 +266,7 @@ void ElfLinker::preprocessRelocations(char *start, char *end) {
 
             upx_uint64_t add = 0;
             char *p = strstr(symbol, "+0x");
-            if (p == NULL)
+            if (p == nullptr)
                 p = strstr(symbol, "-0x");
             if (p) {
                 char sign = *p;
@@ -275,7 +280,7 @@ void ElfLinker::preprocessRelocations(char *start, char *end) {
                 else
                     add = a;
 #else
-                char *endptr = NULL;
+                char *endptr = nullptr;
                 add = strtoull(p, &endptr, 16);
                 assert(endptr && *endptr == '\0');
 #endif
@@ -298,7 +303,7 @@ ElfLinker::Section *ElfLinker::findSection(const char *name, bool fatal) const {
             return sections[ic];
     if (fatal)
         internal_error("unknown section %s\n", name);
-    return NULL;
+    return nullptr;
 }
 
 ElfLinker::Symbol *ElfLinker::findSymbol(const char *name, bool fatal) const {
@@ -307,12 +312,14 @@ ElfLinker::Symbol *ElfLinker::findSymbol(const char *name, bool fatal) const {
             return symbols[ic];
     if (fatal)
         internal_error("unknown symbol %s\n", name);
-    return NULL;
+    return nullptr;
 }
 
 ElfLinker::Section *ElfLinker::addSection(const char *sname, const void *sdata, int slen,
                                           unsigned p2align) {
     // printf("addSection: %s len=%d align=%d\n", sname, slen, p2align);
+    if (!sdata && (!strcmp("ABS*", sname) || !strcmp("UND*", sname)))
+        return nullptr;
     if (update_capacity(nsections, &nsections_capacity))
         sections =
             static_cast<Section **>(realloc(sections, nsections_capacity * sizeof(Section *)));
@@ -320,7 +327,7 @@ ElfLinker::Section *ElfLinker::addSection(const char *sname, const void *sdata, 
     assert(sname);
     assert(sname[0]);
     assert(sname[strlen(sname) - 1] != ':');
-    assert(findSection(sname, false) == NULL);
+    assert(findSection(sname, false) == nullptr);
     Section *sec = new Section(sname, sdata, slen, p2align);
     sections[nsections++] = sec;
     return sec;
@@ -331,11 +338,11 @@ ElfLinker::Symbol *ElfLinker::addSymbol(const char *name, const char *section,
     // printf("addSymbol: %s %s 0x%x\n", name, section, offset);
     if (update_capacity(nsymbols, &nsymbols_capacity))
         symbols = static_cast<Symbol **>(realloc(symbols, nsymbols_capacity * sizeof(Symbol *)));
-    assert(symbols != NULL);
+    assert(symbols != nullptr);
     assert(name);
     assert(name[0]);
     assert(name[strlen(name) - 1] != ':');
-    assert(findSymbol(name, false) == NULL);
+    assert(findSymbol(name, false) == nullptr);
     Symbol *sym = new Symbol(name, findSection(section), offset);
     symbols[nsymbols++] = sym;
     return sym;
@@ -346,7 +353,7 @@ ElfLinker::Relocation *ElfLinker::addRelocation(const char *section, unsigned of
     if (update_capacity(nrelocations, &nrelocations_capacity))
         relocations = static_cast<Relocation **>(
             realloc(relocations, (nrelocations_capacity) * sizeof(Relocation *)));
-    assert(relocations != NULL);
+    assert(relocations != nullptr);
     Relocation *rel = new Relocation(findSection(section), off, type, findSymbol(symbol), add);
     relocations[nrelocations++] = rel;
     return rel;
@@ -361,7 +368,7 @@ void ElfLinker::setLoaderAlignOffset(int phase)
 #endif
 
 int ElfLinker::addLoader(const char *sname) {
-    assert(sname != NULL);
+    assert(sname != nullptr);
     if (!sname[0])
         return outputlen;
 
@@ -420,13 +427,13 @@ int ElfLinker::addLoader(const char *sname) {
 }
 
 void ElfLinker::addLoader(const char *s, va_list ap) {
-    while (s != NULL) {
+    while (s != nullptr) {
         addLoader(s);
         s = va_arg(ap, const char *);
     }
 }
 
-void __acc_cdecl_va ElfLinker::addLoaderVA(const char *s, ...) {
+void ElfLinker::addLoaderVA(const char *s, ...) {
     va_list ap;
     va_start(ap, s);
     addLoader(s, ap);
@@ -458,14 +465,14 @@ void ElfLinker::relocate() {
         const Relocation *rel = relocations[ic];
         upx_uint64_t value = 0;
 
-        if (rel->section->output == NULL)
+        if (rel->section->output == nullptr)
             continue;
         if (strcmp(rel->value->section->name, "*ABS*") == 0) {
             value = rel->value->offset;
         } else if (strcmp(rel->value->section->name, "*UND*") == 0 &&
                    rel->value->offset == 0xdeaddead)
             internal_error("undefined symbol '%s' referenced\n", rel->value->name);
-        else if (rel->value->section->output == NULL)
+        else if (rel->value->section->output == nullptr)
             internal_error("can not apply reloc '%s:%x' without section '%s'\n", rel->section->name,
                            rel->offset, rel->value->section->name);
         else {
@@ -500,21 +507,21 @@ void ElfLinker::defineSymbol(const char *name, upx_uint64_t value) {
 
 // debugging support
 void ElfLinker::dumpSymbol(const Symbol *symbol, unsigned flags, FILE *fp) const {
-    if ((flags & 1) && symbol->section->output == NULL)
+    if ((flags & 1) && symbol->section->output == nullptr)
         return;
     char d0[16 + 1], d1[16 + 1];
-    upx_snprintf(d0, sizeof(d0), "%016llx", (upx_uint64_t) symbol->offset);
-    upx_snprintf(d1, sizeof(d1), "%016llx", (upx_uint64_t) symbol->section->offset);
+    upx_safe_snprintf(d0, sizeof(d0), "%016llx", (upx_uint64_t) symbol->offset);
+    upx_safe_snprintf(d1, sizeof(d1), "%016llx", (upx_uint64_t) symbol->section->offset);
     fprintf(fp, "%-28s 0x%-16s | %-28s 0x%-16s\n", symbol->name, d0, symbol->section->name, d1);
 }
 void ElfLinker::dumpSymbols(unsigned flags, FILE *fp) const {
-    if (fp == NULL)
+    if (fp == nullptr)
         fp = stdout;
     if ((flags & 2) == 0) {
         // default: dump symbols in used section order
         for (const Section *section = head; section; section = section->next) {
             char d1[16 + 1];
-            upx_snprintf(d1, sizeof(d1), "%016llx", (upx_uint64_t) section->offset);
+            upx_safe_snprintf(d1, sizeof(d1), "%016llx", (upx_uint64_t) section->offset);
             fprintf(fp, "%-42s%-28s 0x%-16s\n", "", section->name, d1);
             for (unsigned ic = 0; ic < nsymbols; ic++) {
                 const Symbol *symbol = symbols[ic];
@@ -531,7 +538,7 @@ void ElfLinker::dumpSymbols(unsigned flags, FILE *fp) const {
 
 upx_uint64_t ElfLinker::getSymbolOffset(const char *name) const {
     const Symbol *symbol = findSymbol(name);
-    if (symbol->section->output == NULL)
+    if (symbol->section->output == nullptr)
         return 0xdeaddead;
     return symbol->section->offset + symbol->offset;
 }
@@ -886,7 +893,7 @@ void ElfLinkerX86::relocate1(const Relocation *rel, upx_byte *location, upx_uint
     if (strcmp(type, "8") == 0) {
         int displ = (signed char) *location + (int) value;
         if (range_check && (displ < -128 || displ > 127))
-            internal_error("target out of range (%d,%d,%d) in reloc %s:%x\n", displ, *location,
+            internal_error("target out of range (%d,%d,%llu) in reloc %s:%x\n", displ, *location,
                            value, rel->section->name, rel->offset);
         *location += value;
     } else if (strcmp(type, "16") == 0)

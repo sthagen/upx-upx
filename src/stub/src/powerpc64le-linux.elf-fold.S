@@ -2,9 +2,9 @@
 *
 *  This file is part of the UPX executable compressor.
 *
-*  Copyright (C) 1996-2020 Markus Franz Xaver Johannes Oberhumer
-*  Copyright (C) 1996-2020 Laszlo Molnar
-*  Copyright (C) 2000-2020 John F. Reiser
+*  Copyright (C) 1996-2022 Markus Franz Xaver Johannes Oberhumer
+*  Copyright (C) 1996-2022 Laszlo Molnar
+*  Copyright (C) 2000-2022 John F. Reiser
 *  All Rights Reserved.
 *
 *  UPX and the UCL library are free software; you can redistribute them
@@ -139,6 +139,10 @@ L90:
         la cblk,NBPW(a1)  // original &strings
         stwu r0,NBPW(a0)
         la  r_buf,L_PFX(a0)  // buffer
+// r_fd = open("/proc/self/exe", O_RDONLY)
+        li a1,O_RDONLY
+        la a0,L_PFX+ L90a - L90b(r_unf)  //     "/proc/self/exe"
+        call open; mr r_fd,a0
 // readlink("/proc/self/exe", buffer, -1+ PATH_MAX)
         li a2,-1+ PATH_MAX
         movr a1,r_buf  // buffer
@@ -215,6 +219,12 @@ noTOC:
         std r3,0(av_hi)  // .func for .e_entry
 #endif  //}
         mr r_exp,a0  // save &entry (.entry when BIG_ENDIAN)
+
+p_memsz= 4+4+ 4*NBPW
+// Discard pages of compressed data (includes [ADRX,+LENX) )
+        ld a1,p_memsz+szElf64_Phdr+szElf64_Ehdr(r_elfa)  // Phdr[C_TEXT= 1].p_memsz
+        movr a0,r_elfa  // hi elfaddr
+        call munmap  # discard C_TEXT compressed data
 
 // first page of /proc/self/exe, to preserve it despite munmap(ADRU, LENU)
         li a5,0  // offset
@@ -323,7 +333,7 @@ munmap: .globl munmap
         li r0,SYS_munmap;   5: b sysgo
 
 my_bkpt: .globl my_bkpt
-        teq r0,r0
+        teq r0,r0  // my_bkpt
         blr
 
 /* vim:set ts=8 sw=8 et: */

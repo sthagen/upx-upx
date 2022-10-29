@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2020 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2020 Laszlo Molnar
+   Copyright (C) 1996-2022 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2022 Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -38,19 +38,19 @@
 **************************************************************************/
 
 // ugly hacks
-static screen_t *last_screen = NULL;
+static screen_t *last_screen = nullptr;
 
 screen_t *sobject_get_screen(void) { return last_screen; }
 
 void sobject_destroy(screen_t *this) {
-    last_screen = NULL;
+    last_screen = nullptr;
     if (!this)
         return;
     if (this->data) {
         if (this->finalize)
             this->finalize(this);
         free(this->data);
-        this->data = NULL;
+        this->data = nullptr;
     }
     free(this);
 }
@@ -58,12 +58,12 @@ void sobject_destroy(screen_t *this) {
 screen_t *sobject_construct(const screen_t *c, size_t data_size) {
     screen_t *this;
 
-    last_screen = NULL;
+    last_screen = nullptr;
 
     /* allocate object */
     this = (screen_t *) malloc(sizeof(*this));
     if (!this)
-        return NULL;
+        return nullptr;
 
     /* copy function table */
     *this = *c;
@@ -72,7 +72,7 @@ screen_t *sobject_construct(const screen_t *c, size_t data_size) {
     this->data = (struct screen_data_t *) malloc(data_size);
     if (!this->data) {
         free(this);
-        return NULL;
+        return nullptr;
     }
     memset(this->data, 0, data_size);
 

@@ -1,0 +1,4 @@
+-Ivendor
+-fno-strict-aliasing
+-fno-strict-overflow
+-funsigned-char

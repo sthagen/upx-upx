@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2020 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2020 Laszlo Molnar
+   Copyright (C) 1996-2022 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2022 Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -47,7 +47,9 @@ static const
 **************************************************************************/
 
 PackW64Pep::PackW64Pep(InputFile *f) : super(f)
-{}
+{
+    use_stub_relocs = false;
+}
 
 
 PackW64Pep::~PackW64Pep()
@@ -101,6 +103,8 @@ void PackW64Pep::buildLoader(const Filter *ft)
     addLoader("START");
     if (ih.entry && isdll)
         addLoader("PEISDLL0");
+    if (isefi)
+        addLoader("PEISEFI0");
     addLoader(isdll ? "PEISDLL1" : "",
               "PEMAIN01",
               icondir_count > 1 ? (icondir_count == 2 ? "PEICONS1" : "PEICONS2") : "",
@@ -114,14 +118,14 @@ void PackW64Pep::buildLoader(const Filter *ft)
               //getDecompressorSections(),
               /*multipass ? "PEMULTIP" :  */  "",
               "PEMAIN10",
-              NULL
+              nullptr
              );
     addLoader(tmp_tlsindex ? "PETLSHAK2" : "");
     if (ft->id)
     {
         const unsigned texv = ih.codebase - rvamin;
         assert(ft->calls > 0);
-        addLoader(texv ? "PECTTPOS" : "PECTTNUL",NULL);
+        addLoader(texv ? "PECTTPOS" : "PECTTNUL",nullptr);
         addLoader("PEFILTER49");
     }
     if (soimport)
@@ -132,7 +136,7 @@ void PackW64Pep::buildLoader(const Filter *ft)
                   "PEIMPOR2",
                   isdll ? "PEIERDLL" : "PEIEREXE",
                   "PEIMDONE",
-                  NULL
+                  nullptr
                  );
     if (sorelocs)
     {
@@ -140,38 +144,40 @@ void PackW64Pep::buildLoader(const Filter *ft)
                   "PERELOC3",
                   big_relocs ? "REL64BIG" : "",
                   "RELOC64J",
-                  NULL
+                  nullptr
                  );
         if __acc_cte(0)
         {
             addLoader(big_relocs&6 ? "PERLOHI0" : "",
                       big_relocs&4 ? "PERELLO0" : "",
                       big_relocs&2 ? "PERELHI0" : "",
-                      NULL
+                      nullptr
                      );
         }
     }
     if (use_dep_hack)
-        addLoader("PEDEPHAK", NULL);
+        addLoader("PEDEPHAK", nullptr);
 
     //NEW: TLS callback support PART 1, the callback handler installation - Stefan Widmann
     if(use_tls_callbacks)
-        addLoader("PETLSC", NULL);
+        addLoader("PETLSC", nullptr);
 
-    addLoader("PEMAIN20", NULL);
+    addLoader("PEMAIN20", nullptr);
     if (use_clear_dirty_stack)
-        addLoader("CLEARSTACK", NULL);
-    addLoader("PEMAIN21", NULL);
+        addLoader("CLEARSTACK", nullptr);
+    addLoader("PEMAIN21", nullptr);
 
     if (ih.entry && isdll)
         addLoader("PEISDLL9");
-    addLoader(ih.entry ? "PEDOJUMP" : "PERETURN", NULL);
+    if (isefi)
+        addLoader("PEISEFI9");
+    addLoader(ih.entry || !ilinker ? "PEDOJUMP" : "PERETURN", nullptr);
 
     //NEW: TLS callback support PART 2, the callback handler - Stefan Widmann
     if(use_tls_callbacks)
-        addLoader("PETLSC2", NULL);
+        addLoader("PETLSC2", nullptr);
 
-    addLoader("IDENTSTR,UPX1HEAD", NULL);
+    addLoader("IDENTSTR,UPX1HEAD", nullptr);
 }
 
 bool PackW64Pep::handleForceOption()
@@ -225,16 +231,19 @@ void PackW64Pep::defineSymbols(unsigned ncsection, unsigned upxsection,
                              ilinkerGetAddress("kernel32.dll", "VirtualProtect"));
     }
     linker->defineSymbol("start_of_relocs", crelocs);
-    if (!isdll)
-        linker->defineSymbol("ExitProcess",
-                             ilinkerGetAddress("kernel32.dll", "ExitProcess"));
-    linker->defineSymbol("GetProcAddress",
-                         ilinkerGetAddress("kernel32.dll", "GetProcAddress"));
-    linker->defineSymbol("kernel32_ordinals", myimport);
-    linker->defineSymbol("LoadLibraryA",
-                         ilinkerGetAddress("kernel32.dll", "LoadLibraryA"));
-    linker->defineSymbol("start_of_imports", myimport);
-    linker->defineSymbol("compressed_imports", cimports);
+
+    if (ilinker) {
+        if (!isdll)
+            linker->defineSymbol("ExitProcess",
+                                 ilinkerGetAddress("kernel32.dll", "ExitProcess"));
+        linker->defineSymbol("GetProcAddress",
+                             ilinkerGetAddress("kernel32.dll", "GetProcAddress"));
+        linker->defineSymbol("kernel32_ordinals", myimport);
+        linker->defineSymbol("LoadLibraryA",
+                             ilinkerGetAddress("kernel32.dll", "LoadLibraryA"));
+        linker->defineSymbol("start_of_imports", myimport);
+        linker->defineSymbol("compressed_imports", cimports);
+    }
 
     if (M_IS_LZMA(ph.method))
     {
@@ -266,16 +275,21 @@ void PackW64Pep::defineSymbols(unsigned ncsection, unsigned upxsection,
     linker->defineSymbol("START", upxsection);
 }
 
-void PackW64Pep::setOhHeaderSize(const pe_section_t *)
+void PackW64Pep::setOhHeaderSize(const pe_section_t *osection)
 {
-    oh.headersize = rvamin; // FIXME
+    oh.headersize = ALIGN_UP(pe_offset + sizeof(oh) + sizeof(*osection) * oh.objects, oh.filealign);
 }
 
 void PackW64Pep::pack(OutputFile *fo)
 {
-    // FIXME: Relocation stripping disabled for now - Stefan Widmann
-    opt->win32_pe.strip_relocs = false;
-    super::pack0(fo, 0x0c, 0x0000000140000000ULL);
+    super::pack0(fo
+        , (1u<<IMAGE_SUBSYSTEM_WINDOWS_GUI)
+        | (1u<<IMAGE_SUBSYSTEM_WINDOWS_CUI)
+        | (1u<<IMAGE_SUBSYSTEM_EFI_APPLICATION)
+        | (1u<<IMAGE_SUBSYSTEM_EFI_BOOT_SERVICE_DRIVER)
+        | (1u<<IMAGE_SUBSYSTEM_EFI_RUNTIME_DRIVER)
+        | (1u<<IMAGE_SUBSYSTEM_EFI_ROM)
+        , 0x0000000140000000ULL);
 }
 
 /* vim:set ts=4 sw=4 et: */
