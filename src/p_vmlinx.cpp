@@ -108,16 +108,16 @@ typename T::Shdr const *PackVmlinuxBase<T>::getElfSections()
     if (ehdri.e_shentsize != sizeof(*shdri)
     ||  file_size_u < ehdri.e_shoff
     ||  file_size_u < ehdri.e_shoff + mem_size(ehdri.e_shentsize, e_shnum)) {
-        throwCantPack("bad ElfXX_Shdrs");
+        infoWarning("bad ElfXX_Shdrs");
+        return nullptr;
     }
     shdri = new Shdr[(unsigned) e_shnum];
     fi->seek(ehdri.e_shoff, SEEK_SET);
     fi->readx(shdri, e_shnum * sizeof(*shdri));
     unsigned const e_shstrndx = ehdri.e_shstrndx;
     if (e_shnum <= e_shstrndx) {
-        char msg[50]; snprintf(msg, sizeof(msg),
-                "bad .e_shstrndx %#x", e_shstrndx);
-        throwCantPack(msg);
+        infoWarning("bad .e_shstrndx %#x", e_shstrndx);
+        return nullptr;
     }
     Shdr const *p = &shdri[e_shstrndx];
     if (Shdr::SHT_STRTAB==p->sh_type
@@ -128,9 +128,8 @@ typename T::Shdr const *PackVmlinuxBase<T>::getElfSections()
         // 10 == (1+ strlen(".shstrtab"))
     ) {
         if (p->sh_size <= p->sh_name) {
-            char msg[50]; snprintf(msg, sizeof(msg),
-                "bad .shstrtab _Shdr[%u]", (unsigned)ehdri.e_shstrndx);
-            throwCantPack(msg);
+            infoWarning("bad .shstrtab _Shdr[%u]", (unsigned)ehdri.e_shstrndx);
+            return nullptr;
         }
         shstrtab = new char[1+ p->sh_size];
         fi->seek(p->sh_offset, SEEK_SET);

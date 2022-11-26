@@ -1,21 +1,8 @@
 #
-# UPX doc Makefile - needs GNU make
+# UPX doc Makefile - needs GNU make, pod2html, pod2man and pod2text
 #
 
-MAKEFLAGS += -rR
-.SUFFIXES:
-SHELL = /bin/sh
-
-# internal make variables
-comma := ,
-empty :=
-space := $(empty) $(empty)
-tab   := $(empty)	$(empty)
-
-
-# /***********************************************************************
-# //
-# ************************************************************************/
+BUILT_SOURCES = upx.1 upx-doc.html upx-doc.txt
 
 top_srcdir ?= ..
 
@@ -23,28 +10,31 @@ PACKAGE       = upx
 VERSION_DATE := $(shell sed -n 's/^.*UPX_VERSION_DATE_ISO .*"\(.*\)".*/\1/p' $(top_srcdir)/src/version.h)
 VERSION      := $(shell sed -n 's/^.*UPX_VERSION_STRING .*"\(.*\)".*/\1/p' $(top_srcdir)/src/version.h)
 
+# internal make variables
+comma := ,
+empty :=
+space := $(empty) $(empty)
+tab   := $(empty)	$(empty)
+
 RTRIM  := sed -e 's/[ $(tab)]*$$//'
 DETAB2 := sed -e 's/$(tab)/  /g'
 
-BUILT_SOURCES = upx.1 upx-doc.html upx-doc.txt
+#***********************************************************************
+# targets
+#***********************************************************************
 
+.DEFAULT_GOAL = all
 
-###
-### targets
-###
+all: $(BUILT_SOURCES) PHONY
 
-all: $(BUILT_SOURCES)
+mostlyclean clean distclean maintainer-clean: PHONY
+	rm -f $(BUILT_SOURCES) ./pod2htm*
 
-mostlyclean clean distclean maintainer-clean:
-	rm -f $(BUILT_SOURCES) pod2htm*
+#***********************************************************************
+# rules
+#***********************************************************************
 
-.PHONY: all mostlyclean clean distclean maintainer-clean
-
-
-###
-### rules
-###
-
+.SUFFIXES:
 .SUFFIXES: .1 .html .man .pod .ps .tex .txt
 
 %.1 : %.pod
@@ -53,7 +43,7 @@ mostlyclean clean distclean maintainer-clean:
 
 %-doc.html : %.pod
 	pod2html --noindex $< | $(RTRIM) | $(DETAB2) > $@
-	@rm -f pod2htm*
+	@rm -f ./pod2htm*
 	test -s $@
 
 %.man : %.1
@@ -72,11 +62,10 @@ mostlyclean clean distclean maintainer-clean:
 	pod2text < $< | $(RTRIM) > $@
 	test -s $@
 
-
-###
-### dependencies
-###
+#***********************************************************************
+# dependencies
+#***********************************************************************
 
 $(BUILT_SOURCES): $(top_srcdir)/src/version.h $(MAKEFILE_LIST)
 .DELETE_ON_ERROR: $(BUILT_SOURCES)
-
+.PHONY: PHONY

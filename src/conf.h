@@ -295,9 +295,9 @@ typedef upx_int64_t upx_off_t;
 #define CLANG_FORMAT_DUMMY_STATEMENT /*empty*/
 
 #if defined(_WIN32) && defined(__MINGW32__) && defined(__GNUC__) && !defined(__clang__)
-#  define attribute_format(a,b) __attribute__((__format__(__gnu_printf__,a,b)));
+#  define attribute_format(a,b) __attribute__((__format__(__gnu_printf__,a,b)))
 #elif (ACC_CC_CLANG || ACC_CC_GNUC)
-#  define attribute_format(a,b) __attribute__((__format__(__printf__,a,b)));
+#  define attribute_format(a,b) __attribute__((__format__(__printf__,a,b)))
 #else
 #  define attribute_format(a,b) /*empty*/
 #endif
@@ -377,6 +377,9 @@ private:
 
 
 namespace compile_time {
+constexpr size_t string_len(const char *a) {
+    return *a == '\0' ? 0 : 1 + string_len(a + 1);
+}
 constexpr bool string_eq(const char *a, const char *b) {
     return *a == *b && (*a == '\0' || string_eq(a + 1, b + 1));
 }
@@ -816,6 +819,13 @@ inline T *raw_bytes(T *ptr, size_t size_in_bytes) {
     return ptr;
 }
 
+// default: for any regular pointer, raw_index_bytes() is just "pointer + index"
+// NOTE: index == number of elements, *NOT* size in bytes!
+template <class T>
+inline T *raw_index_bytes(T *ptr, size_t index, size_t size_in_bytes) {
+    typedef T element_type;
+    return raw_bytes(ptr, mem_size(sizeof(element_type), index, size_in_bytes)) + index;
+}
 
 #if (ACC_OS_CYGWIN || ACC_OS_DOS16 || ACC_OS_DOS32 || ACC_OS_EMX || ACC_OS_OS2 || ACC_OS_OS216 || ACC_OS_WIN16 || ACC_OS_WIN32 || ACC_OS_WIN64)
 #  if defined(INVALID_HANDLE_VALUE) || defined(MAKEWORD) || defined(RT_CURSOR)

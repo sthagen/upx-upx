@@ -143,34 +143,34 @@ struct Span_is_convertible
 
 #if 1
 // char => char
-ACC_COMPILE_TIME_ASSERT_HEADER((Span_is_convertible<char, char>::value));
-ACC_COMPILE_TIME_ASSERT_HEADER((Span_is_convertible<char, const char>::value));
-ACC_COMPILE_TIME_ASSERT_HEADER((Span_is_convertible<const char, const char>::value));
-ACC_COMPILE_TIME_ASSERT_HEADER((!Span_is_convertible<const char, char>::value));
+ACC_COMPILE_TIME_ASSERT_HEADER((Span_is_convertible<char, char>::value))
+ACC_COMPILE_TIME_ASSERT_HEADER((Span_is_convertible<char, const char>::value))
+ACC_COMPILE_TIME_ASSERT_HEADER((Span_is_convertible<const char, const char>::value))
+ACC_COMPILE_TIME_ASSERT_HEADER((!Span_is_convertible<const char, char>::value))
 
 // void => void
-ACC_COMPILE_TIME_ASSERT_HEADER((Span_is_convertible<void, void>::value));
-ACC_COMPILE_TIME_ASSERT_HEADER((Span_is_convertible<void, const void>::value));
-ACC_COMPILE_TIME_ASSERT_HEADER((Span_is_convertible<const void, const void>::value));
-ACC_COMPILE_TIME_ASSERT_HEADER((!Span_is_convertible<const void, void>::value));
+ACC_COMPILE_TIME_ASSERT_HEADER((Span_is_convertible<void, void>::value))
+ACC_COMPILE_TIME_ASSERT_HEADER((Span_is_convertible<void, const void>::value))
+ACC_COMPILE_TIME_ASSERT_HEADER((Span_is_convertible<const void, const void>::value))
+ACC_COMPILE_TIME_ASSERT_HEADER((!Span_is_convertible<const void, void>::value))
 
 // char => void
-ACC_COMPILE_TIME_ASSERT_HEADER((Span_is_convertible<char, void>::value));
-ACC_COMPILE_TIME_ASSERT_HEADER((Span_is_convertible<char, const void>::value));
-ACC_COMPILE_TIME_ASSERT_HEADER((Span_is_convertible<const char, const void>::value));
-ACC_COMPILE_TIME_ASSERT_HEADER((!Span_is_convertible<const char, void>::value));
+ACC_COMPILE_TIME_ASSERT_HEADER((Span_is_convertible<char, void>::value))
+ACC_COMPILE_TIME_ASSERT_HEADER((Span_is_convertible<char, const void>::value))
+ACC_COMPILE_TIME_ASSERT_HEADER((Span_is_convertible<const char, const void>::value))
+ACC_COMPILE_TIME_ASSERT_HEADER((!Span_is_convertible<const char, void>::value))
 
 // void => char
-ACC_COMPILE_TIME_ASSERT_HEADER((!Span_is_convertible<void, char>::value));
-ACC_COMPILE_TIME_ASSERT_HEADER((!Span_is_convertible<void, const char>::value));
-ACC_COMPILE_TIME_ASSERT_HEADER((!Span_is_convertible<const void, const char>::value));
-ACC_COMPILE_TIME_ASSERT_HEADER((!Span_is_convertible<const void, char>::value));
+ACC_COMPILE_TIME_ASSERT_HEADER((!Span_is_convertible<void, char>::value))
+ACC_COMPILE_TIME_ASSERT_HEADER((!Span_is_convertible<void, const char>::value))
+ACC_COMPILE_TIME_ASSERT_HEADER((!Span_is_convertible<const void, const char>::value))
+ACC_COMPILE_TIME_ASSERT_HEADER((!Span_is_convertible<const void, char>::value))
 
 // char => int
-ACC_COMPILE_TIME_ASSERT_HEADER(!(Span_is_convertible<char, int>::value));
-ACC_COMPILE_TIME_ASSERT_HEADER(!(Span_is_convertible<char, const int>::value));
-ACC_COMPILE_TIME_ASSERT_HEADER(!(Span_is_convertible<const char, const int>::value));
-ACC_COMPILE_TIME_ASSERT_HEADER((!Span_is_convertible<const char, int>::value));
+ACC_COMPILE_TIME_ASSERT_HEADER(!(Span_is_convertible<char, int>::value))
+ACC_COMPILE_TIME_ASSERT_HEADER(!(Span_is_convertible<char, const int>::value))
+ACC_COMPILE_TIME_ASSERT_HEADER(!(Span_is_convertible<const char, const int>::value))
+ACC_COMPILE_TIME_ASSERT_HEADER((!Span_is_convertible<const char, int>::value))
 #endif
 
 /*************************************************************************
@@ -190,16 +190,6 @@ template <class T>
 struct Span;
 template <class T>
 struct Ptr;
-
-template <class T>
-inline typename PtrOrSpanOrNull<T>::pointer raw_bytes(const PtrOrSpanOrNull<T> &a,
-                                                      size_t size_in_bytes);
-template <class T>
-inline typename PtrOrSpan<T>::pointer raw_bytes(const PtrOrSpan<T> &a, size_t size_in_bytes);
-template <class T>
-inline typename Span<T>::pointer raw_bytes(const Span<T> &a, size_t size_in_bytes);
-template <class T>
-inline typename Ptr<T>::pointer raw_bytes(const Ptr<T> &a, size_t size_in_bytes);
 
 class SpanInternalDummyArg; // not implemented
 

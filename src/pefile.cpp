@@ -873,7 +873,7 @@ void PeFile::addStubImports()
 
 void PeFile::processImports2(unsigned myimport, unsigned) // pass 2
 {
-    COMPILE_TIME_ASSERT(sizeof(import_desc) == 20);
+    COMPILE_TIME_ASSERT(sizeof(import_desc) == 20)
 
     if (!ilinker)
         return;
@@ -1386,11 +1386,12 @@ void PeFile::processTls1(Interval *iv,
     // ... and those dwords should be correctly aligned
     if (use_tls_callbacks)
         sotls = ALIGN_UP(sotls, cb_size) + 2 * cb_size;
+    const unsigned aligned_sotls = ALIGN_UP(sotls, (unsigned)sizeof(LEXX));
 
     // the PE loader wants this stuff uncompressed
-    mb_otls.alloc(sotls);
+    mb_otls.alloc(aligned_sotls);
     mb_otls.clear();
-    otls = mb_otls; // => SPAN_S
+    otls = mb_otls; // => otls now is a SPAN_S
     unsigned const take1 = sizeof(tls);
     unsigned const skip1 = IDADDR(PEDIR_TLS);
     memcpy(otls,ibuf.subref("bad tls %#x", skip1, take1), take1);
@@ -2599,7 +2600,7 @@ void PeFile::pack0(OutputFile *fo, ht &ih, ht &oh,
         callProcessRelocs(rel, ic);
 
     // when the resource is put alone into section 3
-    const unsigned res_start = (ic + oam1) &~ oam1;;
+    const unsigned res_start = (ic + oam1) &~ oam1;
     if (last_section_rsrc_only)
         callProcessResources(res, ic = res_start);
 
@@ -2784,7 +2785,7 @@ void PeFile::rebuildRelocs(SPAN_S(upx_byte) & extrainfo, unsigned bits,
 
     if (ODSIZE(PEDIR_RELOC) == 8) // some tricky dlls use this
     {
-        omemcpy(obuf + ODADDR(PEDIR_RELOC) - rvamin, "\x0\x0\x0\x0\x8\x0\x0\x0", 8);
+        omemcpy(obuf + (ODADDR(PEDIR_RELOC) - rvamin), "\x0\x0\x0\x0\x8\x0\x0\x0", 8);
         return;
     }
 
@@ -2830,7 +2831,7 @@ void PeFile::rebuildRelocs(SPAN_S(upx_byte) & extrainfo, unsigned bits,
     }
     rel.finish (oxrelocs,soxrelocs);
 
-    omemcpy(obuf + ODADDR(PEDIR_RELOC) - rvamin,oxrelocs,soxrelocs);
+    omemcpy(obuf + (ODADDR(PEDIR_RELOC) - rvamin), oxrelocs, soxrelocs);
     delete [] oxrelocs; oxrelocs = nullptr;
     mb_wrkmem.dealloc();
 
@@ -2846,7 +2847,7 @@ void PeFile::rebuildExports()
     Export xport((char*)(unsigned char*) ibuf - isection[2].vaddr);
     processExports(&xport);
     processExports(&xport,ODADDR(PEDIR_EXPORT));
-    omemcpy(obuf + ODADDR(PEDIR_EXPORT) - rvamin, oexport, soexport);
+    omemcpy(obuf + (ODADDR(PEDIR_EXPORT) - rvamin), oexport, soexport);
 }
 
 void PeFile::rebuildTls()
@@ -2876,19 +2877,19 @@ void PeFile::rebuildResources(SPAN_S(upx_byte) & extrainfo, unsigned lastvaddr)
             ICHECK(r + res.offs() - 4, 4);
             unsigned origoffs = get_le32(r + res.offs() - 4);
             res.newoffs() = origoffs;
-            omemcpy(obuf + origoffs - rvamin,r + res.offs(),res.size());
+            omemcpy(obuf + (origoffs - rvamin), r + res.offs(), res.size());
             if (icondir_count && res.itype() == RT_GROUP_ICON)
             {
-                set_le16(obuf + origoffs - rvamin + 4,icondir_count);
+                set_le16(obuf + (origoffs - rvamin + 4), icondir_count);
                 icondir_count = 0;
             }
         }
     if (res.dirsize()) {
       upx_byte *p = res.build();
-      OCHECK(obuf + ODADDR(PEDIR_RESOURCE) - rvamin, 16);
+      OCHECK(obuf + (ODADDR(PEDIR_RESOURCE) - rvamin), 16);
       // write back when the original is zeroed
-      if (get_le32(obuf + ODADDR(PEDIR_RESOURCE) - rvamin + 12) == 0)
-        omemcpy(obuf + ODADDR(PEDIR_RESOURCE) - rvamin, p, res.dirsize());
+      if (get_le32(obuf + (ODADDR(PEDIR_RESOURCE) - rvamin + 12)) == 0)
+        omemcpy(obuf + (ODADDR(PEDIR_RESOURCE) - rvamin), p, res.dirsize());
     }
 }
 
@@ -3066,8 +3067,8 @@ void PeFile::unpack0(OutputFile *fo, const ht &ih, ht &oh,
         Filter ft(ph.level);
         ft.init(ph.filter,oh.codebase - rvamin);
         ft.cto = (unsigned char) ph.filter_cto;
-        OCHECK(obuf + oh.codebase - rvamin, oh.codesize);
-        ft.unfilter(obuf + oh.codebase - rvamin, oh.codesize);
+        OCHECK(obuf + (oh.codebase - rvamin), oh.codesize);
+        ft.unfilter(obuf + (oh.codebase - rvamin), oh.codesize);
     }
 
     // FIXME: ih.flags is checked here because of a bug in UPX 0.92
@@ -3127,7 +3128,7 @@ void PeFile::unpack0(OutputFile *fo, const ht &ih, ht &oh,
         fo->write(ibuf,osection[ic].rawdataptr - fo->getBytesWritten());
         for (ic = 0; ic < objs; ic++)
             if (osection[ic].rawdataptr)
-                fo->write(obuf + osection[ic].vaddr - rvamin,ALIGN_UP(osection[ic].size,oh.filealign));
+                fo->write(obuf + (osection[ic].vaddr - rvamin), ALIGN_UP(osection[ic].size,oh.filealign));
         copyOverlay(fo, overlay, obuf);
     }
     ibuf.dealloc();

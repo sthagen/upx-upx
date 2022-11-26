@@ -1,9 +1,11 @@
 cmake_minimum_required(VERSION 3.10 FATAL_ERROR)
 
-# config options
+# compilation config options
 option(UPX_CONFIG_DISABLE_GITREV   "Do not compile with default Git version info.")
 option(UPX_CONFIG_DISABLE_SANITIZE "Do not compile with default sanitize options.")
 option(UPX_CONFIG_DISABLE_WERROR   "Do not compile with default -Werror option.")
+# test config options
+option(UPX_CONFIG_DISABLE_SELF_PACK_TEST "Do not test packing UPX with itself") # see below
 
 #***********************************************************************
 # init
@@ -17,10 +19,13 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 if(",${CMAKE_SOURCE_DIR}," STREQUAL ",${CMAKE_BINARY_DIR},")
     message(FATAL_ERROR "ERROR: In-source builds are not allowed, please use an extra build dir.")
 endif()
+set(CMAKE_C_STANDARD_REQUIRED   ON)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # determine git revision
 set(GITREV_SHORT "")
 set(GITREV_PLUS "")
+set(GIT_DESCRIBE "")
 find_package(Git)
 if(GIT_FOUND AND NOT UPX_CONFIG_DISABLE_GITREV)
     execute_process(
@@ -39,17 +44,32 @@ if(GIT_FOUND AND NOT UPX_CONFIG_DISABLE_GITREV)
     else()
         set(GITREV_SHORT "")
     endif()
+    execute_process(
+        RESULT_VARIABLE result
+        COMMAND "${GIT_EXECUTABLE}" describe --match "v*.*.*" --tags --dirty
+        ERROR_QUIET
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        OUTPUT_VARIABLE GIT_DESCRIBE
+    )
+    if(GIT_DESCRIBE MATCHES "^v?([0-9]+\\.[0-9]+\\.[0-9]+)-([0-9]+)-g(.+)$")
+        set(GIT_DESCRIBE "${CMAKE_MATCH_1}-devel.${CMAKE_MATCH_2}+git-${CMAKE_MATCH_3}")
+    endif()
 endif()
 if(NOT IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/.git") # extra check
     set(GITREV_SHORT "")
 endif()
 if(GITREV_SHORT)
     message(STATUS "UPX_VERSION_GITREV = \"${GITREV_SHORT}${GITREV_PLUS}\"")
+    if(GIT_DESCRIBE)
+        message(STATUS "UPX_VERSION_GIT_DESCRIBE = \"${GIT_DESCRIBE}\"")
+    endif()
+elseif(UPX_CONFIG_DISABLE_GITREV)
+    message(STATUS "UPX_VERSION_GITREV: disabled")
 else()
     message(STATUS "UPX_VERSION_GITREV: not set")
 endif()
 
-project(upx VERSION 4.0.0 LANGUAGES C CXX)
+project(upx VERSION 4.0.1 LANGUAGES C CXX)
 
 # set default build type to "Release"
 get_property(is_multi_config GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
@@ -83,6 +103,7 @@ set_property(TARGET upx_vendor_zlib PROPERTY C_STANDARD 11)
 file(GLOB upx_SOURCES "src/*.cpp" "src/util/*.cpp")
 list(SORT upx_SOURCES)
 add_executable(upx ${upx_SOURCES})
+#target_compile_features(upx PRIVATE cxx_std_14)
 set_property(TARGET upx PROPERTY CXX_STANDARD 14)
 target_link_libraries(upx upx_vendor_ucl upx_vendor_zlib)
 
@@ -118,8 +139,18 @@ else()
     add_definitions(-fno-tree-vectorize)
 endif()
 
+function(upx_sanitize_target t)
+    if(NOT UPX_CONFIG_DISABLE_SANITIZE AND NOT MSVC)
+        # default sanitizer for Debug builds
+        target_compile_options(${t} PRIVATE $<$<CONFIG:Debug>:-fsanitize=undefined -fsanitize-undefined-trap-on-error -fstack-protector-all>)
+        # default sanitizer for Release builds
+        target_compile_options(${t} PRIVATE $<$<CONFIG:Release>:-fstack-protector>)
+    endif()
+endfunction()
+
 set(t upx_vendor_ucl)
 target_include_directories(${t} PRIVATE vendor/ucl/include vendor/ucl)
+upx_sanitize_target(${t})
 if(MSVC)
     target_compile_options(${t} PRIVATE -J -W4 ${warn_WX})
 else()
@@ -127,6 +158,7 @@ else()
 endif()
 
 set(t upx_vendor_zlib)
+upx_sanitize_target(${t})
 if(MSVC)
     target_compile_options(${t} PRIVATE -DHAVE_STDARG_H -DHAVE_VSNPRINTF -J -W3 ${warn_WX})
 else()
@@ -140,13 +172,11 @@ target_include_directories(${t} PRIVATE vendor)
 target_compile_definitions(${t} PRIVATE $<$<CONFIG:Debug>:DEBUG=1>)
 if(GITREV_SHORT)
     target_compile_definitions(${t} PRIVATE UPX_VERSION_GITREV="${GITREV_SHORT}${GITREV_PLUS}")
+    if(GIT_DESCRIBE)
+        target_compile_definitions(${t} PRIVATE UPX_VERSION_GIT_DESCRIBE="${GIT_DESCRIBE}")
+    endif()
 endif()
-if(NOT UPX_CONFIG_DISABLE_SANITIZE AND NOT MSVC)
-    # default sanitizer for Debug builds
-    target_compile_options(${t} PRIVATE $<$<CONFIG:Debug>:-fsanitize=undefined -fsanitize-undefined-trap-on-error -fstack-protector-all>)
-    # default sanitizer for Release builds
-    target_compile_options(${t} PRIVATE $<$<CONFIG:Release>:-fstack-protector>)
-endif()
+upx_sanitize_target(${t})
 if(MSVC)
     target_compile_options(${t} PRIVATE -EHsc -J -W4 ${warn_WX})
 else()
@@ -160,26 +190,34 @@ endif()
 # "make test"
 #***********************************************************************
 
+include(CTest)
 if(NOT CMAKE_CROSSCOMPILING)
-    include(CTest)
+    add_test(NAME upx-version COMMAND upx --version)
+    add_test(NAME upx-help    COMMAND upx --help)
+endif()
+if(NOT CMAKE_CROSSCOMPILING AND NOT UPX_CONFIG_DISABLE_SELF_PACK_TEST)
+    # NOTE: these tests can only work if the host executable format is supported by UPX!
+    function(upx_add_test)
+        set(name ${ARGV0})
+        list(REMOVE_AT ARGV 0)
+        add_test(NAME ${name} COMMAND ${ARGV})
+        set_tests_properties(${name} PROPERTIES RUN_SERIAL TRUE) # run these tests sequentially
+    endfunction()
     set(exe ${CMAKE_EXECUTABLE_SUFFIX})
     set(upx_self_exe "$<TARGET_FILE:upx>")
-    add_test(NAME upx-test-cleanup COMMAND rm -f ./upx.packed${exe} ./upx.unpacked${exe})
-    add_test(NAME upx-version      COMMAND upx --version)
-    add_test(NAME upx-help         COMMAND upx --help)
-    add_test(NAME upx-self-pack    COMMAND upx -3 ${upx_self_exe} -o upx.packed${exe})
-    add_test(NAME upx-list         COMMAND upx -l upx.packed${exe})
-    add_test(NAME upx-fileinfo     COMMAND upx --fileinfo upx.packed${exe})
-    add_test(NAME upx-test         COMMAND upx -t upx.packed${exe})
-    add_test(NAME upx-unpack       COMMAND upx -d upx.packed${exe} -o upx.unpacked${exe})
-    add_test(NAME upx-run-unpacked COMMAND ./upx.unpacked${exe} --version)
-    add_test(NAME upx-run-packed   COMMAND ./upx.packed${exe} --version)
+    set(fo "--force-overwrite")
+    upx_add_test(upx-self-pack      upx -3         ${upx_self_exe} ${fo} -o upx-packed${exe})
+    upx_add_test(upx-self-pack-n2b  upx -3 --nrv2b ${upx_self_exe} ${fo} -o upx-packed-n2b${exe})
+    upx_add_test(upx-self-pack-n2d  upx -3 --nrv2d ${upx_self_exe} ${fo} -o upx-packed-n2d${exe})
+    upx_add_test(upx-self-pack-n2e  upx -3 --nrv2e ${upx_self_exe} ${fo} -o upx-packed-n2e${exe})
+    upx_add_test(upx-self-pack-lzma upx -3 --lzma  ${upx_self_exe} ${fo} -o upx-packed-lzma${exe})
+    upx_add_test(upx-list           upx -l         upx-packed${exe} upx-packed-n2b${exe} upx-packed-n2d${exe} upx-packed-n2e${exe} upx-packed-lzma${exe})
+    upx_add_test(upx-fileinfo       upx --fileinfo upx-packed${exe} upx-packed-n2b${exe} upx-packed-n2d${exe} upx-packed-n2e${exe} upx-packed-lzma${exe})
+    upx_add_test(upx-test           upx -t         upx-packed${exe} upx-packed-n2b${exe} upx-packed-n2d${exe} upx-packed-n2e${exe} upx-packed-lzma${exe})
+    upx_add_test(upx-unpack         upx -d upx-packed${exe} ${fo} -o upx-unpacked${exe})
+    upx_add_test(upx-run-unpacked   ./upx-unpacked${exe} --version-short)
+    upx_add_test(upx-run-packed     ./upx-packed${exe} --version-short)
 endif()
-
-# TODO: could add some more explicit test programs; but then, the integrated
-# "doctest" is quite convenient and already covers a number of basic
-# checks - and more complex cases better should be handled by an
-# external test suite.
 
 #***********************************************************************
 # "make install"
@@ -194,7 +232,7 @@ include(GNUInstallDirs)
 if(DEFINED CMAKE_INSTALL_FULL_BINDIR)
     install(TARGETS upx DESTINATION "${CMAKE_INSTALL_FULL_BINDIR}")
     install(FILES
-        COPYING LICENSE NEWS README doc/upx-doc.html doc/upx-doc.txt
+        COPYING LICENSE NEWS README THANKS doc/upx-doc.html doc/upx-doc.txt
         DESTINATION "${CMAKE_INSTALL_FULL_DOCDIR}"
     )
     install(FILES doc/upx.1 DESTINATION "${CMAKE_INSTALL_FULL_MANDIR}/man1")
