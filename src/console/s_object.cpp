@@ -1,9 +1,9 @@
-/* c_none.cpp --
+/* s_object.cpp -- base of all screen drivers
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2022 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2022 Laszlo Molnar
+   Copyright (C) 1996-2023 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2023 Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -25,54 +25,61 @@
    <markus@oberhumer.com>               <ezerotven+github@gmail.com>
  */
 
+#include "../conf.h"
 
-#include "conf.h"
+#if (USE_SCREEN)
 
-#if (USE_CONSOLE)
+#define this self
+
+#include "screen.h"
 
 /*************************************************************************
 //
 **************************************************************************/
 
-static int init(FILE *f, int o, int now)
-{
-    UNUSED(f);
-    UNUSED(o);
-    UNUSED(now);
-    return CON_NONE;
+// ugly hacks
+static screen_t *last_screen = nullptr;
+
+screen_t *sobject_get_screen(void) { return last_screen; }
+
+void sobject_destroy(screen_t *this) {
+    last_screen = nullptr;
+    if (!this)
+        return;
+    if (this->data) {
+        if (this->finalize)
+            this->finalize(this);
+        free(this->data);
+        this->data = nullptr;
+    }
+    free(this);
 }
 
+screen_t *sobject_construct(const screen_t *c, size_t data_size) {
+    screen_t *this;
 
-static int set_fg(FILE *f, int fg)
-{
-    UNUSED(f);
-    UNUSED(fg);
-    return -1;
+    last_screen = nullptr;
+
+    /* allocate object */
+    this = (screen_t *) malloc(sizeof(*this));
+    if (!this)
+        return nullptr;
+
+    /* copy function table */
+    *this = *c;
+
+    /* initialize instance variables */
+    this->data = (struct screen_data_t *) malloc(data_size);
+    if (!this->data) {
+        free(this);
+        return nullptr;
+    }
+    memset(this->data, 0, data_size);
+
+    last_screen = this;
+    return this;
 }
 
-
-static void print0(FILE *f, const char *s)
-{
-    UNUSED(f);
-    UNUSED(s);
-}
-
-
-static bool intro(FILE *f)
-{
-    UNUSED(f);
-    return 0;
-}
-
-
-console_t console_none =
-{
-    init,
-    set_fg,
-    print0,
-    intro
-};
-
-#endif /* USE_CONSOLE */
+#endif /* (USE_SCREEN) */
 
 /* vim:set ts=4 sw=4 et: */

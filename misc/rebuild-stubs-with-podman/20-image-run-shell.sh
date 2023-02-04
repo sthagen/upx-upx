@@ -6,7 +6,7 @@ argv0=$0; argv0abs="$(readlink -fn "$argv0")"; argv0dir="$(dirname "$argv0abs")"
 # run an interactive shell in the image
 # using a rootless Podman container
 
-image=upx-stubtools-20210104-v7
+image=upx-stubtools-20221212-v4
 
 flags=( -ti --read-only --rm )
 flags+=( --cap-drop=all )               # drop all capabilities
@@ -37,24 +37,40 @@ podman run "${flags[@]}" "$image" bash -l
 #   # make sure that git is clean:
 #   git status .
 #   # remove stub files and make sure that they got deleted:
-#   make maintainer-clean
+#   make maintainer-clean extra-clean
 #   git status .
 #   # rebuild
-#   make all
+#   make extra-all all
 #   # make sure that the stub files did rebuild correctly:
 #   git status .
 #   git diff .
 
 # we can also build UPX in the container:
 #   cd /home/upx/src/upx
-#   rm -rf ./build/release
-#   make build/release
+#   rm -rf ./build/extra/gcc/release
+#   make build/extra/gcc/release
 #   # run tests
-#   ./build/release/upx --version
-#   make -C build/release test
+#   ./build/extra/gcc/release/upx --version
+#   make -C build/extra/gcc/release test
+
+# and we can also build UPX with -m32:
+#   cd /home/upx/src/upx
+#   rm -rf ./build/extra/gcc-m32/release
+#   make build/extra/gcc-m32/release
+#   # run tests
+#   ./build/extra/gcc-m32/release/upx --version
+#   make -C build/extra/gcc-m32/release test
+
+# and we can also build UPX with -mx32: (NOTE: needs CONFIG_X86_X32_ABI on host kernel!)
+#   cd /home/upx/src/upx
+#   rm -rf ./build/extra/gcc-mx32/release
+#   make build/extra/gcc-mx32/release
+#   # run tests (needs CONFIG_X86_X32_ABI on host kernel)
+#   ./build/extra/gcc-mx32/release/upx --version
+#   make -C build/extra/gcc-mx32/release test
 
 # and we can also rebuild the UPX docs the container:
-#   cd /home/upx/src/upx
-#   make -C doc clean all
-#   git status doc
-#   git diff doc
+#   cd /home/upx/src/upx/doc
+#   make clean all
+#   git status .
+#   git diff .

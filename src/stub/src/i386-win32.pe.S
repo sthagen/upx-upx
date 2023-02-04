@@ -3,8 +3,8 @@
 ;
 ;  This file is part of the UPX executable compressor.
 ;
-;  Copyright (C) 1996-2022 Markus Franz Xaver Johannes Oberhumer
-;  Copyright (C) 1996-2022 Laszlo Molnar
+;  Copyright (C) 1996-2023 Markus Franz Xaver Johannes Oberhumer
+;  Copyright (C) 1996-2023 Laszlo Molnar
 ;  All Rights Reserved.
 ;
 ;  UPX and the UCL library are free software; you can redistribute them
@@ -30,7 +30,6 @@
 #define         UPX102  1
 #include "arch/i386/macros.S"
 
-
 // =============
 // ============= ENTRY POINT
 // =============
@@ -54,7 +53,11 @@ section         PEICONS1
 section         PEICONS2
                 addw    [edi + icon_offset], offset icon_delta
 section         PETLSHAK
-                mov     dword ptr [edi + tls_address], offset tls_value
+                lea     eax, [edi + tls_address]
+                push    [eax]   // save the TLS index
+                mov     dword ptr [eax], offset tls_value // restore compressed data overwritten by the TLS index
+                push    eax
+
 section         PEMAIN02
                 push    edi
 section         PEMAIN03
@@ -72,6 +75,11 @@ section         PEMAIN03
 // =============
 section         PEMAIN10
                 pop     esi             // load vaddr
+
+section         PETLSHAK2               // restore the TLS index
+                pop     edi
+                pop     eax
+                mov     [edi], eax
 
 // =============
 // ============= CALLTRICK

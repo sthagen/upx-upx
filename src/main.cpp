@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2022 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2022 Laszlo Molnar
+   Copyright (C) 1996-2023 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2023 Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -25,15 +25,21 @@
    <markus@oberhumer.com>               <ezerotven+github@gmail.com>
  */
 
+// main entry, mostly boring stuff; see work.cpp for actual action
+
 #include "conf.h"
-#include "compress.h"
 #include "file.h"
 #include "packer.h"
 #include "p_elf.h"
+#include "compress/compress.h" // upx_ucl_init()
 
 /*************************************************************************
 // options
 **************************************************************************/
+
+#ifndef OPTIONS_VAR
+#define OPTIONS_VAR "UPX"
+#endif
 
 static const char *argv0 = "";
 const char *progname = "";
@@ -569,7 +575,7 @@ static int do_option(int optc, const char *arg) {
     case 525: // --exact
         opt->exact = true;
         break;
-    // compression runtime parameters
+    // CRP - Compression Runtime Parameters (undocumented and subject to change)
     case 801:
         getoptvar(&opt->crp.crp_ucl.c_flags, 0, 3, arg);
         break;
@@ -866,7 +872,7 @@ int main_get_options(int argc, char **argv) {
         {"filter", 0x31, N, 521}, // --filter=
         {"no-filter", 0x10, N, 522},
         {"small", 0x10, N, 520},
-        // compression runtime parameters
+        // CRP - Compression Runtime Parameters (undocumented and subject to change)
         {"crp-nrv-cf", 0x31, N, 801},
         {"crp-nrv-sl", 0x31, N, 802},
         {"crp-nrv-hl", 0x31, N, 803},
@@ -1201,11 +1207,17 @@ int upx_main(int argc, char *argv[]) {
 
     set_term(stderr);
 
+#if (WITH_BZIP2)
+    assert(upx_bzip2_init() == 0);
+#endif
     assert(upx_lzma_init() == 0);
-    assert(upx_ucl_init() == 0);
-    assert(upx_zlib_init() == 0);
 #if (WITH_NRV)
     assert(upx_nrv_init() == 0);
+#endif
+    assert(upx_ucl_init() == 0);
+    assert(upx_zlib_init() == 0);
+#if (WITH_ZSTD)
+    assert(upx_zstd_init() == 0);
 #endif
 
     /* get options */

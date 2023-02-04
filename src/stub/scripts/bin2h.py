@@ -5,7 +5,7 @@
 #
 #  This file is part of the UPX executable compressor.
 #
-#  Copyright (C) 1996-2022 Markus Franz Xaver Johannes Oberhumer
+#  Copyright (C) 1996-2023 Markus Franz Xaver Johannes Oberhumer
 #  All Rights Reserved.
 #
 #  UPX and the UCL library are free software; you can redistribute them
@@ -49,9 +49,9 @@ def w_header_c(w, ifile, ofile, n):
     w("""\n\
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2022 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2022 Laszlo Molnar
-   Copyright (C) 2000-2022 John F. Reiser
+   Copyright (C) 1996-2023 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2023 Laszlo Molnar
+   Copyright (C) 2000-2023 John F. Reiser
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -188,6 +188,12 @@ def write_stub(w, odata, method_index, methods):
     if opts.ident:
         if opts.mode == "c":
             w_checksum_c(w, opts.ident.upper(), odata)
+            if 0:
+                # idea: put all stubs in a dedicated section so that UPX compresses better
+                #w("#if defined(__ELF__)\n")
+                #w('__attribute__((__section__("upx_stubs")))\n')
+                #w("#endif\n")
+                w("ATTRIBUTE_FOR_STUB(%s)\n" % (opts.ident))
             w("unsigned char %s[%d] = {\n" % (opts.ident, len(odata)))
     if opts.mode == "c":
         DataWriter_c(w).w_data(odata)
@@ -351,6 +357,17 @@ def main(argv):
         else:
             ofp.close()
 
+    # write an extra C file so that we can test the total size of the stubs:
+    #   $ gcc -Wall -c test_size*.c
+    #   $ size --totals test_size*.o
+    # current results (2022-12-22):
+    #   89 files, 1,082,956 bytes
+    if 0 and not opts.dry_run:
+        if opts.ident and ofile and ofile != "-":
+            tfp = open("test_size_" + ofile + ".c", "wb")
+            tfp.write("const\n")
+            tfp.write('#include "' + ofile + '"\n')
+            tfp.close()
 
 if __name__ == "__main__":
     sys.exit(main(sys.argv))

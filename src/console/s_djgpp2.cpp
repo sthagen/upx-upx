@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2022 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2022 Laszlo Molnar
+   Copyright (C) 1996-2023 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2023 Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -25,7 +25,7 @@
    <markus@oberhumer.com>               <ezerotven+github@gmail.com>
  */
 
-#include "conf.h"
+#include "../conf.h"
 
 #if (USE_SCREEN) && (ACC_OS_DOS32) && defined(__DJGPP__)
 #if (ACC_CC_GNUC >= 0x040300ul)
@@ -81,7 +81,9 @@ struct screen_data_t {
 };
 
 /* atExit information */
-static struct { int cursor_shape; } ae = {-1};
+static struct {
+    int cursor_shape;
+} ae = {-1};
 
 #if USE_SCROLLBACK
 static __inline__ void sb_add(screen_t *this, int *val, int inc) {
@@ -107,7 +109,7 @@ static void refresh(screen_t *this) { UNUSED(this); }
 
 static __inline__ Cell make_cell(screen_t *this, int ch, int attr) {
     UNUSED(this);
-    return (Cell)(((attr & 0xff) << 8) | (ch & 0xff));
+    return (Cell) (((attr & 0xff) << 8) | (ch & 0xff));
 }
 
 static int getMode(const screen_t *this) {

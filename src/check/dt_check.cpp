@@ -2,8 +2,7 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2022 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2022 Laszlo Molnar
+   Copyright (C) 1996-2023 Markus Franz Xaver Johannes Oberhumer
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -21,8 +20,8 @@
    If not, write to the Free Software Foundation, Inc.,
    59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 
-   Markus F.X.J. Oberhumer              Laszlo Molnar
-   <markus@oberhumer.com>               <ezerotven+github@gmail.com>
+   Markus F.X.J. Oberhumer
+   <markus@oberhumer.com>
  */
 
 #include "../conf.h"
@@ -123,6 +122,20 @@ ACC_COMPILE_TIME_ASSERT_HEADER(!compile_time::string_gt("abc", "abz"))
 ACC_COMPILE_TIME_ASSERT_HEADER(!compile_time::string_ge("abc", "abz"))
 ACC_COMPILE_TIME_ASSERT_HEADER(compile_time::string_le("abc", "abz"))
 
+ACC_COMPILE_TIME_ASSERT_HEADER(CHAR_BIT == 8)
+#if 0 // does not work with MSVC
+#if '\0' - 1 < 0
+ACC_COMPILE_TIME_ASSERT_HEADER(CHAR_MAX == 127)
+#else
+ACC_COMPILE_TIME_ASSERT_HEADER(CHAR_MAX == 255)
+#endif
+#if L'\0' - 1 < 0
+ACC_COMPILE_TIME_ASSERT_HEADER((wchar_t) -1 < 0)
+#else
+ACC_COMPILE_TIME_ASSERT_HEADER((wchar_t) -1 > 0)
+#endif
+#endif
+
 /*************************************************************************
 // upx_compiler_sanity_check()
 // assert a sane architecture and compiler
@@ -133,62 +146,77 @@ namespace {
 template <class T>
 struct TestBELE {
     __acc_static_noinline bool test(void) {
-        COMPILE_TIME_ASSERT_ALIGNED1(T)
-        struct alignas(1) test1_t {
-            char a;
-            T b;
-        };
-        struct alignas(1) test2_t {
-            char a;
-            T b[3];
-        };
-        test1_t t1[7];
-        UNUSED(t1);
-        test2_t t2[7];
-        UNUSED(t2);
-        COMPILE_TIME_ASSERT(sizeof(test1_t) == 1 + sizeof(T))
-        COMPILE_TIME_ASSERT_ALIGNED1(test1_t)
-        COMPILE_TIME_ASSERT(sizeof(t1) == 7 + 7 * sizeof(T))
-        COMPILE_TIME_ASSERT(sizeof(test2_t) == 1 + 3 * sizeof(T))
-        COMPILE_TIME_ASSERT_ALIGNED1(test2_t)
-        COMPILE_TIME_ASSERT(sizeof(t2) == 7 + 21 * sizeof(T))
+        // POD checks
+        {
+            COMPILE_TIME_ASSERT(std::is_standard_layout<T>::value)
+            COMPILE_TIME_ASSERT(std::is_trivial<T>::value)
+            // extra checks, these are probably implied by std::is_trivial:
+            COMPILE_TIME_ASSERT(std::is_nothrow_default_constructible<T>::value)
+            COMPILE_TIME_ASSERT(std::is_trivially_copyable<T>::value)
+            COMPILE_TIME_ASSERT(std::is_trivially_default_constructible<T>::value)
+        }
+        // alignment checks
+        {
+            COMPILE_TIME_ASSERT_ALIGNED1(T)
+            struct alignas(1) test1_t {
+                char a;
+                T b;
+            };
+            struct alignas(1) test2_t {
+                char a;
+                T b[3];
+            };
+            COMPILE_TIME_ASSERT_ALIGNED1(test1_t)
+            COMPILE_TIME_ASSERT_ALIGNED1(test2_t)
+            test1_t t1[7];
+            test2_t t2[7];
+            COMPILE_TIME_ASSERT(sizeof(test1_t) == 1 + sizeof(T))
+            COMPILE_TIME_ASSERT(sizeof(t1) == 7 + 7 * sizeof(T))
+            COMPILE_TIME_ASSERT(sizeof(test2_t) == 1 + 3 * sizeof(T))
+            COMPILE_TIME_ASSERT(sizeof(t2) == 7 + 21 * sizeof(T))
+            UNUSED(t1);
+            UNUSED(t2);
+        }
 #if 1
-        T allbits;
-        allbits = 0;
-        allbits += 1;
-        allbits -= 2;
-        T v1;
-        v1 = 1;
-        v1 *= 2;
-        v1 -= 1;
-        T v2;
-        v2 = 1;
-        assert((v1 == v2));
-        assert(!(v1 != v2));
-        assert((v1 <= v2));
-        assert((v1 >= v2));
-        assert(!(v1 < v2));
-        assert(!(v1 > v2));
-        v2 ^= allbits;
-        assert(!(v1 == v2));
-        assert((v1 != v2));
-        assert((v1 <= v2));
-        assert(!(v1 >= v2));
-        assert((v1 < v2));
-        assert(!(v1 > v2));
-        v2 += 2;
-        assert(v1 == 1);
-        assert(v2 == 0);
-        v1 <<= 1;
-        v1 |= v2;
-        v1 >>= 1;
-        v2 &= v1;
-        v2 /= v1;
-        v2 *= v1;
-        assert(v1 == 1);
-        assert(v2 == 0);
-        if ((v1 ^ v2) != 1)
-            return false;
+        // arithmetic checks
+        {
+            T allbits;
+            allbits = 0;
+            allbits += 1;
+            allbits -= 2;
+            T v1;
+            v1 = 1;
+            v1 *= 2;
+            v1 -= 1;
+            T v2;
+            v2 = 1;
+            assert((v1 == v2));
+            assert(!(v1 != v2));
+            assert((v1 <= v2));
+            assert((v1 >= v2));
+            assert(!(v1 < v2));
+            assert(!(v1 > v2));
+            v2 ^= allbits;
+            assert(!(v1 == v2));
+            assert((v1 != v2));
+            assert((v1 <= v2));
+            assert(!(v1 >= v2));
+            assert((v1 < v2));
+            assert(!(v1 > v2));
+            v2 += 2;
+            assert(v1 == 1);
+            assert(v2 == 0);
+            v1 <<= 1;
+            v1 |= v2;
+            v1 >>= 1;
+            v2 &= v1;
+            v2 /= v1;
+            v2 *= v1;
+            assert(v1 == 1);
+            assert(v2 == 0);
+            if ((v1 ^ v2) != 1)
+                return false;
+        }
 #endif
         return true;
     }
@@ -324,6 +352,20 @@ void upx_compiler_sanity_check(void) {
         set_le26(d, 0xff020304);
         assert(get_le26(d) == 0x03020304);
         assert(dd == ne32_to_le32(0xf7020304));
+    }
+    {
+        upx_uint16_t a;
+        upx_uint32_t b;
+        upx_uint64_t c;
+        set_ne16(&a, 0x04030201); // ignore upper bits
+        set_ne32(&b, 0x04030201);
+        set_ne64(&c, 0x0807060504030201ull);
+        assert(a == 0x0201);
+        assert(b == 0x04030201);
+        assert(c == 0x0807060504030201ull);
+        assert(get_ne16(&a) == 0x0201);
+        assert(get_ne32(&b) == 0x04030201);
+        assert(get_ne64(&c) == 0x0807060504030201ull);
     }
 #endif
     union {

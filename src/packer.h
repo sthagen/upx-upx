@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2022 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2022 Laszlo Molnar
+   Copyright (C) 1996-2023 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2023 Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -50,7 +50,7 @@ class PackHeader final {
     PackHeader();
 
     void putPackHeader(SPAN_S(upx_byte) p);
-    bool fillPackHeader(SPAN_S(const upx_byte) b, int blen);
+    bool decodePackHeaderFromBuf(SPAN_S(const upx_byte) b, int blen);
 
 public:
     int getPackHeaderSize() const;
@@ -76,7 +76,7 @@ public:
     unsigned saved_u_adler;
     unsigned saved_c_adler;
 
-    // info fields set by fillPackHeader()
+    // info fields set by decodePackHeaderFromBuf()
     unsigned buf_offset;
 
     // info fields set by Packer::compress()
@@ -212,7 +212,7 @@ protected:
     // loader util for linker
     virtual upx_byte *getLoader() const;
     virtual int getLoaderSize() const;
-    virtual void initLoader(const void *pdata, int plen, int small = -1);
+    virtual void initLoader(const void *pdata, int plen, int small = -1, int pextra = 0);
 #define C const char *
     void addLoader(C);
     void addLoader(C, C);

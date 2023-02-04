@@ -2,8 +2,7 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2022 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2022 Laszlo Molnar
+   Copyright (C) 1996-2023 Markus Franz Xaver Johannes Oberhumer
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -21,13 +20,13 @@
    If not, write to the Free Software Foundation, Inc.,
    59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 
-   Markus F.X.J. Oberhumer              Laszlo Molnar
-   <markus@oberhumer.com>               <ezerotven+github@gmail.com>
+   Markus F.X.J. Oberhumer
+   <markus@oberhumer.com>
  */
 
-#include "conf.h"
+#include "../conf.h"
 #include "compress.h"
-#include "util/membuffer.h"
+#include "../util/membuffer.h"
 #include <zlib/zlib.h>
 #include <zlib/deflate.h>
 
@@ -224,13 +223,13 @@ int upx_zlib_init(void) {
 
 const char *upx_zlib_version_string(void) { return zlibVersion(); }
 
-#if 0 /* UNUSED */
+#if 0 // UNUSED
 unsigned upx_zlib_adler32(const void *buf, unsigned len, unsigned adler) {
     return adler32(adler, (const Bytef *) buf, len);
 }
 #endif
 
-#if 0 /* UNUSED */
+#if 0 // UNUSED
 unsigned upx_zlib_crc32(const void *buf, unsigned len, unsigned crc) {
     return crc32(crc, (const Bytef *) buf, len);
 }
@@ -240,9 +239,7 @@ unsigned upx_zlib_crc32(const void *buf, unsigned len, unsigned crc) {
 // doctest checks
 **************************************************************************/
 
-#if DEBUG && 1
-
-#include "util/membuffer.h"
+#if DEBUG && !defined(DOCTEST_CONFIG_DISABLE) && 1
 
 static bool check_zlib(const int method, const int level, const unsigned expected_c_len) {
     const unsigned u_len = 16384;

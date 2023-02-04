@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2022 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2022 Laszlo Molnar
+   Copyright (C) 1996-2023 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2023 Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -25,8 +25,9 @@
    <markus@oberhumer.com>               <ezerotven+github@gmail.com>
  */
 
-#ifndef __UPX_PACKMASTER_H
-#define __UPX_PACKMASTER_H 1
+#pragma once
+#ifndef UPX_PACKMASTER_H__
+#define UPX_PACKMASTER_H__ 1
 
 class Packer;
 class InputFile;
@@ -36,10 +37,10 @@ class OutputFile;
 // interface for work.cpp
 **************************************************************************/
 
-class PackMaster {
+class PackMaster final {
 public:
     PackMaster(InputFile *f, options_t *o = nullptr);
-    virtual ~PackMaster();
+    ~PackMaster();
 
     void pack(OutputFile *fo);
     void unpack(OutputFile *fo);
@@ -51,15 +52,15 @@ public:
     static Packer *visitAllPackers(visit_func_t, InputFile *f, const options_t *, void *user);
 
 private:
-    InputFile *fi;
-    Packer *p;
+    InputFile *fi = nullptr;
+    Packer *p = nullptr;
 
     static Packer *getPacker(InputFile *f);
     static Packer *getUnpacker(InputFile *f);
 
     // setup local options for each file
     options_t local_options;
-    options_t *saved_opt;
+    options_t *saved_opt = nullptr;
 };
 
 #endif /* already included */

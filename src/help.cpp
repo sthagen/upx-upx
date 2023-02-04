@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2022 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2022 Laszlo Molnar
+   Copyright (C) 1996-2023 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2023 Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -27,9 +27,9 @@
 
 
 #include "conf.h"
-#include "compress.h"
 #include "packmast.h"
 #include "packer.h"
+#include "compress/compress.h" // upx_ucl_version_string()
 
 
 /*************************************************************************
@@ -411,18 +411,27 @@ void show_version(bool one_line)
     if (v != nullptr && v[0])
         fprintf(fp, "LZMA SDK version %s\n", v);
 #endif
+#if (WITH_ZSTD)
+    v = upx_zstd_version_string();
+    if (v != nullptr && v[0])
+        fprintf(fp, "zstd data compression library %s\n", v);
+#endif
 #if !defined(DOCTEST_CONFIG_DISABLE)
     fprintf(fp, "doctest C++ testing framework version %s\n", DOCTEST_VERSION_STR);
 #endif
-    fprintf(fp, "Copyright (C) 1996-2022 Markus Franz Xaver Johannes Oberhumer\n");
-    fprintf(fp, "Copyright (C) 1996-2022 Laszlo Molnar\n");
-    fprintf(fp, "Copyright (C) 2000-2022 John F. Reiser\n");
-    fprintf(fp, "Copyright (C) 2002-2022 Jens Medoch\n");
+    fprintf(fp, "Copyright (C) 1996-2023 Markus Franz Xaver Johannes Oberhumer\n");
+    fprintf(fp, "Copyright (C) 1996-2023 Laszlo Molnar\n");
+    fprintf(fp, "Copyright (C) 2000-2023 John F. Reiser\n");
+    fprintf(fp, "Copyright (C) 2002-2023 Jens Medoch\n");
 #if (WITH_ZLIB)
     fprintf(fp, "Copyright (C) 1995" "-2022 Jean-loup Gailly and Mark Adler\n");
 #endif
 #if (WITH_LZMA)
     fprintf(fp, "Copyright (C) 1999" "-2006 Igor Pavlov\n");
+#endif
+#if (WITH_ZSTD)
+    // see vendor/zstd/LICENSE; main author is Yann Collet
+    fprintf(fp, "Copyright (C) 2015" "-2023 Meta Platforms, Inc. and affiliates\n");
 #endif
 #if !defined(DOCTEST_CONFIG_DISABLE)
     fprintf(fp, "Copyright (C) 2016" "-2021 Viktor Kirilov\n");

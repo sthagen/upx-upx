@@ -2,9 +2,9 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2022 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2022 Laszlo Molnar
-   Copyright (C) 2000-2022 John F. Reiser
+   Copyright (C) 1996-2023 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2023 Laszlo Molnar
+   Copyright (C) 2000-2023 John F. Reiser
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -47,7 +47,8 @@
 **************************************************************************/
 
 PackUnix::PackUnix(InputFile *f) :
-    super(f), exetype(0), blocksize(0), overlay_offset(0), lsize(0)
+    super(f), exetype(0), blocksize(0), overlay_offset(0), lsize(0),
+    methods_used(0)
 {
     COMPILE_TIME_ASSERT(sizeof(Elf32_Ehdr) == 52)
     COMPILE_TIME_ASSERT(sizeof(Elf32_Phdr) == 32)
@@ -410,6 +411,7 @@ void PackUnix::packExtent(
             tmp.b_method = (unsigned char) forced_method(ph.method);
             tmp.b_extra = b_extra;
             fo->write(&tmp, sizeof(tmp));
+            total_out += sizeof(tmp);
             b_len += sizeof(b_info);
             fo->write(hdr_obuf, hdr_c_len);
             total_out += hdr_c_len;
@@ -428,6 +430,7 @@ void PackUnix::packExtent(
         }
         tmp.b_extra = b_extra;
         fo->write(&tmp, sizeof(tmp));
+        total_out += sizeof(tmp);
         b_len += sizeof(b_info);
 
         if (ft) {
@@ -436,24 +439,31 @@ void PackUnix::packExtent(
         // write compressed data
         if (ph.c_len < ph.u_len) {
             fo->write(obuf, ph.c_len);
+            total_out += ph.c_len;
             // Checks ph.u_adler after decompression, after unfiltering
             verifyOverlappingDecompression(ft);
         }
         else {
             fo->write(ibuf, ph.u_len);
+            total_out += ph.u_len;
         }
 
         total_in += ph.u_len;
-        total_out += ph.c_len;
     }
 }
 
-void PackUnix::unpackExtent(unsigned wanted, OutputFile *fo,
+// Consumes b_info header block and sz_cpr data block from input file 'fi'.
+// De-compresses; appends to output file 'fo' unless rewrite or peeking.
+// For "peeking" without writing: set (fo = nullptr), (is_rewrite = -1)
+// Return actual length when peeking; else 0.
+unsigned PackUnix::unpackExtent(unsigned wanted, OutputFile *fo,
     unsigned &c_adler, unsigned &u_adler,
-    bool first_PF_X, unsigned szb_info, bool is_rewrite
+    bool first_PF_X, unsigned szb_info,
+    int is_rewrite // 0(false): write; 1(true): rewrite; -1: no write
 )
 {
     b_info hdr; memset(&hdr, 0, sizeof(hdr));
+    unsigned inlen = 0; // output index (if-and-only-if peeking)
     while (wanted) {
         fi->readx(&hdr, szb_info);
         int const sz_unc = ph.u_len = get_te32(&hdr.sz_unc);
@@ -469,21 +479,22 @@ void PackUnix::unpackExtent(unsigned wanted, OutputFile *fo,
         if (sz_cpr > sz_unc || sz_unc > (int)blocksize)
             throwCantUnpack("corrupt b_info");
 
-        int j = blocksize + OVERHEAD - sz_cpr;
+        // place the input for overlapping de-compression
+        // FIXME: inlen cheats OVERHEAD; assumes small wanted peek length
+        int j = inlen + blocksize + OVERHEAD - sz_cpr;
         fi->readx(ibuf+j, sz_cpr);
-        total_in  += sz_cpr;
+        total_in += sz_cpr;
         // update checksum of compressed data
         c_adler = upx_adler32(ibuf + j, sz_cpr, c_adler);
-        // decompress
-        if (sz_cpr < sz_unc)
-        {
-            decompress(ibuf+j, ibuf, false);
+
+        if (sz_cpr < sz_unc) { // block was compressed
+            decompress(ibuf+j, ibuf+inlen, false);
             if (12==szb_info) { // modern per-block filter
                 if (hdr.b_ftid) {
                     Filter ft(ph.level);  // FIXME: ph.level for b_info?
                     ft.init(hdr.b_ftid, 0);
                     ft.cto = hdr.b_cto8;
-                    ft.unfilter(ibuf, sz_unc);
+                    ft.unfilter(ibuf+inlen, sz_unc);
                 }
             }
             else { // ancient per-file filter
@@ -494,27 +505,38 @@ void PackUnix::unpackExtent(unsigned wanted, OutputFile *fo,
                     Filter ft(ph.level);
                     ft.init(ph.filter, 0);
                     ft.cto = (unsigned char) ph.filter_cto;
-                    ft.unfilter(ibuf, sz_unc);
+                    ft.unfilter(ibuf+inlen, sz_unc);
                 }
             }
-            j = 0;
+        }
+        else if (sz_cpr == sz_unc) { // slide literal (non-compressible) block
+            memmove(&ibuf[inlen], &ibuf[j], sz_unc);
         }
         // update checksum of uncompressed data
-        u_adler = upx_adler32(ibuf + j, sz_unc, u_adler);
+        u_adler = upx_adler32(ibuf + inlen, sz_unc, u_adler);
         // write block
         if (fo) {
             if (is_rewrite) {
-                fo->rewrite(ibuf + j, sz_unc);
+                fo->rewrite(ibuf, sz_unc);
             }
             else {
-                fo->write(ibuf + j, sz_unc);
+                fo->write(ibuf, sz_unc);
                 total_out += sz_unc;
             }
         }
-        if (wanted < (unsigned)sz_unc)
+        else if (is_rewrite < 0) { // append to &ibuf[inlen]
+            inlen += sz_unc;  // accounting; data is already there
+            if (wanted <= (unsigned)sz_unc)  // done
+                break;
+        }
+        else if (wanted < (unsigned)sz_unc) // mismatched end-of-block
             throwCantUnpack("corrupt b_info");
+        else { // "upx -t": (!fo && !(is_rewrite < 0))
+            // No output.
+        }
         wanted -= sz_unc;
     }
+    return inlen;
 }
 
 /*************************************************************************

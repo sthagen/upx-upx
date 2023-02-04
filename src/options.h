@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2022 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2022 Laszlo Molnar
+   Copyright (C) 1996-2023 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2023 Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -43,10 +43,10 @@ enum {
     CMD_FILEINFO,
     CMD_HELP,
     CMD_LICENSE,
-    CMD_VERSION
+    CMD_VERSION,
 };
 
-struct options_t {
+struct options_t final {
     int cmd;
 
     // compression options
@@ -96,7 +96,8 @@ struct options_t {
     enum { SKIP_OVERLAY = 0, COPY_OVERLAY = 1, STRIP_OVERLAY = 2 };
     int overlay;
 
-    // compression runtime parameters - see struct XXX_compress_config_t
+    // CRP - Compression Runtime Parameters (undocumented and subject to change)
+    // see struct XXX_compress_config_t
     struct crp_t {
         lzma_compress_config_t crp_lzma;
         ucl_compress_config_t crp_ucl;
@@ -116,8 +117,6 @@ struct options_t {
         CPU_286 = 2,
         CPU_386 = 3,
         CPU_486 = 4,
-        CPU_586 = 5,
-        CPU_686 = 6
     };
     int cpu;
 
@@ -133,12 +132,6 @@ struct options_t {
         bool no_reloc;
     } dos_exe;
     struct {
-        bool boot_only;
-        bool no_align;
-        bool do_8bit;
-        bool do_8mib;
-    } ps1_exe;
-    struct {
         unsigned blocksize;
         bool force_execve;      // force the linux/386 execve format
         bool is_ptinterp;       // is PT_INTERP, so don't adjust auxv_t
@@ -150,6 +143,12 @@ struct options_t {
         bool android_shlib;     // keep some ElfXX_Shdr for dlopen()
         bool force_pie;         // choose DF_1_PIE instead of is_shlib
     } o_unix;
+    struct {
+        bool boot_only;
+        bool no_align;
+        bool do_8bit;
+        bool do_8mib;
+    } ps1_exe;
     struct {
         bool le;
     } watcom_le;

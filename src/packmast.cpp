@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2022 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2022 Laszlo Molnar
+   Copyright (C) 1996-2023 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2023 Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -219,6 +219,7 @@ Packer *PackMaster::visitAllPackers(visit_func_t func, InputFile *f, const optio
 
     // Mach (macOS)
     D(PackDylibAMD64);
+    D(PackMachPPC32); // TODO: this works with upx 3.91..3.94 but got broken in 3.95; FIXME
     D(PackMachI386);
     D(PackMachAMD64);
     D(PackMachARMEL);
@@ -251,7 +252,7 @@ Packer *PackMaster::getUnpacker(InputFile *f) {
 }
 
 /*************************************************************************
-// delegation
+// delegation from work.cpp
 **************************************************************************/
 
 void PackMaster::pack(OutputFile *fo) {

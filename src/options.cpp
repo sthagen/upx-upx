@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2022 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2022 Laszlo Molnar
+   Copyright (C) 1996-2023 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2023 Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -27,8 +27,11 @@
 
 #include "conf.h"
 
+static options_t global_options;
+options_t *opt = &global_options; // also see class PackMaster
+
 /*************************************************************************
-// options
+// reset
 **************************************************************************/
 
 void options_t::reset() {
@@ -57,7 +60,7 @@ void options_t::reset() {
 #endif
     o->verbose = 2;
 
-    opt->o_unix.osabi0 = 3; // 3 == ELFOSABI_LINUX
+    o->o_unix.osabi0 = 3; // 3 == ELFOSABI_LINUX
 
     o->win32_pe.compress_exports = 1;
     o->win32_pe.compress_icons = 2;
@@ -69,12 +72,16 @@ void options_t::reset() {
     o->win32_pe.keep_resource = "";
 }
 
-static options_t global_options;
-options_t *opt = &global_options;
-
 /*************************************************************************
-//
+// doctest checks
 **************************************************************************/
+
+TEST_CASE("options_t::reset") {
+    options_t local_options;
+    options_t *o = &local_options;
+    o->reset();
+    CHECK(o->o_unix.osabi0 == 3);
+}
 
 template <size_t N>
 static inline void test_options(const char *(&a)[N]) {
@@ -82,7 +89,7 @@ static inline void test_options(const char *(&a)[N]) {
 }
 
 TEST_CASE("getopt") {
-    options_t *saved_opt = opt;
+    options_t *const saved_opt = opt;
     options_t local_options;
     opt = &local_options;
     opt->reset();

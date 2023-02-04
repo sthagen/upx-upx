@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2022 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2022 Laszlo Molnar
+   Copyright (C) 1996-2023 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2023 Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -29,12 +29,8 @@
 #ifndef UPX_CONF_H__
 #define UPX_CONF_H__ 1
 
-#if defined(__cplusplus)
-#  if (__cplusplus >= 201402L)
-#  elif defined(_MSC_VER) && defined(_MSVC_LANG) && (_MSVC_LANG+0 >= 201402L)
-#  else
-#    error "C++ 14 is required"
-#  endif
+#if !(__cplusplus+0 >= 201703L)
+#  error "C++ 17 is required"
 #endif
 
 #include "version.h"
@@ -48,11 +44,9 @@
 #  endif
 #endif
 
-#undef NDEBUG
-
 
 /*************************************************************************
-// ACC
+// ACC and system includes
 **************************************************************************/
 
 #ifndef ACC_CFG_USE_NEW_STYLE_CASTS
@@ -89,10 +83,10 @@ ACC_COMPILE_TIME_ASSERT_HEADER((char)(-1) == 255) // -funsigned-char
    // don't enable before gcc-10 because of gcc bug #78010
 #  pragma GCC diagnostic error "-Wsuggest-override"
 #endif
-    // Some non-GLIBC toolchains do not use 'nullptr' everywhere when C++:
-    // openwrt-sdk-x86-64_gcc-11.2.0_musl.Linux-x86_64/staging_dir/
-    //   toolchain-x86_64_gcc-11.2.0_musl/include/fortify/stdlib.h:
-    //   51:32: error: zero as null pointer constant
+   // Some non-GLIBC toolchains do not use 'nullptr' everywhere when C++:
+   // openwrt-sdk-x86-64_gcc-11.2.0_musl.Linux-x86_64/staging_dir/
+   //   toolchain-x86_64_gcc-11.2.0_musl/include/fortify/stdlib.h:
+   //   51:32: error: zero as null pointer constant
 #if (ACC_CC_CLANG >= 0x050000)
 #  pragma clang diagnostic error "-Wzero-as-null-pointer-constant"
 #elif (ACC_CC_GNUC >= 0x040700) && defined(__GLIBC__)
@@ -117,8 +111,59 @@ ACC_COMPILE_TIME_ASSERT_HEADER((char)(-1) == 255) // -funsigned-char
 #define ACC_WANT_ACC_LIB_H 1
 #define ACC_WANT_ACC_CXX_H 1
 #include "miniacc.h"
+#if (ACC_CC_MSC)
+#  include <intrin.h>
+#endif
 
-/* intergral types */
+// C++ system headers
+#include <exception>
+#include <new>
+#include <type_traits>
+#include <typeinfo>
+#if __STDC_NO_ATOMICS__ || 1
+// UPX currently does not use multithreading
+#define upx_std_atomic(Type)    Type
+//#define upx_std_atomic(Type)    typename std::add_volatile<Type>::type
+#else
+#include <atomic>
+#define upx_std_atomic(Type)    std::atomic<Type>
+#endif
+
+// C++ submodule headers
+#include <doctest/doctest/parts/doctest_fwd.h>
+#if WITH_BOOST_PFR
+#  include <sstream>
+#  include <boost/pfr/io.hpp>
+#endif
+#if WITH_RANGELESS_FN
+#  include <rangeless/include/fn.hpp>
+#endif
+#ifndef WITH_VALGRIND
+#  define WITH_VALGRIND 1
+#endif
+#if defined(__SANITIZE_ADDRESS__) || defined(_WIN32) || !defined(__GNUC__)
+#  undef WITH_VALGRIND
+#endif
+#if (WITH_VALGRIND)
+#  include <valgrind/include/valgrind/memcheck.h>
+#endif
+
+// IMPORTANT: unconditionally enable assertions
+#undef NDEBUG
+#include <assert.h>
+
+// <type_traits> C++20 std::is_bounded_array
+template <class T>
+struct std_is_bounded_array : public std::false_type {};
+template <class T, size_t N>
+struct std_is_bounded_array<T[N]> : public std::true_type {};
+
+
+/*************************************************************************
+// core
+**************************************************************************/
+
+// intergral types
 typedef acc_int8_t      upx_int8_t;
 typedef acc_uint8_t     upx_uint8_t;
 typedef acc_int16_t     upx_int16_t;
@@ -131,59 +176,6 @@ typedef acc_uintptr_t   upx_uintptr_t;
 
 typedef unsigned char   upx_byte;
 #define upx_bytep       upx_byte *
-
-
-/*************************************************************************
-//
-**************************************************************************/
-
-#if defined(__linux__) && !defined(__unix__)
-#  define __unix__ 1
-#endif
-
-// just in case
-#undef _
-#undef __
-#undef ___
-#undef dos
-#undef linux
-#undef small
-#undef tos
-#undef unix
-#if (ACC_OS_DOS32) && defined(__DJGPP__)
-#  undef sopen
-#  undef __unix__
-#  undef __unix
-#endif
-
-#define WITH_LZMA 0x443
-#define WITH_UCL 1
-#define WITH_ZLIB 1
-#if (WITH_UCL)
-#  define ucl_compress_config_t REAL_ucl_compress_config_t
-#  include <ucl/include/ucl/uclconf.h>
-#  include <ucl/include/ucl/ucl.h>
-#  undef ucl_compress_config_t
-#  undef ucl_compress_config_p
-#endif
-
-// malloc debuggers
-#if (WITH_VALGRIND)
-#  include <valgrind/memcheck.h>
-#endif
-#if !defined(VALGRIND_MAKE_MEM_DEFINED)
-#  define VALGRIND_MAKE_MEM_DEFINED(addr,len)   0
-#endif
-#if !defined(VALGRIND_MAKE_MEM_NOACCESS)
-#  define VALGRIND_MAKE_MEM_NOACCESS(addr,len)  0
-#endif
-#if !defined(VALGRIND_MAKE_MEM_UNDEFINED)
-#  define VALGRIND_MAKE_MEM_UNDEFINED(addr,len) 0
-#endif
-
-// IMPORTANT: unconditionally enable assertions
-#undef NDEBUG
-#include <assert.h>
 
 // protect against integer overflows and malicious header fields
 // see C 11 standard, Annex K
@@ -202,10 +194,46 @@ typedef upx_int64_t upx_off_t;
 #define off_t upx_off_t
 #endif
 
+// shortcuts
+#define forceinline     __acc_forceinline
+#if _MSC_VER
+#define noinline        __declspec(noinline)
+#undef __acc_noinline
+#define __acc_noinline  noinline
+#else
+#define noinline        __acc_noinline
+#endif
+#define likely          __acc_likely
+#define unlikely        __acc_unlikely
+#define very_likely     __acc_very_likely
+#define very_unlikely   __acc_very_unlikely
+
+#define COMPILE_TIME_ASSERT(e)  ACC_COMPILE_TIME_ASSERT(e)
+#define DELETED_FUNCTION        = delete
+#define UNUSED(var)             ACC_UNUSED(var)
+
 
 /*************************************************************************
 // portab
 **************************************************************************/
+
+// just in case
+#undef _
+#undef __
+#undef ___
+#undef dos
+#undef linux
+#undef small
+#undef tos
+#undef unix
+#if defined(__linux__) && !defined(__unix__)
+#  define __unix__ 1
+#endif
+#if (ACC_OS_DOS32) && defined(__DJGPP__)
+#  undef sopen
+#  undef __unix__
+#  undef __unix
+#endif
 
 #ifndef STDIN_FILENO
 #  define STDIN_FILENO      (fileno(stdin))
@@ -264,12 +292,14 @@ typedef upx_int64_t upx_off_t;
 #endif
 
 // avoid warnings about shadowing global functions
+#undef _base
 #undef basename
 #undef index
 #undef outp
-#define basename            upx_basename
-#define index               upx_index
-#define outp                upx_outp
+#define _base               upx_renamed__base
+#define basename            upx_renamed_basename
+#define index               upx_renamed_index
+#define outp                upx_renamed_outp
 
 #undef PAGE_MASK
 #undef PAGE_SIZE
@@ -283,16 +313,29 @@ typedef upx_int64_t upx_off_t;
 #  define O_BINARY  0
 #endif
 
-#ifndef OPTIONS_VAR
-#  define OPTIONS_VAR   "UPX"
-#endif
-
 
 /*************************************************************************
-//
+// util
 **************************************************************************/
 
 #define CLANG_FORMAT_DUMMY_STATEMENT /*empty*/
+
+// malloc debuggers
+#if !defined(VALGRIND_CHECK_MEM_IS_ADDRESSABLE)
+#  define VALGRIND_CHECK_MEM_IS_ADDRESSABLE(addr,len)   0
+#endif
+#if !defined(VALGRIND_CHECK_MEM_IS_DEFINED)
+#  define VALGRIND_CHECK_MEM_IS_DEFINED(addr,len)   0
+#endif
+#if !defined(VALGRIND_MAKE_MEM_DEFINED)
+#  define VALGRIND_MAKE_MEM_DEFINED(addr,len)   0
+#endif
+#if !defined(VALGRIND_MAKE_MEM_NOACCESS)
+#  define VALGRIND_MAKE_MEM_NOACCESS(addr,len)  0
+#endif
+#if !defined(VALGRIND_MAKE_MEM_UNDEFINED)
+#  define VALGRIND_MAKE_MEM_UNDEFINED(addr,len) 0
+#endif
 
 #if defined(_WIN32) && defined(__MINGW32__) && defined(__GNUC__) && !defined(__clang__)
 #  define attribute_format(a,b) __attribute__((__format__(__gnu_printf__,a,b)))
@@ -321,12 +364,27 @@ inline void NO_fprintf(FILE *, const char *, ...) {}
 #  define upx_memcpy_inline     memcpy
 #endif
 
-#define UNUSED(var)             ACC_UNUSED(var)
-#define COMPILE_TIME_ASSERT(e)  ACC_COMPILE_TIME_ASSERT(e)
+#if __has_builtin(__builtin_return_address)
+#  define upx_return_address()  __builtin_return_address(0)
+#elif defined(__GNUC__)
+#  define upx_return_address()  __builtin_return_address(0)
+#elif (ACC_CC_MSC)
+#  define upx_return_address()  _ReturnAddress()
+#else
+#  define upx_return_address()  nullptr
+#endif
 
 // TODO cleanup: we now require C++14, so remove all __packed_struct usage
 #define __packed_struct(s)      struct alignas(1) s {
 #define __packed_struct_end()   };
+
+#if (ACC_ARCH_M68K && ACC_OS_TOS && ACC_CC_GNUC) && defined(__MINT__)
+// horrible hack for broken compiler
+#define upx_fake_alignas_1      __attribute__((__aligned__(1),__packed__))
+#define upx_fake_alignas_16     __attribute__((__aligned__(2))) // object file maximum 2 ???
+#define upx_fake_alignas__(a)   upx_fake_alignas_ ## a
+#define alignas(x)              upx_fake_alignas__(x)
+#endif
 
 #define COMPILE_TIME_ASSERT_ALIGNOF_USING_SIZEOF__(a,b) { \
      typedef a acc_tmp_a_t; typedef b acc_tmp_b_t; \
@@ -355,6 +413,15 @@ inline const T& UPX_MAX(const T& a, const T& b) { if (a < b) return b; return a;
 template <class T>
 inline const T& UPX_MIN(const T& a, const T& b) { if (a < b) return a; return b; }
 
+template <size_t TypeSize>
+struct USizeOfTypeImpl {
+    static forceinline constexpr unsigned value() {
+        COMPILE_TIME_ASSERT(TypeSize >= 1 && TypeSize <= 64 * 1024); // arbitrary limit
+        return ACC_ICONV(unsigned, TypeSize);
+    }
+};
+#define usizeof(type)   (USizeOfTypeImpl<sizeof(type)>::value())
+ACC_COMPILE_TIME_ASSERT_HEADER(usizeof(int) == 4)
 
 // An Array allocates memory on the heap, and automatically
 // gets destructed when leaving scope or on exceptions.
@@ -371,8 +438,10 @@ protected:
     inline noncopyable() {}
     inline ~noncopyable() {}
 private:
-    noncopyable(const noncopyable &); // undefined
-    const noncopyable& operator=(const noncopyable &); // undefined
+    noncopyable(const noncopyable &) DELETED_FUNCTION; // copy constuctor
+    noncopyable& operator=(const noncopyable &) DELETED_FUNCTION; // copy assignment
+    noncopyable(noncopyable &&) DELETED_FUNCTION; // move constructor
+    noncopyable& operator=(noncopyable &&) DELETED_FUNCTION; // move assignment
 };
 
 
@@ -443,14 +512,14 @@ constexpr bool string_ge(const char *a, const char *b) {
 #define UPX_F_DOS_EXE           3
 #define UPX_F_DJGPP2_COFF       4
 #define UPX_F_WATCOM_LE         5
-#define UPX_F_VXD_LE            6               // NOT IMPLEMENTED
+//#define UPX_F_VXD_LE            6               // NOT IMPLEMENTED
 #define UPX_F_DOS_EXEH          7               // OBSOLETE
 #define UPX_F_TMT_ADAM          8
 #define UPX_F_WIN32_PE          9
 #define UPX_F_LINUX_i386        10
-#define UPX_F_WIN16_NE          11              // NOT IMPLEMENTED
+//#define UPX_F_WIN16_NE          11              // NOT IMPLEMENTED
 #define UPX_F_LINUX_ELF_i386    12
-#define UPX_F_LINUX_SEP_i386    13              // NOT IMPLEMENTED
+//#define UPX_F_LINUX_SEP_i386    13              // NOT IMPLEMENTED
 #define UPX_F_LINUX_SH_i386     14
 #define UPX_F_VMLINUZ_i386      15
 #define UPX_F_BVMLINUZ_i386     16
@@ -488,7 +557,7 @@ constexpr bool string_ge(const char *a, const char *b) {
 #define UPX_F_LINUX_ELF64_ARM   42
 
 #define UPX_F_ATARI_TOS         129
-#define UPX_F_SOLARIS_SPARC     130             // NOT IMPLEMENTED
+//#define UPX_F_SOLARIS_SPARC     130             // NOT IMPLEMENTED
 #define UPX_F_MACH_PPC32        131
 #define UPX_F_LINUX_ELFPPC32    132
 #define UPX_F_LINUX_ELF32_ARMEB 133
@@ -517,7 +586,8 @@ constexpr bool string_ge(const char *a, const char *b) {
 //#define M_CL1B_8        12
 //#define M_CL1B_LE16     13
 #define M_LZMA          14
-#define M_DEFLATE       15      /* zlib */
+#define M_DEFLATE       15      // zlib
+#define M_ZSTD          16
 // compression methods internal usage
 #define M_ALL           (-1)
 #define M_END           (-2)
@@ -531,6 +601,7 @@ constexpr bool string_ge(const char *a, const char *b) {
 //#define M_IS_CL1B(x)    ((x) >= M_CL1B_LE32  && (x) <= M_CL1B_LE16)
 #define M_IS_LZMA(x)    (((x) & 255) == M_LZMA)
 #define M_IS_DEFLATE(x) ((x) == M_DEFLATE)
+#define M_IS_ZSTD(x)    ((x) == M_ZSTD)
 
 
 // filters
@@ -541,8 +612,19 @@ constexpr bool string_ge(const char *a, const char *b) {
 
 
 /*************************************************************************
-// compression - callback_t
+// compression - setup and callback_t
 **************************************************************************/
+
+#define WITH_LZMA 1
+#define WITH_UCL 1
+#define WITH_ZLIB 1
+#if (WITH_UCL)
+#  define ucl_compress_config_t REAL_ucl_compress_config_t
+#  include <ucl/include/ucl/uclconf.h>
+#  include <ucl/include/ucl/ucl.h>
+#  undef ucl_compress_config_t
+#  undef ucl_compress_config_p
+#endif
 
 struct upx_callback_t;
 typedef upx_callback_t *upx_callback_p;
@@ -580,25 +662,26 @@ struct OptVar
         assertValue(v);
     }
 
-    OptVar() : v(default_value), is_set(0) { }
+    OptVar() : v(default_value), is_set(false) { }
     OptVar& operator= (const T &other) {
-        v = other; is_set = 1;
-        assertValue();
+        assertValue(other);
+        v = other;
+        is_set = true;
         return *this;
     }
 
-    void reset() { v = default_value; is_set = 0; }
+    void reset() { v = default_value; is_set = false; }
     operator T () const { return v; }
 
     T v;
-    unsigned is_set;
+    bool is_set;
 };
 
 
 // optional assignments
 template <class T, T a, T b, T c>
 inline void oassign(OptVar<T,a,b,c> &self, const OptVar<T,a,b,c> &other) {
-    if (other.is_set) { self.v = other.v; self.is_set = 1; }
+    if (other.is_set) { self.v = other.v; self.is_set = true; }
 }
 template <class T, T a, T b, T c>
 inline void oassign(T &v, const OptVar<T,a,b,c> &other) {
@@ -627,12 +710,10 @@ struct lzma_compress_config_t
     void reset();
 };
 
-
 struct ucl_compress_config_t : public REAL_ucl_compress_config_t
 {
     void reset() { memset(this, 0xff, sizeof(*this)); }
 };
-
 
 struct zlib_compress_config_t
 {
@@ -647,13 +728,20 @@ struct zlib_compress_config_t
     void reset();
 };
 
+struct zstd_compress_config_t
+{
+    unsigned dummy;
+
+    void reset();
+};
 
 struct upx_compress_config_t
 {
     lzma_compress_config_t  conf_lzma;
     ucl_compress_config_t   conf_ucl;
     zlib_compress_config_t  conf_zlib;
-    void reset() { conf_lzma.reset(); conf_ucl.reset(); conf_zlib.reset(); }
+    zstd_compress_config_t  conf_zstd;
+    void reset() { conf_lzma.reset(); conf_ucl.reset(); conf_zlib.reset(); conf_zstd.reset(); }
 };
 
 #define NULL_cconf  ((upx_compress_config_t *) nullptr)
@@ -677,14 +765,12 @@ struct lzma_compress_result_t
     void reset() { memset(this, 0, sizeof(*this)); }
 };
 
-
 struct ucl_compress_result_t
 {
     ucl_uint result[16];
 
     void reset() { memset(this, 0, sizeof(*this)); }
 };
-
 
 struct zlib_compress_result_t
 {
@@ -693,20 +779,29 @@ struct zlib_compress_result_t
     void reset() { memset(this, 0, sizeof(*this)); }
 };
 
+struct zstd_compress_result_t
+{
+    unsigned dummy;
+
+    void reset() { memset(this, 0, sizeof(*this)); }
+};
 
 struct upx_compress_result_t
 {
-    // debug
-    int method, level;
-    unsigned u_len, c_len;
+    // debugging aid
+    struct {
+        int method, level;
+        unsigned u_len, c_len;
+    } debug;
 
     lzma_compress_result_t  result_lzma;
     ucl_compress_result_t   result_ucl;
     zlib_compress_result_t  result_zlib;
+    zstd_compress_result_t  result_zstd;
 
     void reset() {
-        memset(this, 0, sizeof(*this));
-        result_lzma.reset(); result_ucl.reset(); result_zlib.reset();
+        memset(&this->debug, 0, sizeof(this->debug));
+        result_lzma.reset(); result_ucl.reset(); result_zlib.reset(); result_zstd.reset();
     }
 };
 
@@ -716,16 +811,10 @@ struct upx_compress_result_t
 **************************************************************************/
 
 #include "util/snprintf.h"   // must get included first!
-
-#include <exception>
-#include <new>
-#include <type_traits>
-#include <typeinfo>
-
 #include "options.h"
 #include "except.h"
 #include "bele.h"
-#include "console.h"
+#include "console/console.h"
 #include "util/util.h"
 
 // classes
@@ -737,10 +826,8 @@ class MemBuffer;
 void *membuffer_get_void_ptr(MemBuffer &mb);
 unsigned membuffer_get_size(MemBuffer &mb);
 
+// xspan
 #include "util/xspan.h"
-
-//#define DOCTEST_CONFIG_DISABLE 1
-#include <doctest/doctest/parts/doctest_fwd.h>
 
 // util/dt_check.cpp
 void upx_compiler_sanity_check();
@@ -780,9 +867,9 @@ void show_license();
 void show_usage();
 void show_version(bool one_line=false);
 
-// compress.cpp
+// compress/compress.cpp
 unsigned upx_adler32(const void *buf, unsigned len, unsigned adler=1);
-unsigned upx_crc32(const void *buf, unsigned len, unsigned crc=0);
+unsigned upx_crc32  (const void *buf, unsigned len, unsigned crc=0);
 
 int upx_compress           ( const upx_bytep src, unsigned  src_len,
                                    upx_bytep dst, unsigned* dst_len,
@@ -801,31 +888,6 @@ int upx_test_overlap       ( const upx_bytep buf,
                                    int method,
                              const upx_compress_result_t *cresult );
 
-/*************************************************************************
-// raw_bytes() - get underlying memory from checked buffers/pointers.
-// This is overloaded by various utility classes like BoundedPtr,
-// MemBuffer and Span.
-//
-// Note that the pointer type is retained, the "_bytes" hints size_in_bytes
-**************************************************************************/
-
-// default: for any regular pointer, raw_bytes() is just the pointer itself
-template <class T>
-inline T *raw_bytes(T *ptr, size_t size_in_bytes) {
-    if (size_in_bytes > 0) {
-        if __acc_very_unlikely (ptr == nullptr)
-            throwInternalError("raw_bytes unexpected NULL ptr");
-    }
-    return ptr;
-}
-
-// default: for any regular pointer, raw_index_bytes() is just "pointer + index"
-// NOTE: index == number of elements, *NOT* size in bytes!
-template <class T>
-inline T *raw_index_bytes(T *ptr, size_t index, size_t size_in_bytes) {
-    typedef T element_type;
-    return raw_bytes(ptr, mem_size(sizeof(element_type), index, size_in_bytes)) + index;
-}
 
 #if (ACC_OS_CYGWIN || ACC_OS_DOS16 || ACC_OS_DOS32 || ACC_OS_EMX || ACC_OS_OS2 || ACC_OS_OS216 || ACC_OS_WIN16 || ACC_OS_WIN32 || ACC_OS_WIN64)
 #  if defined(INVALID_HANDLE_VALUE) || defined(MAKEWORD) || defined(RT_CURSOR)

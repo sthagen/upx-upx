@@ -2,9 +2,9 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2022 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2022 Laszlo Molnar
-   Copyright (C) 2000-2022 John F. Reiser
+   Copyright (C) 1996-2023 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2023 Laszlo Molnar
+   Copyright (C) 2000-2023 John F. Reiser
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -61,7 +61,7 @@ protected:
         unsigned const brka
     ) = 0;
     virtual void defineSymbols(Filter const *);
-    virtual void addStubEntrySections(Filter const *);
+    virtual void addStubEntrySections(Filter const *, unsigned m_decompr);
     virtual void unpack(OutputFile *fo) override;
     unsigned old_data_off, old_data_len;  // un_shlib
 
@@ -84,6 +84,7 @@ protected:
     unsigned lg2_page;  // log2(PAGE_SIZE)
     unsigned page_size;  // 1u<<lg2_page
     bool is_pie;  // is Position-Independent-Executable (ET_DYN main program)
+    unsigned is_asl;  // is Android Shared Library
     unsigned xct_off;  // shared library: file offset of SHT_EXECINSTR
     unsigned hatch_off;  // file offset of escape hatch
     unsigned o_binfo;  // offset to first b_info
@@ -91,6 +92,7 @@ protected:
     upx_uint64_t xct_va;  // minimum SHT_EXECINSTR virtual address
     upx_uint64_t jni_onload_va;  // runtime &JNI_OnLoad
     upx_uint64_t user_init_va;
+    upx_uint64_t plt_va, plt_off;
     unsigned user_init_off;  // within file_image
     unsigned linfo_off;
     unsigned loader_offset;  // during de-compression
@@ -99,6 +101,7 @@ protected:
     unsigned char ei_class;
     unsigned char ei_data;
     unsigned char ei_osabi;
+    unsigned char prev_method;
     char const *osabi_note;
     unsigned upx_dt_init;  // DT_INIT, DT_PREINIT_ARRAY, DT_INIT_ARRAY
     static unsigned const DT_NUM = 34;  // elf.h
@@ -106,6 +109,7 @@ protected:
 
     MemBuffer mb_shstrtab;   // via ElfXX_Shdr
     char const *shstrtab;
+    MemBuffer jump_slots;  // is_asl de-compression fixing
     MemBuffer buildid_data;
     MemBuffer note_body;  // concatenated contents of PT_NOTEs, if any
     unsigned note_size;  // total size of PT_NOTEs
@@ -269,11 +273,12 @@ protected:
     virtual int  canUnpack() override; // bool, except -1: format known, but not packed
 
     virtual void pack1(OutputFile *, Filter &) override;  // generate executable header
-    virtual void asl_pack2_Shdrs(OutputFile *);  // AndroidSharedLibrary processes Shdrs
+    virtual void asl_pack2_Shdrs(OutputFile *, unsigned pre_xct_top);  // AndroidSharedLibrary processes Shdrs
     virtual int  pack2(OutputFile *, Filter &) override;  // append compressed data
     virtual off_t pack3(OutputFile *, Filter &) override;  // append loader
     virtual void pack4(OutputFile *, Filter &) override;  // append pack header
     virtual void unpack(OutputFile *fo) override;
+    virtual void un_asl_dynsym(unsigned orig_file_size, OutputFile *);
     virtual void un_shlib_1(
         OutputFile *const fo,
         MemBuffer &o_elfhdrs,
@@ -287,12 +292,10 @@ protected:
         unsigned old_dtinit,
         Elf64_Phdr const *phdro,
         Elf64_Phdr const *dynhdr,  // in phdri
-        OutputFile *fo,
-        unsigned is_asl
+        OutputFile *fo
     );
     virtual void unRela64(upx_uint64_t dt_rela, Elf64_Rela *rela0, unsigned relasz,
-        MemBuffer &membuf, upx_uint64_t const load_off, upx_uint64_t const old_dtinit,
-        OutputFile *fo);
+        upx_uint64_t const old_dtinit, OutputFile *fo);
 
     virtual void generateElfHdr(
         OutputFile *,
@@ -319,13 +322,14 @@ protected:
     Elf64_Phdr const *elf_find_ptype(unsigned type, Elf64_Phdr const *phdr0, unsigned phnum);
     Elf64_Shdr const *elf_find_section_name(char const *) const;
     Elf64_Shdr const *elf_find_section_type(unsigned) const;
+    int is_LOAD64(Elf64_Phdr const *phdr) const;  // beware confusion with (1+ LO_PROC)
     upx_uint64_t check_pt_load(Elf64_Phdr const *);
     upx_uint64_t check_pt_dynamic(Elf64_Phdr const *);
     void invert_pt_dynamic(Elf64_Dyn const *, upx_uint64_t dt_filesz);
     void const *elf_find_dynamic(unsigned) const;
     Elf64_Dyn const *elf_has_dynamic(unsigned) const;
     virtual upx_uint64_t elf_unsigned_dynamic(unsigned) const override;
-    virtual int adjABS(Elf64_Sym *sym, unsigned delta);
+    virtual int adjABS(Elf64_Sym *sym, unsigned long delta);
 
     char const *get_str_name(unsigned st_name, unsigned symnum) const;
     char const *get_dynsym_name(unsigned symnum, unsigned relnum) const;
@@ -340,7 +344,6 @@ protected:
     upx_uint64_t sz_dynseg;  // PT_DYNAMIC.p_memsz
     upx_uint64_t so_slide;
     unsigned n_jmp_slot;
-    upx_uint64_t plt_off;
     upx_uint64_t page_mask;  // AND clears the offset-within-page
 
     Elf64_Dyn    const *dynseg;   // from PT_DYNAMIC
@@ -565,7 +568,7 @@ protected:
     virtual void pack1(OutputFile *, Filter &) override;  // generate executable header
 
     virtual void buildLoader(const Filter *) override;
-    virtual void addStubEntrySections(Filter const *) override;
+    virtual void addStubEntrySections(Filter const *, unsigned m_decompr) override;
     virtual Linker* newLinker() const override;
     virtual void defineSymbols(Filter const *) override;
 };

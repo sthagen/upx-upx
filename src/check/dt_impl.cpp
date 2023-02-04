@@ -2,8 +2,7 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2022 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2022 Laszlo Molnar
+   Copyright (C) 1996-2023 Markus Franz Xaver Johannes Oberhumer
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -21,8 +20,8 @@
    If not, write to the Free Software Foundation, Inc.,
    59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 
-   Markus F.X.J. Oberhumer              Laszlo Molnar
-   <markus@oberhumer.com>               <ezerotven+github@gmail.com>
+   Markus F.X.J. Oberhumer
+   <markus@oberhumer.com>
  */
 
 /*************************************************************************
@@ -33,11 +32,19 @@
 #if !defined(UPX_DOCTEST_CONFIG_MULTITHREADING)
 #define DOCTEST_CONFIG_NO_MULTITHREADING
 #endif
-#if defined(__MSDOS__) && defined(__DJGPP__)
+#if defined(__i386__) && defined(__MSDOS__) && defined(__DJGPP__) && defined(__GNUC__)
 #define DOCTEST_CONFIG_NO_POSIX_SIGNALS
+#elif defined(__m68k__) && defined(__atarist__) && defined(__GNUC__)
+#define DOCTEST_CONFIG_COLORS_NONE
+#define DOCTEST_CONFIG_NO_POSIX_SIGNALS
+#pragma GCC diagnostic ignored "-Wshadow"
 #endif
 #define DOCTEST_CONFIG_NO_UNPREFIXED_OPTIONS
 #if !defined(DOCTEST_CONFIG_DISABLE)
+#if defined(__clang__) && defined(__FAST_MATH__) && defined(__INTEL_LLVM_COMPILER)
+// warning: comparison with NaN always evaluates to false in fast floating point modes
+#pragma clang diagnostic ignored "-Wtautological-constant-compare"
+#endif
 #include <doctest/doctest/parts/doctest.cpp>
 #endif
 

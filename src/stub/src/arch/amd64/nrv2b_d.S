@@ -2,9 +2,9 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2022 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2022 Laszlo Molnar
-   Copyright (C) 2000-2022 John F. Reiser
+   Copyright (C) 1996-2023 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2023 Laszlo Molnar
+   Copyright (C) 2000-2023 John F. Reiser
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -49,7 +49,7 @@ offmore_n2b:
         shll $ 8,off; movzbl %dl,%edx
         orl %edx,off; incq %rsi
         xorl $~0,off; jz eof
-        movslq off,disp  # XXX: 2GB
+        movslq off,dispq  # XXX: 2GB
 len_n2b:
         lea 1(lenq),off  # [len= 0] off= 1
         getnextb(len); getnextb(len)  # two bits; cc set on result
@@ -60,7 +60,7 @@ lenmore_n2b:
         getnextb(len)
         jnextb0n lenmore_n2b
 gotlen_n2b:
-        cmpq $-0xd00,disp
+        cmpq $-0xd00,dispq
         adcl off,len  # len += off + (disp < -0xd00)
         call copy
 bot_n2b:  # In: 0==len

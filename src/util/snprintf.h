@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2022 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2022 Laszlo Molnar
+   Copyright (C) 1996-2023 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2023 Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -49,6 +49,9 @@ char *upx_safe_xprintf(const char *format, ...) attribute_format(1, 2);
 upx_rsize_t upx_safe_strlen(const char *);
 
 // globally redirect some functions
+#undef strlen
+#define strlen upx_safe_strlen
+
 #undef snprintf
 #undef sprintf
 #undef vsnprintf
@@ -56,21 +59,26 @@ upx_rsize_t upx_safe_strlen(const char *);
 #define sprintf ERROR_sprintf_IS_DANGEROUS_USE_snprintf
 #define vsnprintf upx_safe_vsnprintf
 
-#undef strlen
-#define strlen upx_safe_strlen
-
 /*************************************************************************
-// some unsigned char string support functions
+// some unsigned char string support functions to avoid casts
 **************************************************************************/
 
 inline unsigned char *strcpy(unsigned char *s1, const unsigned char *s2) {
     return (unsigned char *) strcpy((char *) s1, (const char *) s2);
 }
 
+inline int strcmp(const unsigned char *s1, const char *s2) { return strcmp((const char *) s1, s2); }
+inline int strcmp(const char *s1, const unsigned char *s2) { return strcmp(s1, (const char *) s2); }
 inline int strcmp(const unsigned char *s1, const unsigned char *s2) {
     return strcmp((const char *) s1, (const char *) s2);
 }
 
+inline int strcasecmp(const unsigned char *s1, const char *s2) {
+    return strcasecmp((const char *) s1, s2);
+}
+inline int strcasecmp(const char *s1, const unsigned char *s2) {
+    return strcasecmp(s1, (const char *) s2);
+}
 inline int strcasecmp(const unsigned char *s1, const unsigned char *s2) {
     return strcasecmp((const char *) s1, (const char *) s2);
 }

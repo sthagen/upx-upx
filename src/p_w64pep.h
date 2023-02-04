@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2022 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2022 Laszlo Molnar
+   Copyright (C) 1996-2023 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2023 Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -25,16 +25,15 @@
    <markus@oberhumer.com>               <ezerotven+github@gmail.com>
  */
 
-
-#ifndef __UPX_P_W64PEP_H
-#define __UPX_P_W64PEP_H 1
+#pragma once
+#ifndef UPX_P_W64PEP_H__
+#define UPX_P_W64PEP_H__ 1
 
 /*************************************************************************
 // w64/pep
 **************************************************************************/
 
-class PackW64Pep : public PeFile64
-{
+class PackW64Pep final : public PeFile64 {
     typedef PeFile64 super;
 
 public:
@@ -47,9 +46,8 @@ public:
     virtual const int *getFilters() const override;
 
     virtual bool handleForceOption() override;
-    virtual void defineSymbols(unsigned ncsection, unsigned upxsection,
-                               unsigned sizeof_oh, unsigned isize_isplit,
-                               unsigned s1addr) override;
+    virtual void defineSymbols(unsigned ncsection, unsigned upxsection, unsigned sizeof_oh,
+                               unsigned isize_isplit, unsigned s1addr) override;
     virtual void setOhDataBase(const pe_section_t *) override {}
     virtual void setOhHeaderSize(const pe_section_t *osection) override;
     virtual void pack(OutputFile *fo) override;
@@ -58,9 +56,8 @@ public:
 
 protected:
     virtual void buildLoader(const Filter *ft) override;
-    virtual Linker* newLinker() const override;
+    virtual Linker *newLinker() const override;
 };
-
 
 #endif /* already included */
 

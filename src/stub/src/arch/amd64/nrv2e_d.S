@@ -2,9 +2,9 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2022 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2022 Laszlo Molnar
-   Copyright (C) 2000-2022 John F. Reiser
+   Copyright (C) 1996-2023 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2023 Laszlo Molnar
+   Copyright (C) 2000-2023 John F. Reiser
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -55,7 +55,7 @@ getoff_n2e:
         orl %edx,off; incq %rsi
         xorl $~0,off; jz eof
         sarl off  # Carry= original low bit
-        movslq off,disp  # XXX: 2GB
+        movslq off,dispq  # XXX: 2GB
         jc lenlast_n2e
         jmp lenmore_n2e
 
@@ -73,7 +73,7 @@ len_n2e:
 lenlast_n2e:
         getnextb(len)  # 0,1,2,3
 gotlen_n2e:
-        cmpq $-0x500,disp
+        cmpq $-0x500,dispq
         adcl $2,len  # len += 2+ (disp < -0x500);
         call copy
 bot_n2e:  # In: 0==len

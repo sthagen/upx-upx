@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2022 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2022 Laszlo Molnar
+   Copyright (C) 1996-2023 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2023 Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -25,7 +25,7 @@
    <markus@oberhumer.com>               <ezerotven+github@gmail.com>
  */
 
-#include "conf.h"
+#include "../conf.h"
 
 #if (USE_SCREEN_WIN32)
 
@@ -76,7 +76,7 @@ struct screen_data_t {
     CHAR_INFO empty_line[256];
 };
 
-#define P(x) ((SHORT)(x))
+#define P(x) ((SHORT) (x))
 
 static const COORD pos00 = {0, 0};
 static const COORD size11 = {1, 1};
@@ -111,12 +111,12 @@ static int getFg(const screen_t *this) { return this->data->attr & mask_fg; }
 static int getBg(const screen_t *this) { return this->data->attr & mask_bg; }
 
 static void setFg(screen_t *this, int fg) {
-    this->data->attr = (WORD)((this->data->attr & mask_bg) | (fg & mask_fg));
+    this->data->attr = (WORD) ((this->data->attr & mask_bg) | (fg & mask_fg));
     SetConsoleTextAttribute(this->data->ho, this->data->attr);
 }
 
 static void setBg(screen_t *this, int bg) {
-    this->data->attr = (WORD)((this->data->attr & mask_fg) | (bg & mask_bg));
+    this->data->attr = (WORD) ((this->data->attr & mask_fg) | (bg & mask_bg));
     SetConsoleTextAttribute(this->data->ho, this->data->attr);
 }
 
