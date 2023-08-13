@@ -26,6 +26,7 @@
  */
 
 
+#pragma once
 #ifndef __UPX_P_VMLINX_H
 #define __UPX_P_VMLINX_H 1
 
@@ -125,7 +126,7 @@ class PackVmlinuxARMEL : public PackVmlinuxBase<ElfClass_LE32>
 public:
     PackVmlinuxARMEL(InputFile *f) : super(f, Ehdr::EM_ARM,
         Ehdr::ELFCLASS32, Ehdr::ELFDATA2LSB, "decompress_kernel") { }
-    virtual int getFormat() const override { return UPX_F_VMLINUX_ARMEL; }
+    virtual int getFormat() const override { return UPX_F_VMLINUX_ARM; }
     virtual const char *getName() const override { return "vmlinux/arm"; }
     virtual const char *getFullName(const options_t *) const override { return "arm-linux.kernel.vmlinux"; }
     virtual const int *getCompressionMethods(int method, int level) const override;

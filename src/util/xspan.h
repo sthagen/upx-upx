@@ -43,7 +43,7 @@
 #define XSPAN_CONFIG_ENABLE_IMPLICIT_CONVERSION 0
 #endif
 // allow automatic conversion PtrOrSpanOrNull => PtrOrSpan => Span (with run-time checks)
-// choose between compile-time safety vs. possible run-time errors
+// choose between compile-time safety vs. possible run-time exceptions
 #ifndef XSPAN_CONFIG_ENABLE_SPAN_CONVERSION
 #define XSPAN_CONFIG_ENABLE_SPAN_CONVERSION 1
 #endif
@@ -80,37 +80,39 @@ using XSPAN_NAMESPACE_NAME::raw_index_bytes; // overloaded for all classes
 
 // fully checked
 
+// types
 #define XSPAN_0(type) PtrOrSpanOrNull<type>
 #define XSPAN_P(type) PtrOrSpan<type>
 #define XSPAN_S(type) Span<type>
 
 // create a value
-#define XSPAN_0_MAKE(type, first, ...) (XSPAN_0(type)(first, ##__VA_ARGS__))
-#define XSPAN_P_MAKE(type, first, ...) (XSPAN_P(type)(first, ##__VA_ARGS__))
-#define XSPAN_S_MAKE(type, first, ...) (XSPAN_S(type)(first, ##__VA_ARGS__))
+#define XSPAN_0_MAKE(type, first, ...) (XSPAN_0(type)((first), ##__VA_ARGS__))
+#define XSPAN_P_MAKE(type, first, ...) (XSPAN_P(type)((first), ##__VA_ARGS__))
+#define XSPAN_S_MAKE(type, first, ...) (XSPAN_S(type)((first), ##__VA_ARGS__))
 
 // define a variable
-#define XSPAN_0_VAR(type, var, first, ...) XSPAN_0(type) var(first, ##__VA_ARGS__)
-#define XSPAN_P_VAR(type, var, first, ...) XSPAN_P(type) var(first, ##__VA_ARGS__)
-#define XSPAN_S_VAR(type, var, first, ...) XSPAN_S(type) var(first, ##__VA_ARGS__)
+#define XSPAN_0_VAR(type, var, first, ...) XSPAN_0(type) var((first), ##__VA_ARGS__)
+#define XSPAN_P_VAR(type, var, first, ...) XSPAN_P(type) var((first), ##__VA_ARGS__)
+#define XSPAN_S_VAR(type, var, first, ...) XSPAN_S(type) var((first), ##__VA_ARGS__)
 
 #elif WITH_XSPAN >= 1
 
 // unchecked - just a no-op pointer wrapper, no extra functionality
 
+// types
 #define XSPAN_0(type) Ptr<type>
 #define XSPAN_P(type) Ptr<type>
 #define XSPAN_S(type) Ptr<type>
 
 // create a value
-#define XSPAN_0_MAKE(type, first, ...) (XSPAN_0(type)(first))
-#define XSPAN_P_MAKE(type, first, ...) (XSPAN_P(type)(first))
-#define XSPAN_S_MAKE(type, first, ...) (XSPAN_S(type)(first))
+#define XSPAN_0_MAKE(type, first, ...) (XSPAN_0(type)((first)))
+#define XSPAN_P_MAKE(type, first, ...) (XSPAN_P(type)((first)))
+#define XSPAN_S_MAKE(type, first, ...) (XSPAN_S(type)((first)))
 
 // define a variable
-#define XSPAN_0_VAR(type, var, first, ...) XSPAN_0(type) var(first)
-#define XSPAN_P_VAR(type, var, first, ...) XSPAN_P(type) var(first)
-#define XSPAN_S_VAR(type, var, first, ...) XSPAN_S(type) var(first)
+#define XSPAN_0_VAR(type, var, first, ...) XSPAN_0(type) var((first))
+#define XSPAN_P_VAR(type, var, first, ...) XSPAN_P(type) var((first))
+#define XSPAN_S_VAR(type, var, first, ...) XSPAN_S(type) var((first))
 
 #else // WITH_XSPAN
 
@@ -118,98 +120,52 @@ using XSPAN_NAMESPACE_NAME::raw_index_bytes; // overloaded for all classes
 
 // helper for implicit pointer conversions and MemBuffer overloads
 template <class R, class T>
-inline R *xspan_make_helper__(R * /*dummy*/, T *first) {
+inline R *xspan_make_helper__(R * /*dummy*/, T *first) may_throw {
     return first; // IMPORTANT: no cast here to detect bad usage
 }
 template <class R>
-inline R *xspan_make_helper__(R * /*dummy*/, std::nullptr_t /*first*/) {
+inline R *xspan_make_helper__(R * /*dummy*/, std::nullptr_t /*first*/) noexcept {
     return nullptr;
 }
 template <class R>
-inline R *xspan_make_helper__(R * /*dummy*/, MemBuffer &first) {
-    return (R *) membuffer_get_void_ptr(first);
+inline R *xspan_make_helper__(R * /*dummy*/, MemBuffer &mb) noexcept {
+    return (R *) membuffer_get_void_ptr(mb);
 }
 
+// types
 #define XSPAN_0(type) type *
 #define XSPAN_P(type) type *
 #define XSPAN_S(type) type *
 
 // create a value
-#define XSPAN_0_MAKE(type, first, ...) (xspan_make_helper__((type *) nullptr, first))
-#define XSPAN_P_MAKE(type, first, ...) (xspan_make_helper__((type *) nullptr, first))
-#define XSPAN_S_MAKE(type, first, ...) (xspan_make_helper__((type *) nullptr, first))
+#define XSPAN_0_MAKE(type, first, ...) (xspan_make_helper__((type *) nullptr, (first)))
+#define XSPAN_P_MAKE(type, first, ...) (xspan_make_helper__((type *) nullptr, (first)))
+#define XSPAN_S_MAKE(type, first, ...) (xspan_make_helper__((type *) nullptr, (first)))
 
 // define a variable
-#define XSPAN_0_VAR(type, var, first, ...) type *var = XSPAN_0_MAKE(type, first)
-#define XSPAN_P_VAR(type, var, first, ...) type *var = XSPAN_P_MAKE(type, first)
-#define XSPAN_S_VAR(type, var, first, ...) type *var = XSPAN_S_MAKE(type, first)
+#define XSPAN_0_VAR(type, var, first, ...) type *var = XSPAN_0_MAKE(type, (first))
+#define XSPAN_P_VAR(type, var, first, ...) type *var = XSPAN_P_MAKE(type, (first))
+#define XSPAN_S_VAR(type, var, first, ...) type *var = XSPAN_S_MAKE(type, (first))
 
 #endif // WITH_XSPAN
 
-#if 1
+/*************************************************************************
 // nicer names
+**************************************************************************/
+
+#if 1
+// types
 #define SPAN_0 XSPAN_0
 #define SPAN_P XSPAN_P
 #define SPAN_S XSPAN_S
+// create a value
 #define SPAN_0_MAKE XSPAN_0_MAKE
 #define SPAN_P_MAKE XSPAN_P_MAKE
 #define SPAN_S_MAKE XSPAN_S_MAKE
+// define a variable
 #define SPAN_0_VAR XSPAN_0_VAR
 #define SPAN_P_VAR XSPAN_P_VAR
 #define SPAN_S_VAR XSPAN_S_VAR
 #endif
-
-/*************************************************************************
-// raw_bytes() - get underlying memory from checked buffers/pointers.
-// This is overloaded by various utility classes like BoundedPtr,
-// MemBuffer and XSpan.
-//
-// Note that the pointer type is retained, the "_bytes" hints size_in_bytes
-**************************************************************************/
-
-// default: for any regular pointer, raw_bytes() is just the pointer itself
-template <class T>
-inline
-    typename std::enable_if<std::is_pointer<T>::value && !std_is_bounded_array<T>::value, T>::type
-    raw_bytes(T ptr, size_t size_in_bytes) {
-    if (size_in_bytes > 0) {
-        if very_unlikely (ptr == nullptr)
-            throwInternalError("raw_bytes unexpected NULL ptr");
-        if very_unlikely (__acc_cte(VALGRIND_CHECK_MEM_IS_ADDRESSABLE(ptr, size_in_bytes) != 0))
-            throwInternalError("raw_bytes valgrind-check-mem");
-    }
-    return ptr;
-}
-
-// default: for any regular pointer, raw_index_bytes() is just "pointer + index"
-// NOTE: index == number of elements, *NOT* size in bytes!
-template <class T>
-inline
-    typename std::enable_if<std::is_pointer<T>::value && !std_is_bounded_array<T>::value, T>::type
-    raw_index_bytes(T ptr, size_t index, size_t size_in_bytes) {
-    typedef typename std::remove_pointer<T>::type element_type;
-    if very_unlikely (ptr == nullptr)
-        throwInternalError("raw_index_bytes unexpected NULL ptr");
-    size_in_bytes = mem_size(sizeof(element_type), index, size_in_bytes); // assert size
-    if very_unlikely (__acc_cte(VALGRIND_CHECK_MEM_IS_ADDRESSABLE(ptr, size_in_bytes) != 0))
-        throwInternalError("raw_index_bytes valgrind-check-mem");
-    UNUSED(size_in_bytes);
-    return ptr + index;
-}
-
-// same for bounded arrays
-template <class T, size_t N>
-inline T *raw_bytes(T (&a)[N], size_t size_in_bytes) {
-    typedef T element_type;
-    if very_unlikely (size_in_bytes > mem_size(sizeof(element_type), N))
-        throwInternalError("raw_bytes out of range");
-    return a;
-}
-
-template <class T, size_t N>
-inline T *raw_index_bytes(T (&a)[N], size_t index, size_t size_in_bytes) {
-    typedef T element_type;
-    return raw_bytes(a, mem_size(sizeof(element_type), index, size_in_bytes)) + index;
-}
 
 /* vim:set ts=4 sw=4 et: */

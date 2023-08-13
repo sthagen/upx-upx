@@ -26,8 +26,8 @@
  */
 
 #pragma once
-#ifndef UPX_LEFILE_H__
-#define UPX_LEFILE_H__ 1
+
+#include "util/membuffer.h"
 
 class InputFile;
 class OutputFile;
@@ -38,8 +38,8 @@ class OutputFile;
 
 class LeFile {
 protected:
-    LeFile(InputFile *);
-    virtual ~LeFile();
+    explicit LeFile(InputFile *) noexcept;
+    virtual ~LeFile() noexcept;
 
     virtual bool readFileHeader();
     virtual void writeFile(OutputFile *, bool);
@@ -49,13 +49,13 @@ protected:
 
     struct alignas(1) le_header_t {
         // 0x00
-        char _[2];             // signature: 'LE' || 'LX'
-        char byte_order;       // 0 little endian
-        char word_order;       // 0 little endian
+        byte _[2];             // signature: 'LE' || 'LX'
+        byte byte_order;       // 0 little endian
+        byte word_order;       // 0 little endian
         LE32 exe_format_level; // 0
         LE16 cpu_type;         // 1->286..4->586
         LE16 target_os;        // 1->OS2
-        char _0[4];            // module_version = 0
+        byte _0[4];            // module_version = 0
         // 0x10
         LE32 module_type; // 0x200->compatible with PM windowing
         LE32 memory_pages;
@@ -68,21 +68,21 @@ protected:
         LE32 bytes_on_last_page;
         // 0x30
         LE32 fixup_size;
-        char _1[4]; // fixup_checksum = 0
+        byte _1[4]; // fixup_checksum = 0
         LE32 loader_size;
-        char _2[4]; // loader_checksum = 0
+        byte _2[4]; // loader_checksum = 0
         // 0x40
         LE32 object_table_offset;
         LE32 object_table_entries;
         LE32 object_pagemap_offset;
         LE32 object_iterate_data_map_offset;
         // 0x50
-        char _3[4]; //  resource_offset
+        byte _3[4]; //  resource_offset
         LE32 resource_entries;
         LE32 resident_names_offset;
         LE32 entry_table_offset;
         // 0x60
-        char _4[4]; //  module_directives_table_offset = 0
+        byte _4[4]; //  module_directives_table_offset = 0
         LE32 module_directives_entries;
         LE32 fixup_page_table_offset;
         LE32 fixup_record_table_offset;
@@ -90,17 +90,17 @@ protected:
         LE32 imported_modules_name_table_offset;
         LE32 imported_modules_count;
         LE32 imported_procedures_name_table_offset;
-        char _5[4]; // per_page_checksum_table_offset =  0
+        byte _5[4]; // per_page_checksum_table_offset =  0
         // 0x80
         LE32 data_pages_offset;
-        char _6[4]; // preload_page_count = 0
+        byte _6[4]; // preload_page_count = 0
         LE32 non_resident_name_table_offset;
         LE32 non_resident_name_table_length;
         // 0x90
-        char _7[4]; // non_resident_names_checksum
+        byte _7[4]; // non_resident_names_checksum
         LE32 automatic_data_object;
 #if 1
-        char _8[44];
+        byte _8[44];
 #else
         LE32 debug_info_offset;
         LE32 debug_info_length;
@@ -108,7 +108,7 @@ protected:
         LE32 preload_instance_pages;
         LE32 demand_instance_pages;
         LE32 extra_heap_alloc;
-        char reserved[12];
+        byte reserved[12];
         LE32 versioninfo;
         LE32 unknown;
         // 0xC0
@@ -127,10 +127,10 @@ protected:
     };
 
     struct alignas(1) le_pagemap_entry_t {
-        unsigned char h;
-        unsigned char m;
-        unsigned char l;
-        unsigned char type; // 0x00-legal;0x40-iterated;0x80-invalid;0xC0-zeroed
+        byte h;
+        byte m;
+        byte l;
+        byte type; // 0x00-legal;0x40-iterated;0x80-invalid;0xC0-zeroed
     };
 
     virtual void readObjectTable();
@@ -187,8 +187,8 @@ protected:
 
     InputFile *fif = nullptr;
     OutputFile *fof = nullptr;
-    unsigned le_offset;
-    unsigned exe_offset;
+    unsigned le_offset = 0;
+    unsigned exe_offset = 0;
 
     le_header_t ih;
     le_header_t oh;
@@ -199,34 +199,34 @@ protected:
     unsigned *ofpage_table = nullptr;
     le_pagemap_entry_t *ipm_entries = nullptr;
     le_pagemap_entry_t *opm_entries = nullptr;
-    upx_byte *ires_names = nullptr;
-    upx_byte *ores_names = nullptr;
-    upx_byte *ifixups = nullptr;
-    upx_byte *ofixups = nullptr;
-    upx_byte *inonres_names = nullptr;
-    upx_byte *ononres_names = nullptr;
+    byte *ires_names = nullptr;
+    byte *ores_names = nullptr;
+    byte *ifixups = nullptr;
+    byte *ofixups = nullptr;
+    byte *inonres_names = nullptr;
+    byte *ononres_names = nullptr;
     MemBuffer mb_iimage;
-    SPAN_0(upx_byte) iimage = nullptr;
+    SPAN_0(byte) iimage = nullptr;
     MemBuffer mb_oimage;
-    SPAN_0(upx_byte) oimage = nullptr;
-    upx_byte *ientries = nullptr;
-    upx_byte *oentries = nullptr;
+    SPAN_0(byte) oimage = nullptr;
+    byte *ientries = nullptr;
+    byte *oentries = nullptr;
 
-    unsigned soobject_table;
-    unsigned sofpage_table;
-    unsigned sopm_entries;
-    unsigned sores_names;
-    unsigned sofixups;
-    unsigned sononres_names;
-    unsigned soimage;
-    unsigned soentries;
+    unsigned soobject_table = 0;
+    unsigned sofpage_table = 0;
+    unsigned sopm_entries = 0;
+    unsigned sores_names = 0;
+    unsigned sofixups = 0;
+    unsigned sononres_names = 0;
+    unsigned soimage = 0;
+    unsigned soentries = 0;
 
 private:
-    // disable copy and assignment
-    LeFile(const LeFile &) = delete;
-    LeFile &operator=(const LeFile &) = delete;
+    // disable copy and move
+    LeFile(const LeFile &) DELETED_FUNCTION;
+    LeFile &operator=(const LeFile &) DELETED_FUNCTION;
+    LeFile(LeFile &&) noexcept DELETED_FUNCTION;
+    LeFile &operator=(LeFile &&) noexcept DELETED_FUNCTION;
 };
-
-#endif /* already included */
 
 /* vim:set ts=4 sw=4 et: */

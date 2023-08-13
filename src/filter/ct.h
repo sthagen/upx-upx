@@ -32,8 +32,8 @@
 **************************************************************************/
 
 #define CT16(f, cond, addvalue, get, set) \
-    upx_byte *b = f->buf; \
-    upx_byte *b_end = b + f->buf_len - 3; \
+    byte *b = f->buf; \
+    byte *b_end = b + f->buf_len - 3; \
     do { \
         if (cond) \
         { \
@@ -211,8 +211,8 @@ static int s_ct16_e8e9_bswap_be(Filter *f)
 **************************************************************************/
 
 #define CT32(f, cond, addvalue, get, set) \
-    upx_byte *b = f->buf; \
-    upx_byte *b_end = b + f->buf_len - 5; \
+    byte *b = f->buf; \
+    byte *b_end = b + f->buf_len - 5; \
     do { \
         if (cond) \
         { \
@@ -388,8 +388,8 @@ static int s_ct32_e8e9_bswap_be(Filter *f)
 **************************************************************************/
 
 #define CT24ARM_LE(f, cond, addvalue, get, set) \
-    upx_byte *b = f->buf; \
-    upx_byte *b_end = b + f->buf_len - 4; \
+    byte *b = f->buf; \
+    byte *b_end = b + f->buf_len - 4; \
     do { \
         if (cond) \
         { \
@@ -424,8 +424,8 @@ static int s_ct24arm_le(Filter *f)
 #undef CT24ARM_LE
 
 #define CT24ARM_BE(f, cond, addvalue, get, set) \
-    upx_byte *b = f->buf; \
-    upx_byte *b_end = b + f->buf_len - 4; \
+    byte *b = f->buf; \
+    byte *b_end = b + f->buf_len - 4; \
     do { \
         if (cond) \
         { \
@@ -463,9 +463,10 @@ static int s_ct24arm_be(Filter *f)
 // 26-bit ARM calltrick ("naive")
 **************************************************************************/
 
+#if 1  //{ old reliable
 #define CT26ARM_LE(f, cond, addvalue, get, set) \
-    upx_byte *b = f->buf; \
-    upx_byte *b_end = b + f->buf_len - 4; \
+    byte *b = f->buf; \
+    byte *b_end = b + f->buf_len - 4; \
     do { \
         if (cond) \
         { \
@@ -478,7 +479,6 @@ static int s_ct24arm_be(Filter *f)
     } while (b < b_end); \
     if (f->lastcall) f->lastcall += 4; \
     return 0;
-
 
 #define ARMCT_COND (((b[3] & 0x7C) == 0x14))
 
@@ -496,6 +496,56 @@ static int s_ct26arm_le(Filter *f)
 {
     CT26ARM_LE(f, ARMCT_COND, a + f->addvalue, get_le26, set_dummy)
 }
+
+#else  //}{ new enhanced but DIFFERENT; need new filter type!
+
+static int CTarm64(Filter *f, int dir)  // dir: 1, 0, -1
+{
+    upx_byte *b = f->buf;  // will be incremented
+    upx_byte *const b_end = b + f->buf_len - 4;
+    do {
+        unsigned const a = b - f->buf;
+        int const d = dir * (f->addvalue + (a >> 2));
+        unsigned const v = get_le32(f->buf);  // the 32-bit instruction
+        if (0x05 == (0x1f & (v >> 26))) { // b, bl
+            f->lastcall = a;
+            if (dir) set_le26(b, v + d);
+            f->calls++;
+        }
+        else if (  (0x54 ==  (v >> 24)        )  // b.cond
+                || (0x1a == ((v >> 25) & 0x3f))  // cb{z,nz}
+            ) {
+            f->lastcall = a;
+            if (dir) set_le19_5(b, (v >> 5) + d);
+            f->calls++;
+        }
+        else if (0x1b == ((v >> 25) & 0x3f)) { // tb{z,nz}
+            f->lastcall = a;
+            if (dir) set_le14_5(b, (v >> 5) + d);
+            f->calls++;
+        }
+        b += 4;
+    } while (b < b_end);
+    if (f->lastcall) f->lastcall += 4;
+    return 0;
+}
+
+static int f_CTarm64_le(Filter *f)
+{
+    return CTarm64(f, 1);
+}
+
+static int u_CTarm64_le(Filter *f)
+{
+    return CTarm64(f, -1);
+}
+
+static int s_CTarm64_le(Filter *f)
+{
+    return CTarm64(f, 0);
+}
+
+#endif  //}
 
 #undef CT26ARM_LE
 #undef ARMCT_COND

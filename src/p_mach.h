@@ -26,6 +26,7 @@
  */
 
 
+#pragma once
 #ifndef __UPX_P_MACHO_H
 #define __UPX_P_MACHO_H 1
 
@@ -33,15 +34,10 @@
 
 __packed_struct(Mach_fat_header)
     BE32 magic;
-# if 0
-        enum {  // note conflict with java bytecode PackLinuxI386
+        enum : unsigned {  // note conflict with java bytecode PackLinuxI386
             FAT_MAGIC      = 0xcafebabe,
-            FAT_MAGIC_SWAB = 0xbebafeca
+            FAT_MAGIC_SWAB = 0xbebafeca,
         };
-# else
-        static const unsigned FAT_MAGIC      = 0xcafebabe;
-        static const unsigned FAT_MAGIC_SWAB = 0xbebafeca;
-# endif
     BE32 nfat_arch;  // Number of Mach_fat_arch which follow.
 __packed_struct_end()
 
@@ -1141,7 +1137,7 @@ class PackMachARMEL : public PackMachBase<MachClass_LE32>
 public:
     PackMachARMEL(InputFile *f);
 
-    virtual int getFormat() const override { return UPX_F_MACH_ARMEL; }
+    virtual int getFormat() const override { return UPX_F_MACH_ARM; }
     virtual const char *getName() const override { return "macho/arm"; }
     virtual const char *getFullName(const options_t *) const override { return "arm-darwin.macho"; }
 protected:
@@ -1194,7 +1190,7 @@ class PackMachARM64EL : public PackMachBase<MachClass_LE64>
 public:
     PackMachARM64EL(InputFile *f);
 
-    virtual int getFormat() const override { return UPX_F_MACH_ARM64EL; }
+    virtual int getFormat() const override { return UPX_F_MACH_ARM64; }
     virtual const char *getName() const override { return "macho/arm64"; }
     virtual const char *getFullName(const options_t *) const override { return "arm64-darwin.macho"; }
 protected:

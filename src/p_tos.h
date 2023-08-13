@@ -1,4 +1,4 @@
-/* p_tos.h --
+/* p_tos.h -- atari/tos executable format
 
    This file is part of the UPX executable compressor.
 
@@ -26,8 +26,6 @@
  */
 
 #pragma once
-#ifndef UPX_P_TOS_H__
-#define UPX_P_TOS_H__ 1
 
 /*************************************************************************
 // atari/tos
@@ -37,11 +35,11 @@ class PackTos final : public Packer {
     typedef Packer super;
 
 public:
-    PackTos(InputFile *f);
+    explicit PackTos(InputFile *f);
     virtual int getVersion() const override { return 13; }
     virtual int getFormat() const override { return UPX_F_ATARI_TOS; }
     virtual const char *getName() const override { return "atari/tos"; }
-    virtual const char *getFullName(const options_t *) const override { return "m68k-atari.tos"; }
+    virtual const char *getFullName(const Options *) const override { return "m68k-atari.tos"; }
     virtual const int *getCompressionMethods(int method, int level) const override;
     virtual const int *getFilters() const override;
 
@@ -101,11 +99,9 @@ protected:
         unsigned clear_dirty_stack_len;
         unsigned copy_to_stack_len;
 
-        void reset() { memset(this, 0, sizeof(*this)); }
+        void reset() noexcept { mem_clear(this); }
     };
     LinkerSymbols symbols;
 };
-
-#endif /* already included */
 
 /* vim:set ts=4 sw=4 et: */

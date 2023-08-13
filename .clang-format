@@ -16,10 +16,15 @@ AttributeMacros:
   - __acc_cdecl_sighandler
   - __acc_forceinline
   - __acc_noinline
-  - __acc_static_noinline
   - __acc_static_forceinline
+  - __acc_static_noinline
+  - DELETED_FUNCTION
+  - XSPAN_DELETED_FUNCTION
   - forceinline
+  - may_throw
   - noinline
+  - static_forceinline
+  - static_noinline
 EmptyLineBeforeAccessModifier: Leave
 SortIncludes: false
 SpaceAfterCStyleCast: true

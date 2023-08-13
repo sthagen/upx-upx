@@ -25,21 +25,21 @@
    <markus@oberhumer.com>               <ezerotven+github@gmail.com>
  */
 
-// work.cpp implements the central loop, and it uses class PackMaster to
-// dispatch. PackMaster by itself will instatiate a concrete subclass
+// This file implements the central loop, and it uses class PackMaster to
+// dispatch. PackMaster by itself will instantiate a concrete subclass
 // of class Packer which then does the actual work.
+// And see p_com.cpp for a simple executable format.
 
 #include "conf.h"
 #include "file.h"
 #include "packmast.h"
-#include "packer.h"
 #include "ui.h"
 
 #if (ACC_OS_DOS32) && defined(__DJGPP__)
 #define USE_FTIME 1
 #elif ((ACC_OS_WIN32 || ACC_OS_WIN64) && (ACC_CC_INTELC || ACC_CC_MSC))
 #define USE__FUTIME 1
-#elif (HAVE_UTIME)
+#elif HAVE_UTIME
 #define USE_UTIME 1
 #endif
 
@@ -60,8 +60,8 @@
 void do_one_file(const char *iname, char *oname) {
     int r;
     struct stat st;
-    memset(&st, 0, sizeof(st));
-#if (HAVE_LSTAT)
+    mem_clear(&st);
+#if HAVE_LSTAT
     r = lstat(iname, &st);
 #else
     r = stat(iname, &st);
@@ -100,12 +100,11 @@ void do_one_file(const char *iname, char *oname) {
     }
 
     InputFile fi;
-    fi.st = st;
     fi.sopen(iname, O_RDONLY | O_BINARY, SH_DENYWR);
 
-#if (USE_FTIME)
+#if USE_FTIME
     struct ftime fi_ftime;
-    memset(&fi_ftime, 0, sizeof(fi_ftime));
+    mem_clear(&fi_ftime);
     if (opt->preserve_timestamp) {
         if (getftime(fi.getFd(), &fi_ftime) != 0)
             throwIOException("cannot determine file timestamp");
@@ -123,7 +122,7 @@ void do_one_file(const char *iname, char *oname) {
             if (opt->output_name) {
                 strcpy(tname, opt->output_name);
                 if (opt->force_overwrite || opt->force >= 2) {
-#if (HAVE_CHMOD)
+#if HAVE_CHMOD
                     r = chmod(tname, 0777);
                     IGNORE_ERROR(r);
 #endif
@@ -140,7 +139,7 @@ void do_one_file(const char *iname, char *oname) {
             else
                 flags |= O_EXCL;
             int shmode = SH_DENYWR;
-#if defined(__MINT__)
+#if (ACC_ARCH_M68K && ACC_OS_TOS && ACC_CC_GNUC) && defined(__MINT__)
             flags |= O_TRUNC;
             shmode = O_DENYRW;
 #endif
@@ -155,7 +154,7 @@ void do_one_file(const char *iname, char *oname) {
         }
     }
 
-    // handle command
+    // handle command - actual work is here
     PackMaster pm(&fi, opt);
     if (opt->cmd == CMD_COMPRESS)
         pm.pack(&fo);
@@ -172,10 +171,10 @@ void do_one_file(const char *iname, char *oname) {
 
     // copy time stamp
     if (oname[0] && opt->preserve_timestamp && fo.isOpen()) {
-#if (USE_FTIME)
+#if USE_FTIME
         r = setftime(fo.getFd(), &fi_ftime);
         IGNORE_ERROR(r);
-#elif (USE__FUTIME)
+#elif USE__FUTIME
         struct _utimbuf u;
         u.actime = st.st_atime;
         u.modtime = st.st_mtime;
@@ -196,7 +195,7 @@ void do_one_file(const char *iname, char *oname) {
                 throwIOException("could not create a backup file name");
             FileBase::rename(iname, bakname);
         } else {
-#if (HAVE_CHMOD)
+#if HAVE_CHMOD
             r = chmod(iname, 0777);
             IGNORE_ERROR(r);
 #endif
@@ -210,7 +209,7 @@ void do_one_file(const char *iname, char *oname) {
         oname[0] = 0; // done with oname
         const char *name = opt->output_name ? opt->output_name : iname;
         UNUSED(name);
-#if (USE_UTIME)
+#if USE_UTIME
         // copy time stamp
         if (opt->preserve_timestamp) {
             struct utimbuf u;
@@ -220,21 +219,21 @@ void do_one_file(const char *iname, char *oname) {
             IGNORE_ERROR(r);
         }
 #endif
-#if (HAVE_CHOWN)
+#if HAVE_CHOWN
         // copy the group ownership
         if (opt->preserve_ownership) {
             r = chown(name, -1, st.st_gid);
             IGNORE_ERROR(r);
         }
 #endif
-#if (HAVE_CHMOD)
+#if HAVE_CHMOD
         // copy permissions
         if (opt->preserve_mode) {
             r = chmod(name, st.st_mode);
             IGNORE_ERROR(r);
         }
 #endif
-#if (HAVE_CHOWN)
+#if HAVE_CHOWN
         // copy the user ownership
         if (opt->preserve_ownership) {
             r = chown(name, st.st_uid, -1);
@@ -250,22 +249,22 @@ void do_one_file(const char *iname, char *oname) {
 // process all files from the commandline
 **************************************************************************/
 
-static void unlink_ofile(char *oname) {
+static void unlink_ofile(char *oname) noexcept {
     if (oname && oname[0]) {
-#if (HAVE_CHMOD)
+#if HAVE_CHMOD
         int r;
         r = chmod(oname, 0777);
         IGNORE_ERROR(r);
 #endif
         if (unlink(oname) == 0)
-            oname[0] = 0;
+            oname[0] = 0; // done with oname
     }
 }
 
 int do_files(int i, int argc, char *argv[]) {
     upx_compiler_sanity_check();
     if (opt->verbose >= 1) {
-        show_head();
+        show_header();
         UiPacker::uiHeader();
     }
 
@@ -281,12 +280,12 @@ int do_files(int i, int argc, char *argv[]) {
         } catch (const Exception &e) {
             unlink_ofile(oname);
             if (opt->verbose >= 1 || (opt->verbose >= 0 && !e.isWarning()))
-                printErr(iname, &e);
+                printErr(iname, e);
             main_set_exit_code(e.isWarning() ? EXIT_WARN : EXIT_ERROR);
             // this is not fatal, continue processing more files
         } catch (const Error &e) {
             unlink_ofile(oname);
-            printErr(iname, &e);
+            printErr(iname, e);
             main_set_exit_code(EXIT_ERROR);
             return -1; // fatal error
         } catch (std::bad_alloc *e) {

@@ -31,6 +31,8 @@
 
 
 #include "include/linux.h"
+// Pprotect is mprotect but uses page-aligned address (Linux requirement)
+unsigned Pprotect(void *, size_t, unsigned);
 
 #ifndef DEBUG  //{
 #define DEBUG 0
@@ -86,8 +88,7 @@ static int dprintf(char const *fmt, ...); // forward
 // it at an address different from it load address:  there must be no
 // static data, and no string constants.
 
-#define MAX_ELF_HDR 1024  // Elf64_Ehdr + n*Elf64_Phdr must fit in this
-
+#include "MAX_ELF_HDR.c"
 
 /*************************************************************************
 // "file" util
@@ -248,7 +249,7 @@ make_hatch_x86_64(
         {
             hatch[0] = 0xc35a050f;  // syscall; pop %rdx; ret
             if (xprot) {
-                mprotect(hatch, 1*sizeof(unsigned), PROT_EXEC|PROT_READ);
+                Pprotect(hatch, 1*sizeof(unsigned), PROT_EXEC|PROT_READ);
             }
         }
         else {
@@ -278,7 +279,7 @@ make_hatch_ppc64(
     if (phdr->p_type==PT_LOAD && phdr->p_flags & PF_X) {
         if (
         // Try page fragmentation just beyond .text .
-            ( (hatch = (void *)(phdr->p_memsz + phdr->p_vaddr + reloc)),
+            ( (hatch = (void *)(~3ul & (3+ phdr->p_memsz + phdr->p_vaddr + reloc))),
                 ( phdr->p_memsz==phdr->p_filesz  // don't pollute potential .bss
                 &&  (4*4)<=(frag_mask & -(int)(size_t)hatch) ) ) // space left on page
         // Try Elf64_Phdr[1].p_paddr (2 instr) and .p_filesz (2 instr)
@@ -295,7 +296,7 @@ make_hatch_ppc64(
             hatch[2]= 0x38800000;  // li r4,0
             hatch[3]= 0x4e800020;  // blr
             if (xprot) {
-                mprotect(hatch, 3*sizeof(unsigned), PROT_EXEC|PROT_READ);
+                Pprotect(hatch, 4*sizeof(unsigned), PROT_EXEC|PROT_READ);
             }
         }
         else {
@@ -340,7 +341,7 @@ make_hatch_arm64(
             hatch[0] = 0xd4000001;  // svc #0
             hatch[1] = 0xd65f03c0;  // ret (jmp *lr)
             if (xprot) {
-                mprotect(hatch, 2*sizeof(unsigned), PROT_EXEC|PROT_READ);
+                Pprotect(hatch, 2*sizeof(unsigned), PROT_EXEC|PROT_READ);
             }
         }
         else {
@@ -495,7 +496,7 @@ do_xmap(
     if (xi && PT_PHDR==phdr->p_type) {
         auxv_up(av, AT_PHDR, phdr->p_vaddr + reloc);
     } else
-    if (PT_LOAD==phdr->p_type) {
+    if (PT_LOAD==phdr->p_type && phdr->p_memsz != 0) {
         unsigned const prot = PF_TO_PROT(phdr->p_flags);
         DPRINTF("LOAD p_offset=%%p  p_vaddr=%%p  p_filesz=%%p  p_memsz=%%p  p_flags=%%x  prot=%%x\\n",
             phdr->p_offset, phdr->p_vaddr, phdr->p_filesz, phdr->p_memsz, phdr->p_flags, prot);
@@ -555,8 +556,8 @@ do_xmap(
             if (0!=hatch) {
                 auxv_up((Elf64_auxv_t *)(~1 & (size_t)av), AT_NULL, (size_t)hatch);
             }
-            DPRINTF("mprotect addr=%%p  len=%%p  prot=%%x\\n", addr, mlen, prot);
-            if (0!=mprotect(addr, mlen, prot)) {
+            DPRINTF("Pprotect addr=%%p  len=%%p  prot=%%x\\n", addr, mlen, prot);
+            if (0!=Pprotect(addr, mlen, prot)) {
                 err_exit(10);
 ERR_LAB
             }
@@ -641,7 +642,7 @@ upx_main(  // returns entry address
         if (0 > fdi) {
             err_exit(18);
         }
-        if (MAX_ELF_HDR!=read(fdi, (void *)ehdr, MAX_ELF_HDR)) {
+        if (MAX_ELF_HDR_64!=read(fdi, (void *)ehdr, MAX_ELF_HDR_64)) {
 ERR_LAB
             err_exit(19);
         }

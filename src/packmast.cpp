@@ -29,62 +29,66 @@
 #include "file.h"
 #include "packmast.h"
 #include "packer.h"
+
 #include "lefile.h"
 #include "pefile.h"
 #include "p_elf.h"
+#include "p_unix.h"
 
 #include "p_com.h"
 #include "p_djgpp2.h"
 #include "p_exe.h"
-#include "p_unix.h"
 #include "p_lx_exc.h"
 #include "p_lx_elf.h"
-#include "p_lx_sh.h"
 #include "p_lx_interp.h"
-#include "p_sys.h"
-#include "p_tos.h"
-#include "p_wcle.h"
-#include "p_tmt.h"
-#include "p_w32pe.h"
-#include "p_w64pep.h"
-#include "p_vmlinz.h"
-#include "p_vmlinx.h"
-#include "p_ps1.h"
+#include "p_lx_sh.h"
 #include "p_mach.h"
-#include "p_armpe.h"
+#include "p_ps1.h"
+#include "p_sys.h"
+#include "p_tmt.h"
+#include "p_tos.h"
+#include "p_vmlinx.h"
+#include "p_vmlinz.h"
+#include "p_w32pe_i386.h"
+#include "p_w64pe_amd64.h"
+#include "p_w64pe_arm64.h"
+#include "p_wince_arm.h"
+#include "p_wcle.h"
 
 /*************************************************************************
 //
 **************************************************************************/
 
-PackMaster::PackMaster(InputFile *f, options_t *o) : fi(f), p(nullptr) {
+PackMaster::PackMaster(InputFile *f, Options *o) noexcept : fi(f) {
     // replace global options with local options
-    saved_opt = o;
-    if (o) {
+    if (o != nullptr) {
+#if WITH_THREADS
+        std::lock_guard<std::mutex> lock(opt_lock_mutex);
+#endif
+        saved_opt = o;
         memcpy(&this->local_options, o, sizeof(*o)); // struct copy
         opt = &this->local_options;
     }
 }
 
-PackMaster::~PackMaster() {
-    fi = nullptr;
-    delete p;
-    p = nullptr;
+PackMaster::~PackMaster() noexcept {
+    owner_delete(packer);
     // restore global options
-    if (saved_opt)
+    if (saved_opt != nullptr) {
+#if WITH_THREADS
+        std::lock_guard<std::mutex> lock(opt_lock_mutex);
+#endif
         opt = saved_opt;
-    saved_opt = nullptr;
+        saved_opt = nullptr;
+    }
 }
 
 /*************************************************************************
 //
 **************************************************************************/
 
-static Packer *try_pack(Packer *p, void *user) {
-    if (p == nullptr)
-        return nullptr;
+static Packer *try_can_pack(Packer *p, void *user) {
     InputFile *f = (InputFile *) user;
-    p->assertPacker();
     try {
         p->initPackHeader();
         f->seek(0, SEEK_SET);
@@ -103,11 +107,8 @@ static Packer *try_pack(Packer *p, void *user) {
     return nullptr;
 }
 
-static Packer *try_unpack(Packer *p, void *user) {
-    if (p == nullptr)
-        return nullptr;
+static Packer *try_can_unpack(Packer *p, void *user) {
     InputFile *f = (InputFile *) user;
-    p->assertPacker();
     try {
         p->initPackHeader();
         f->seek(0, SEEK_SET);
@@ -121,6 +122,7 @@ static Packer *try_unpack(Packer *p, void *user) {
             // see canUnpack() in packer.h
         }
     } catch (const IOException &) {
+        // ignored
     } catch (...) {
         delete p;
         throw;
@@ -133,39 +135,40 @@ static Packer *try_unpack(Packer *p, void *user) {
 //
 **************************************************************************/
 
-Packer *PackMaster::visitAllPackers(visit_func_t func, InputFile *f, const options_t *o,
-                                    void *user) {
-    Packer *p = nullptr;
+/*static*/
+Packer *PackMaster::visitAllPackers(visit_func_t func, InputFile *f, const Options *o, void *user) {
 
 #define D(Klass)                                                                                   \
     ACC_BLOCK_BEGIN                                                                                \
-    Klass *const kp = new Klass(f);                                                                \
+    COMPILE_TIME_ASSERT(std::is_nothrow_destructible_v<Klass>)                                     \
+    Klass *kp = new Klass(f);                                                                      \
+    kp->assertPacker();                                                                            \
     if (o->debug.debug_level)                                                                      \
         fprintf(stderr, "visitAllPackers: (ver=%d, fmt=%3d) %s\n", kp->getVersion(),               \
                 kp->getFormat(), #Klass);                                                          \
-    if ((p = func(kp, user)) != nullptr)                                                           \
+    Packer *p = func(kp, user);                                                                    \
+    if (p != nullptr)                                                                              \
         return p;                                                                                  \
     ACC_BLOCK_END
 
-    // note: order of tries is important !
+    // NOTE: order of tries is important !!!
 
     //
     // .exe
     //
     if (!o->dos_exe.force_stub) {
+        // dos32
         D(PackDjgpp2);
         D(PackTmt);
         D(PackWcle);
-        D(PackW64Pep);
-        D(PackW32Pe);
+        // Windows
+        // D(PackW64PeArm64EC); // NOT YET IMPLEMENTED
+        // D(PackW64PeArm64); // NOT YET IMPLEMENTED
+        D(PackW64PeAmd64);
+        D(PackW32PeI386);
+        D(PackWinCeArm);
     }
-    D(PackArmPe);
-    D(PackExe);
-
-    //
-    // atari
-    //
-    D(PackTos);
+    D(PackExe); // dos/exe
 
     //
     // linux kernel
@@ -206,18 +209,7 @@ Packer *PackMaster::visitAllPackers(visit_func_t func, InputFile *f, const optio
     D(PackMachFat);   // cafebabe conflict
     D(PackLinuxI386); // cafebabe conflict
 
-    //
-    // psone
-    //
-    D(PackPs1);
-
-    //
-    // .sys and .com
-    //
-    D(PackSys);
-    D(PackCom);
-
-    // Mach (macOS)
+    // Mach (Darwin / macOS)
     D(PackDylibAMD64);
     D(PackMachPPC32); // TODO: this works with upx 3.91..3.94 but got broken in 3.95; FIXME
     D(PackMachI386);
@@ -231,24 +223,30 @@ Packer *PackMaster::visitAllPackers(visit_func_t func, InputFile *f, const optio
     //   D(PackDylibI386);
     //   D(PackDylibPPC32);
 
+    //
+    // misc
+    //
+    D(PackTos); // atari/tos
+    D(PackPs1); // ps1/exe
+    D(PackSys); // dos/sys
+    D(PackCom); // dos/com
+
     return nullptr;
 #undef D
 }
 
-Packer *PackMaster::getPacker(InputFile *f) {
-    Packer *pp = visitAllPackers(try_pack, f, opt, f);
-    if (!pp)
+/*static*/ Packer *PackMaster::getPacker(InputFile *f) {
+    Packer *p = visitAllPackers(try_can_pack, f, opt, f);
+    if (!p)
         throwUnknownExecutableFormat();
-    pp->assertPacker();
-    return pp;
+    return p;
 }
 
-Packer *PackMaster::getUnpacker(InputFile *f) {
-    Packer *pp = visitAllPackers(try_unpack, f, opt, f);
-    if (!pp)
+/*static*/ Packer *PackMaster::getUnpacker(InputFile *f) {
+    Packer *p = visitAllPackers(try_can_unpack, f, opt, f);
+    if (!p)
         throwNotPacked();
-    pp->assertPacker();
-    return pp;
+    return p;
 }
 
 /*************************************************************************
@@ -256,39 +254,37 @@ Packer *PackMaster::getUnpacker(InputFile *f) {
 **************************************************************************/
 
 void PackMaster::pack(OutputFile *fo) {
-    p = getPacker(fi);
-    fi = nullptr;
-    p->doPack(fo);
+    assert(packer == nullptr);
+    packer = getPacker(fi);
+    packer->doPack(fo);
 }
 
 void PackMaster::unpack(OutputFile *fo) {
-    p = getUnpacker(fi);
-    p->assertPacker();
-    fi = nullptr;
-    p->doUnpack(fo);
+    assert(packer == nullptr);
+    packer = getUnpacker(fi);
+    packer->doUnpack(fo);
 }
 
 void PackMaster::test() {
-    p = getUnpacker(fi);
-    fi = nullptr;
-    p->doTest();
+    assert(packer == nullptr);
+    packer = getUnpacker(fi);
+    packer->doTest();
 }
 
 void PackMaster::list() {
-    p = getUnpacker(fi);
-    fi = nullptr;
-    p->doList();
+    assert(packer == nullptr);
+    packer = getUnpacker(fi);
+    packer->doList();
 }
 
 void PackMaster::fileInfo() {
-    p = visitAllPackers(try_unpack, fi, opt, fi);
-    if (!p)
-        p = visitAllPackers(try_pack, fi, opt, fi);
-    if (!p)
+    assert(packer == nullptr);
+    packer = visitAllPackers(try_can_unpack, fi, opt, fi);
+    if (!packer)
+        packer = visitAllPackers(try_can_pack, fi, opt, fi);
+    if (!packer)
         throwUnknownExecutableFormat(nullptr, 1); // make a warning here
-    p->assertPacker();
-    fi = nullptr;
-    p->doFileInfo();
+    packer->doFileInfo();
 }
 
 /* vim:set ts=4 sw=4 et: */

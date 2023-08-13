@@ -85,22 +85,22 @@ void PackWcle::buildLoader(const Filter *ft) {
     // prepare loader
     initLoader(stub_i386_dos32_watcom_le, sizeof(stub_i386_dos32_watcom_le));
     addLoader("IDENTSTR,WCLEMAIN", ph.first_offset_found == 1 ? "WCLEMAIN02" : "",
-              "WCLEMAIN03,UPX1HEAD,WCLECUTP", nullptr);
+              "WCLEMAIN03,UPX1HEAD,WCLECUTP");
 
     // fake alignment for the start of the decompressor
     linker->defineSymbol("WCLECUTP", 0x1000);
 
-    addLoader(getDecompressorSections(), "WCLEMAI2", nullptr);
+    addLoader(getDecompressorSections(), "WCLEMAI2");
     if (ft->id) {
         assert(ft->calls > 0);
-        addLoader(ft->addvalue ? "WCCTTPOS" : "WCCTTNUL", nullptr);
+        addLoader(ft->addvalue ? "WCCTTPOS" : "WCCTTNUL");
         addFilter32(ft->id);
     }
 #if 1
     // FIXME: if (has_relocation)
-    { addLoader("WCRELOC1,RELOC320", big_relocs ? "REL32BIG" : "", "RELOC32J", nullptr); }
+    { addLoader("WCRELOC1,RELOC320", big_relocs ? "REL32BIG" : "", "RELOC32J"); }
 #endif
-    addLoader(has_extra_code ? "WCRELSEL" : "", "WCLEMAI4", nullptr);
+    addLoader(has_extra_code ? "WCRELSEL" : "", "WCLEMAI4");
 }
 
 /*************************************************************************
@@ -127,7 +127,7 @@ bool PackWcle::canPack() {
 
 void PackWcle::encodeEntryTable() {
     unsigned count, object, n;
-    upx_byte *p = ientries;
+    byte *p = ientries;
     n = 0;
     while (*p) {
         count = *p;
@@ -157,6 +157,8 @@ void PackWcle::readObjectTable() {
     LeFile::readObjectTable();
 
     // temporary copy of the object descriptors
+    if (!objects) // late detection, but protect against .alloc(0)
+        throwCantPack("no objects");
     iobject_desc.alloc(objects * sizeof(*iobject_table));
     memcpy(iobject_desc, iobject_table, objects * sizeof(*iobject_table));
 
@@ -174,14 +176,15 @@ void PackWcle::readObjectTable() {
 void PackWcle::encodeObjectTable() {
     unsigned ic, jc;
 
-    oobject_table = New(le_object_table_entry_t, soobject_table = 2);
-    memset(oobject_table, 0, soobject_table * sizeof(*oobject_table));
+    soobject_table = 2;
+    oobject_table = New(le_object_table_entry_t, soobject_table);
+    memset(oobject_table, 0, mem_size(sizeof(*oobject_table), soobject_table));
 
     // object #1:
     OOT(0, base_address) = IOT(0, base_address);
 
     ic = IOT(objects - 1, my_base_address) + IOT(objects - 1, virtual_size);
-    jc = pages * mps + sofixups + 1024;
+    jc = mem_size(mps, pages, sofixups, 1024);
     if (ic < jc)
         ic = jc;
 
@@ -208,8 +211,8 @@ void PackWcle::encodeObjectTable() {
 void PackWcle::encodePageMap() {
     opm_entries = New(le_pagemap_entry_t, sopm_entries = opages);
     for (unsigned ic = 0; ic < sopm_entries; ic++) {
-        opm_entries[ic].l = (unsigned char) (ic + 1);
-        opm_entries[ic].m = (unsigned char) ((ic + 1) >> 8);
+        opm_entries[ic].l = (byte) (ic + 1);
+        opm_entries[ic].m = (byte) ((ic + 1) >> 8);
         opm_entries[ic].h = 0;
         opm_entries[ic].type = 0;
     }
@@ -224,7 +227,7 @@ void PackWcle::encodeFixupPageTable() {
 
 void PackWcle::encodeFixups() {
     sofixups = 1 * 7 + FIXUP_EXTRA;
-    ofixups = New(upx_byte, sofixups);
+    ofixups = New(byte, sofixups);
     memset(ofixups, 0, sofixups);
     ofixups[0] = 7;
     set_le16(ofixups + 2, (LE_STUB_EDI + neweip) & (mps - 1));
@@ -247,16 +250,16 @@ void PackWcle::preprocessFixups() {
         throwCantPack("files without relocations are not supported");
     }
 
-    MemBuffer rl_membuf(jc);
+    MemBuffer mb_relocs(jc);
     ByteArray(srf, counts[objects + 0] + 1);
     ByteArray(slf, counts[objects + 1] + 1);
 
-    SPAN_S_VAR(upx_byte, rl, rl_membuf);
-    SPAN_S_VAR(upx_byte, selector_fixups, srf_membuf);
-    SPAN_S_VAR(upx_byte, selfrel_fixups, slf_membuf);
-    unsigned rc = 0;
+    SPAN_S_VAR(byte, relocs, mb_relocs);
+    SPAN_S_VAR(byte, selector_fixups, srf_membuf);
+    SPAN_S_VAR(byte, selfrel_fixups, slf_membuf);
+    unsigned relocnum = 0;
 
-    upx_byte *fix = ifixups;
+    byte *fix = ifixups;
     for (ic = jc = 0; ic < pages; ic++) {
         while (ptr_udiff_bytes(fix, ifixups) < get_le32(ifpage_table + (ic + 1))) {
             const int fixp2 = get_le16_signed(fix + 2);
@@ -295,7 +298,7 @@ void PackWcle::preprocessFixups() {
                 }
                 dputc('p', stdout);
                 memcpy(iimage + jc + fixp2, fix + 5, (fix[1] & 0x10) ? 4 : 2);
-                set_le32(rl + 4 * rc++, jc + fixp2);
+                set_le32(relocs + 4 * relocnum++, jc + fixp2);
                 set_le32(iimage + jc + fixp2,
                          get_le32(iimage + jc + fixp2) + IOT(fix[4] - 1, my_base_address));
 
@@ -316,8 +319,8 @@ void PackWcle::preprocessFixups() {
 
                 // work around a pmwunlite bug: remove duplicated fixups
                 // FIXME: fix the other cases too
-                if (rc == 0 || get_le32(rl + 4 * rc - 4) != jc + fixp2) {
-                    set_le32(rl + 4 * rc++, jc + fixp2);
+                if (relocnum == 0 || get_le32(relocs + 4 * relocnum - 4) != jc + fixp2) {
+                    set_le32(relocs + 4 * relocnum++, jc + fixp2);
                     set_le32(iimage + jc + fixp2,
                              get_le32(iimage + jc + fixp2) + IOT(fix[4] - 1, my_base_address));
                 }
@@ -348,11 +351,14 @@ void PackWcle::preprocessFixups() {
     }
 
     // resize ifixups if it's too small
-    if (sofixups < 1000) {
+    if (sofixups < 4 * relocnum + 8192) {
         delete[] ifixups;
-        ifixups = new upx_byte[1000];
+        sofixups = 4 * relocnum + 8192;
+        ifixups = New(byte, sofixups);
     }
-    fix = ifixups + optimizeReloc32(rl, rc, ifixups, iimage, file_size, 1, &big_relocs);
+    SPAN_S_VAR(byte, orelocs, ifixups, sofixups);
+    fix =
+        ifixups + optimizeReloc(relocnum, relocs, orelocs, iimage, soimage, 32, true, &big_relocs);
     has_extra_code = ptr_udiff_bytes(selector_fixups, srf) != 0;
     // FIXME: this could be removed if has_extra_code = false
     // but then we'll need a flag
@@ -380,7 +386,7 @@ void PackWcle::encodeImage(Filter *ft) {
     ifixups = nullptr;
 
     mb_oimage.allocForCompression(isize, RESERVED + 512);
-    oimage = mb_oimage;
+    oimage = mb_oimage; // => now a SPAN_S
     // prepare packheader
     ph.u_len = isize;
     // prepare filter [already done]
@@ -424,11 +430,11 @@ void PackWcle::pack(OutputFile *fo) {
 
     preprocessFixups();
 
-    const unsigned text_size = IOT(ih.init_cs_object - 1, npages) * mps;
+    const unsigned text_size = mem_size(mps, IOT(ih.init_cs_object - 1, npages));
     const unsigned text_vaddr = IOT(ih.init_cs_object - 1, my_base_address);
 
     // attach some useful data at the end of preprocessed fixups
-    ifixups[sofixups++] = (unsigned char) (ih.automatic_data_object & 0xff);
+    ifixups[sofixups++] = (byte) (ih.automatic_data_object & 0xff);
     unsigned ic = objects * sizeof(*iobject_table);
     memcpy(ifixups + sofixups, iobject_desc, ic);
     iobject_desc.dealloc();
@@ -437,8 +443,9 @@ void PackWcle::pack(OutputFile *fo) {
     set_le32(ifixups + sofixups,
              ih.init_esp_offset + IOT(ih.init_ss_object - 1, my_base_address)); // old stack pointer
     set_le32(ifixups + sofixups + 4, ih.init_eip_offset + text_vaddr);          // real entry point
-    set_le32(ifixups + sofixups + 8, mps * pages); // virtual address of unpacked relocations
-    ifixups[sofixups + 12] = (unsigned char) (unsigned) objects;
+    set_le32(ifixups + sofixups + 8,
+             mem_size(mps, pages)); // virtual address of unpacked relocations
+    ifixups[sofixups + 12] = (byte) (unsigned) objects;
     sofixups += 13;
 
     // prepare filter
@@ -478,7 +485,7 @@ void PackWcle::pack(OutputFile *fo) {
     linker->defineSymbol("original_entry", ih.init_eip_offset + text_vaddr);
     linker->defineSymbol("original_stack",
                          ih.init_esp_offset + IOT(ih.init_ss_object - 1, my_base_address));
-    linker->defineSymbol("start_of_relocs", mps * pages);
+    linker->defineSymbol("start_of_relocs", mem_size(mps, pages));
     defineDecompressorSymbols();
     defineFilterSymbols(&ft);
     linker->defineSymbol("filter_buffer_start", text_vaddr);
@@ -518,19 +525,17 @@ void PackWcle::pack(OutputFile *fo) {
 **************************************************************************/
 
 void PackWcle::decodeFixups() {
-    SPAN_P_VAR(upx_byte, p, oimage + soimage);
-    //    assert(p.raw_size_in_bytes() == mb_oimage.getSize()); // Span sanity check
-
     mb_iimage.dealloc();
     iimage = nullptr;
 
-    MemBuffer tmpbuf;
-    unsigned const fixupn = unoptimizeReloc32(p, oimage, tmpbuf, true);
+    SPAN_S_VAR(const byte, p, oimage + soimage);
+    MemBuffer mb_relocs;
+    const unsigned fixupn = unoptimizeReloc(p, mb_relocs, oimage, soimage, 32, true);
 
     MemBuffer wrkmem(8 * fixupn + 8);
     unsigned ic, jc, o, r;
     for (ic = 0; ic < fixupn; ic++) {
-        jc = get_le32(tmpbuf + 4 * ic);
+        jc = get_le32(mb_relocs + 4 * ic);
         set_le32(wrkmem + ic * 8, jc);
         o = soobject_table;
         r = get_le32(oimage + jc);
@@ -539,13 +544,13 @@ void PackWcle::decodeFixups() {
         set_le32(oimage + jc, r);
     }
     set_le32(wrkmem + ic * 8, 0xFFFFFFFF); // end of 32-bit offset fixups
-    tmpbuf.dealloc();
+    mb_relocs.dealloc();                   // done
 
     // selector fixups then self-relative fixups
-    SPAN_P_VAR(const upx_byte, selector_fixups, p);
+    SPAN_S_VAR(const byte, selector_fixups, p);
 
     // Find selfrel_fixups by skipping over selector_fixups.
-    SPAN_P_VAR(const upx_byte, q, selector_fixups);
+    SPAN_S_VAR(const byte, q, selector_fixups);
     // The code is a subroutine that ends in RET (0xC3).
     while (*q != 0xC3) {
         // Defend against tampered selector_fixups; see PackWcle::preprocessFixups().
@@ -555,18 +560,17 @@ void PackWcle::decodeFixups() {
         // and where byte [+1] also can be '\xDA' or '\xDB'.
         if (0x8C != q[0] || 0x66 != q[2] || 0x89 != q[3]) { // Unexpected; tampering?
             // Try to recover by looking for the RET.
-            upx_byte const *q2 = (upx_byte const *) memchr(q, 0xC3, 9);
+            const byte *q2 = (const byte *) memchr(q, 0xC3, 9);
             if (q2) { // Assume recovery
                 q = q2;
                 break;
             }
         }
         // Guard against run-away.
-        static unsigned char const blank[9] = {0};
-        if (ptr_diff_bytes(oimage + ph.u_len - sizeof(blank), raw_bytes(q, 0)) <
-                0                               // catastrophic worst case
-            || !memcmp(blank, q, sizeof(blank)) // no-good early warning
-        ) {
+        static byte const blank[9] = {0};
+        // catastrophic worst case or no-good early warning
+        if (ptr_diff_bytes(oimage + ph.u_len - sizeof(blank), raw_bytes(q, 0)) < 0 ||
+            !memcmp(blank, q, sizeof(blank))) {
             char msg[50];
             snprintf(msg, sizeof(msg), "bad selector_fixups %d",
                      ptr_diff_bytes(q, selector_fixups));
@@ -575,11 +579,11 @@ void PackWcle::decodeFixups() {
         q += 9;
     }
     unsigned selectlen = ptr_udiff_bytes(q, selector_fixups) / 9;
-    SPAN_P_VAR(const upx_byte, selfrel_fixups, q + 1); // Skip the 0xC3
+    SPAN_S_VAR(const byte, selfrel_fixups, q + 1); // Skip the 0xC3
 
     const unsigned fbytes = fixupn * 9 + 1000 + selectlen * 5;
-    ofixups = New(upx_byte, fbytes);
-    SPAN_S_VAR(upx_byte, fp, ofixups, fbytes, ofixups);
+    ofixups = New(byte, fbytes);
+    SPAN_S_VAR(byte, fp, ofixups, fbytes, ofixups);
 
     for (ic = 1, jc = 0; ic <= opages; ic++) {
         // self relative fixups
@@ -591,9 +595,9 @@ void PackWcle::decodeFixups() {
             r += o;
             o = soobject_table;
             virt2rela(oobject_table, &o, &r);
-            fp[4] = (unsigned char) o;
+            fp[4] = (byte) o;
             set_le32(fp + 5, r);
-            fp[1] = (unsigned char) (r > 0xFFFF ? 0x10 : 0);
+            fp[1] = (byte) (r > 0xFFFF ? 0x10 : 0);
             fp += fp[1] ? 9 : 7;
             selfrel_fixups += 4;
             dputc('r', stdout);
@@ -604,26 +608,26 @@ void PackWcle::decodeFixups() {
             fp[1] = 0;
             set_le16(fp + 2, r & (mps - 1));
             unsigned x = selector_fixups[1] > 0xD0 ? oh.init_ss_object : oh.init_cs_object;
-            fp[4] = (unsigned char) x;
+            fp[4] = (byte) x;
             fp += 5;
             selector_fixups += 9;
             selectlen--;
             dputc('s', stdout);
         }
         // 32 bit offset fixups
-        while (get_le32(wrkmem + 4 * jc) < ic * mps) {
+        while (get_le32(wrkmem + 4 * jc) < mem_size(mps, ic)) {
             if (jc > 1 &&
                 ((get_le32(wrkmem + 4 * (jc - 2)) + 3) & (mps - 1)) < 3) // cross page fixup?
             {
                 r = get_le32(oimage + get_le32(wrkmem + 4 * (jc - 2)));
                 fp[0] = 7;
-                fp[1] = (unsigned char) (r > 0xFFFF ? 0x10 : 0);
+                fp[1] = (byte) (r > 0xFFFF ? 0x10 : 0);
                 set_le16(fp + 2, get_le32(wrkmem + 4 * (jc - 2)) | ~3);
                 set_le32(fp + 5, r);
                 o = soobject_table;
                 r = get_le32(wrkmem + 4 * (jc - 1));
                 virt2rela(oobject_table, &o, &r);
-                fp[4] = (unsigned char) o;
+                fp[4] = (byte) o;
                 fp += fp[1] ? 9 : 7;
                 dputc('0', stdout);
             }
@@ -632,9 +636,9 @@ void PackWcle::decodeFixups() {
             virt2rela(oobject_table, &o, &r);
             r = get_le32(oimage + get_le32(wrkmem + 4 * jc));
             fp[0] = 7;
-            fp[1] = (unsigned char) (r > 0xFFFF ? 0x10 : 0);
+            fp[1] = (byte) (r > 0xFFFF ? 0x10 : 0);
             set_le16(fp + 2, get_le32(wrkmem + 4 * jc) & (mps - 1));
-            fp[4] = (unsigned char) o;
+            fp[4] = (byte) o;
             set_le32(fp + 5, r);
             fp += fp[1] ? 9 : 7;
             jc += 2;
@@ -686,7 +690,7 @@ void PackWcle::decodeObjectTable() {
 
 void PackWcle::decodeImage() {
     mb_oimage.allocForDecompression(ph.u_len);
-    oimage = mb_oimage;
+    oimage = mb_oimage; // => now a SPAN_S
 
     decompress(iimage + ph.buf_offset + ph.getPackHeaderSize(), oimage);
     soimage = get_le32(oimage + ph.u_len - 5);
@@ -696,7 +700,7 @@ void PackWcle::decodeImage() {
 
 void PackWcle::decodeEntryTable() {
     unsigned count, object, n, r;
-    SPAN_S_VAR(upx_byte, p, ientries, soentries);
+    SPAN_S_VAR(byte, p, ientries, soentries);
     n = 0;
     while (*p) {
         count = *p;
@@ -770,15 +774,15 @@ void PackWcle::unpack(OutputFile *fo) {
 
     // unfilter
     if (ph.filter) {
-        const unsigned text_size = OOT(oh.init_cs_object - 1, npages) * mps;
+        const unsigned text_size = mem_size(mps, OOT(oh.init_cs_object - 1, npages));
         const unsigned text_vaddr = OOT(oh.init_cs_object - 1, my_base_address);
 
         Filter ft(ph.level);
         ft.init(ph.filter, text_vaddr);
-        ft.cto = (unsigned char) ph.filter_cto;
+        ft.cto = (byte) ph.filter_cto;
         if (ph.version < 11)
-            ft.cto = (unsigned char) (get_le32(oimage + ph.u_len - 9) >> 24);
-        ft.unfilter(raw_bytes(oimage + text_vaddr, text_size), text_size);
+            ft.cto = (byte) (get_le32(oimage + ph.u_len - 9) >> 24);
+        ft.unfilter(oimage + text_vaddr, text_size);
     }
 
     decodeFixupPageTable();

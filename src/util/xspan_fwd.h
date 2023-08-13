@@ -24,24 +24,38 @@
    <markus@oberhumer.com>
  */
 
-// manually forward a number of well-known functions using a
-// checked "raw_bytes()" call
+// manually forward a number of well-known functions using a checked "raw_bytes()" call
+//
+// uses C
+// uses optional D, E and XSPAN_FWD_C_IS_MEMBUFFER
+// needs XSPAN_REQUIRES_CONVERTIBLE_ANY_DIRECTION
+//
+// example for a default implementation:
+//   #define XSPAN_REQUIRES_CONVERTIBLE_ANY_DIRECTION(A, B, RType)
+//       std::enable_if_t<std::is_convertible_v<A *, B *> || std::is_convertible_v<B *, A *>, RType>
 
 #define XSPAN_FWD_TU(RType)                                                                        \
     template <class T, class U>                                                                    \
     inline XSPAN_REQUIRES_CONVERTIBLE_ANY_DIRECTION(T, U, RType)
+
+#ifndef XSPAN_FWD_C_IS_MEMBUFFER
+// global operator: disallow "n + C" => force using "C + n" (member function) instead
+template <class T, class U>
+inline typename std::enable_if<std::is_integral<U>::value, void *>::type operator+(U, const C<T> &)
+    XSPAN_DELETED_FUNCTION;
+#endif // XSPAN_FWD_C_IS_MEMBUFFER
 
 /*************************************************************************
 // overloads for standard functions
 **************************************************************************/
 
 template <class T>
-inline void *memchr(const C<T> &a, int c, size_t n) {
-    return memchr(a.raw_bytes(n), c, n);
+inline void *memchr(const C<T> &a, int v, size_t n) {
+    return memchr(a.raw_bytes(n), v, n);
 }
 template <class T>
-inline const void *memchr(const C<const T> &a, int c, size_t n) {
-    return memchr(a.raw_bytes(n), c, n);
+inline const void *memchr(const C<const T> &a, int v, size_t n) {
+    return memchr(a.raw_bytes(n), v, n);
 }
 
 template <class T>
@@ -111,8 +125,8 @@ XSPAN_FWD_TU(void *) memmove(const C<T> &a, const E<U> &b, size_t n) {
 #endif
 
 template <class T>
-inline void *memset(const C<T> &a, int c, size_t n) {
-    return memset(a.raw_bytes(n), c, n);
+inline void *memset(const C<T> &a, int v, size_t n) {
+    return memset(a.raw_bytes(n), v, n);
 }
 
 /*************************************************************************
@@ -251,6 +265,7 @@ void set_le64(const C<T> &a, upx_uint64_t v) {
     return set_le64(a.raw_bytes(8), v);
 }
 
+#ifndef XSPAN_FWD_C_IS_MEMBUFFER
 template <class T>
 inline C<T> operator+(const C<T> &a, const BE16 &v) {
     return a + unsigned(v);
@@ -284,6 +299,7 @@ template <class T>
 inline C<T> operator-(const C<T> &a, const LE32 &v) {
     return a - unsigned(v);
 }
+#endif // XSPAN_FWD_C_IS_MEMBUFFER
 
 template <class T>
 typename std::enable_if<sizeof(T) == 1, upx_rsize_t>::type upx_safe_strlen(const C<T> &a) {

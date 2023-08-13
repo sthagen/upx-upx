@@ -29,11 +29,11 @@
 #include "file.h"
 
 /*************************************************************************
-// static functions
+// static file-related util functions; will throw on error
 **************************************************************************/
 
-void FileBase::chmod(const char *name, int mode) {
-#if (HAVE_CHMOD)
+/*static*/ void FileBase::chmod(const char *name, int mode) {
+#if HAVE_CHMOD
     if (::chmod(name, mode) != 0)
         throwIOException(name, errno);
 #else
@@ -42,7 +42,7 @@ void FileBase::chmod(const char *name, int mode) {
 #endif
 }
 
-void FileBase::rename(const char *old_, const char *new_) {
+/*static*/ void FileBase::rename(const char *old_, const char *new_) {
 #if (ACC_OS_DOS32) && defined(__DJGPP__)
     if (::_rename(old_, new_) != 0)
 #else
@@ -51,7 +51,7 @@ void FileBase::rename(const char *old_, const char *new_) {
         throwIOException("rename error", errno);
 }
 
-void FileBase::unlink(const char *name) {
+/*static*/ void FileBase::unlink(const char *name) {
     if (::unlink(name) != 0)
         throwIOException(name, errno);
 }
@@ -60,12 +60,7 @@ void FileBase::unlink(const char *name) {
 //
 **************************************************************************/
 
-FileBase::FileBase()
-    : _fd(-1), _flags(0), _shflags(0), _mode(0), _name(nullptr), _offset(0), _length(0) {
-    memset(&st, 0, sizeof(st));
-}
-
-FileBase::~FileBase() {
+FileBase::~FileBase() may_throw {
 #if 0 && defined(__GNUC__) // debug
     if (isOpen())
         fprintf(stderr,"%s: %s\n", _name, __PRETTY_FUNCTION__);
@@ -98,7 +93,7 @@ bool FileBase::do_sopen() {
     return true;
 }
 
-bool FileBase::close() {
+bool FileBase::close() noexcept {
     bool ok = true;
     if (isOpen() && _fd != STDIN_FILENO && _fd != STDOUT_FILENO && _fd != STDERR_FILENO)
         if (::close(_fd) == -1)
@@ -112,7 +107,7 @@ bool FileBase::close() {
     return ok;
 }
 
-void FileBase::closex() {
+void FileBase::closex() may_throw {
     if (!close())
         throwIOException("close failed", errno);
 }
@@ -134,10 +129,10 @@ upx_off_t FileBase::seek(upx_off_t off, int whence) {
         whence = SEEK_SET;
     }
     // SEEK_CUR falls through to here
-    upx_off_t rv = ::lseek(_fd, off, whence);
-    if (rv < 0)
+    upx_off_t l = ::lseek(_fd, off, whence);
+    if (l < 0)
         throwIOException("seek error", errno);
-    return rv - _offset;
+    return l - _offset;
 }
 
 upx_off_t FileBase::tell() const {
@@ -160,8 +155,6 @@ upx_off_t FileBase::st_size() const { return _length; }
 //
 **************************************************************************/
 
-InputFile::InputFile() {}
-
 void InputFile::sopen(const char *name, int flags, int shflags) {
     close();
     _name = name;
@@ -181,10 +174,10 @@ void InputFile::sopen(const char *name, int flags, int shflags) {
     _length_orig = _length;
 }
 
-int InputFile::read(SPAN_P(void) buf, int len) {
-    if (!isOpen() || len < 0)
+int InputFile::read(SPAN_P(void) buf, upx_int64_t blen) {
+    if (!isOpen() || blen < 0)
         throwIOException("bad read");
-    mem_size_assert(1, len); // sanity check
+    int len = (int) mem_size(1, blen); // sanity check
     errno = 0;
     long l = acc_safe_hread(_fd, raw_bytes(buf, len), len);
     if (errno)
@@ -192,9 +185,9 @@ int InputFile::read(SPAN_P(void) buf, int len) {
     return (int) l;
 }
 
-int InputFile::readx(SPAN_P(void) buf, int len) {
-    int l = this->read(buf, len);
-    if (l != len)
+int InputFile::readx(SPAN_P(void) buf, upx_int64_t blen) {
+    int l = this->read(buf, blen);
+    if (l != blen)
         throwEOFException();
     return l;
 }
@@ -211,8 +204,6 @@ upx_off_t InputFile::st_size_orig() const { return _length_orig; }
 /*************************************************************************
 //
 **************************************************************************/
-
-OutputFile::OutputFile() : bytes_written(0) {}
 
 void OutputFile::sopen(const char *name, int flags, int shflags, int mode) {
     close();
@@ -253,22 +244,33 @@ bool OutputFile::openStdout(int flags, bool force) {
     return true;
 }
 
-void OutputFile::write(SPAN_0(const void) buf, int len) {
-    if (!isOpen() || len < 0)
+void OutputFile::write(SPAN_0(const void) buf, upx_int64_t blen) {
+    if (!isOpen() || blen < 0)
         throwIOException("bad write");
-    // allow nullptr if len == 0
-    if (len == 0)
+    // allow nullptr if blen == 0
+    if (blen == 0)
         return;
-    mem_size_assert(1, len); // sanity check
+    int len = (int) mem_size(1, blen); // sanity check
     errno = 0;
-#if 0
-    fprintf(stderr, "write %p %zd (%p) %d\n", buf.raw_ptr(), buf.raw_size_in_bytes(),
-            buf.raw_base(), len);
+#if WITH_XSPAN >= 2
+    NO_fprintf(stderr, "write %p %zd (%p) %d\n", buf.raw_ptr(), buf.raw_size_in_bytes(),
+               buf.raw_base(), len);
 #endif
     long l = acc_safe_hwrite(_fd, raw_bytes(buf, len), len);
     if (l != len)
         throwIOException("write error", errno);
     bytes_written += len;
+#if TESTING && 0
+    static upx_std_atomic(bool) dumping;
+    if (!dumping) {
+        dumping = true;
+        char fn[64];
+        static int part = 0;
+        snprintf(fn, sizeof(fn), "upx-dump-%04d.data", part++);
+        OutputFile::dump(fn, buf, len);
+        dumping = false;
+    }
+#endif
 }
 
 upx_off_t OutputFile::st_size() const {
@@ -319,7 +321,7 @@ upx_off_t OutputFile::seek(upx_off_t off, int whence) {
 void OutputFile::set_extent(upx_off_t offset, upx_off_t length) {
     super::set_extent(offset, length);
     bytes_written = 0;
-    if (0 == offset && (upx_off_t) ~0u == length) {
+    if (0 == offset && 0xffffffffLL == length) { // TODO: check all callers of this method
         if (::fstat(_fd, &st) != 0)
             throwIOException(_name, errno);
         _length = st.st_size - offset;
@@ -336,7 +338,7 @@ upx_off_t OutputFile::unset_extent() {
     return _length;
 }
 
-void OutputFile::dump(const char *name, SPAN_P(const void) buf, int len, int flags) {
+/*static*/ void OutputFile::dump(const char *name, SPAN_P(const void) buf, int len, int flags) {
     if (flags < 0)
         flags = O_CREAT | O_TRUNC;
     flags |= O_WRONLY | O_BINARY;
@@ -344,6 +346,21 @@ void OutputFile::dump(const char *name, SPAN_P(const void) buf, int len, int fla
     f.open(name, flags, 0600);
     f.write(raw_bytes(buf, len), len);
     f.closex();
+}
+
+/*************************************************************************
+//
+**************************************************************************/
+
+TEST_CASE("file") {
+    InputFile fi;
+    CHECK(!fi.isOpen());
+    CHECK(fi.getFd() == -1);
+    CHECK(fi.st_size() == 0);
+    OutputFile fo;
+    CHECK(!fo.isOpen());
+    CHECK(fo.getFd() == -1);
+    CHECK(fo.getBytesWritten() == 0);
 }
 
 /* vim:set ts=4 sw=4 et: */

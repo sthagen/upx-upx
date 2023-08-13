@@ -35,8 +35,6 @@
 static const CLANG_FORMAT_DUMMY_STATEMENT
 #include "stub/i386-dos32.tmt.h"
 
-#define EXTRA_INFO 4 // original entry point
-
 /*************************************************************************
 //
 **************************************************************************/
@@ -45,6 +43,8 @@ PackTmt::PackTmt(InputFile *f) : super(f) {
     bele = &N_BELE_RTP::le_policy;
     COMPILE_TIME_ASSERT(sizeof(tmt_header_t) == 44)
 }
+
+Linker *PackTmt::newLinker() const { return new ElfLinkerX86; }
 
 const int *PackTmt::getCompressionMethods(int method, int level) const {
     return Packer::getDefaultCompressionMethods_le32(method, level);
@@ -56,7 +56,7 @@ const int *PackTmt::getFilters() const {
     return filters;
 }
 
-unsigned PackTmt::findOverlapOverhead(const upx_bytep buf, const upx_bytep tbuf, unsigned range,
+unsigned PackTmt::findOverlapOverhead(const byte *buf, const byte *tbuf, unsigned range,
                                       unsigned upper_limit) const {
     // make sure the decompressor will be paragraph aligned
     unsigned o = super::findOverlapOverhead(buf, tbuf, range, upper_limit);
@@ -64,24 +64,22 @@ unsigned PackTmt::findOverlapOverhead(const upx_bytep buf, const upx_bytep tbuf,
     return o;
 }
 
-Linker *PackTmt::newLinker() const { return new ElfLinkerX86; }
-
 void PackTmt::buildLoader(const Filter *ft) {
     // prepare loader
     initLoader(stub_i386_dos32_tmt, sizeof(stub_i386_dos32_tmt));
     addLoader("IDENTSTR,TMTMAIN1", ph.first_offset_found == 1 ? "TMTMAIN1A" : "", "TMTMAIN1B",
-              ft->id ? "TMTCALT1" : "", "TMTMAIN2,UPX1HEAD,TMTCUTPO", nullptr);
+              ft->id ? "TMTCALT1" : "", "TMTMAIN2,UPX1HEAD,TMTCUTPO");
 
     // fake alignment for the start of the decompressor
     linker->defineSymbol("TMTCUTPO", 0x1000);
 
-    addLoader(getDecompressorSections(), "TMTMAIN5", nullptr);
+    addLoader(getDecompressorSections(), "TMTMAIN5");
     if (ft->id) {
         assert(ft->calls > 0);
-        addLoader("TMTCALT2", nullptr);
+        addLoader("TMTCALT2");
         addFilter32(ft->id);
     }
-    addLoader("TMTRELOC,RELOC320", big_relocs ? "REL32BIG" : "", "RELOC32J,TMTJUMP1", nullptr);
+    addLoader("TMTRELOC,RELOC320", big_relocs ? "REL32BIG" : "", "RELOC32J,TMTJUMP1");
 }
 
 /*************************************************************************
@@ -91,7 +89,7 @@ void PackTmt::buildLoader(const Filter *ft) {
 int PackTmt::readFileHeader() {
 #define H(x) get_le16(h + 2 * (x))
 #define H4(x) get_le32(h + (x))
-    unsigned char h[0x40];
+    byte h[0x40];
     int ic;
     unsigned exe_offset = 0;
     adam_offset = 0;
@@ -100,7 +98,7 @@ int PackTmt::readFileHeader() {
         fi->seek(adam_offset, SEEK_SET);
         fi->readx(h, sizeof(h));
 
-        if (memcmp(h, "MZ", 2) == 0) // dos exe
+        if (memcmp(h, "MZ", 2) == 0) // dos/exe
         {
             exe_offset = adam_offset;
             adam_offset += H(2) * 512 + H(1);
@@ -108,12 +106,12 @@ int PackTmt::readFileHeader() {
                 adam_offset -= 512;
             if (H(0x18 / 2) == 0x40 && H4(0x3c))
                 adam_offset = H4(0x3c);
-        } else if (memcmp(h, "BW", 2) == 0)
+        } else if (memcmp(h, "BW", 2) == 0) {
             adam_offset += H(2) * 512 + H(1);
-        else if (memcmp(h, "PMW1", 4) == 0) {
+        } else if (memcmp(h, "PMW1", 4) == 0) {
             fi->seek(adam_offset + H4(0x18), SEEK_SET);
             adam_offset += H4(0x24);
-            int objs = H4(0x1c);
+            unsigned objs = H4(0x1c);
             while (objs--) {
                 fi->readx(h, 0x18);
                 adam_offset += H4(4);
@@ -125,9 +123,9 @@ int PackTmt::readFileHeader() {
             fi->readx(h, 4);
             // + data_pages_offset
             adam_offset = offs + H4(0);
-        } else if (memcmp(h, "Adam", 4) == 0)
+        } else if (memcmp(h, "Adam", 4) == 0) {
             break;
-        else
+        } else
             return 0;
     }
     if (ic == 20)
@@ -135,14 +133,15 @@ int PackTmt::readFileHeader() {
 
     fi->seek(adam_offset, SEEK_SET);
     fi->readx(&ih, sizeof(ih));
-    // FIXME: should add more checks for the values in 'ih'
-    unsigned const imagesize = ih.imagesize;
-    unsigned const entry = ih.entry;
-    unsigned const relocsize = ih.relocsize;
-    if (imagesize < sizeof(ih) || entry < sizeof(ih) || file_size <= imagesize ||
-        file_size <= entry || file_size <= relocsize) {
-        printWarn(getName(), "bad header; imagesize=%#x  entry=%#x  relocsize=%#x", imagesize,
-                  entry, relocsize);
+
+    // TODO: could add more checks for the values in 'ih'
+    const unsigned imagesize = ih.imagesize;
+    const unsigned entry = ih.entry;
+    const unsigned rsize = ih.relocsize;
+    if (imagesize < sizeof(ih) || imagesize >= file_size_u || entry >= file_size_u ||
+        rsize >= file_size_u) {
+        throwCantPack("%s: bad header: imagesize=%#x entry=%#x relocsize=%#x", getName(), imagesize,
+                      entry, rsize);
         return 0;
     }
 
@@ -168,44 +167,48 @@ void PackTmt::pack(OutputFile *fo) {
 
     const unsigned usize = ih.imagesize;
     const unsigned rsize = ih.relocsize;
+    const unsigned relocnum = rsize / 4;
 
     ibuf.alloc(usize + rsize + 128);
     obuf.allocForCompression(usize + rsize + 128);
 
-    MemBuffer mb_wrkmem;
-    mb_wrkmem.alloc(rsize + EXTRA_INFO + 4); // relocations + original entry point + relocsize
-    SPAN_S_VAR(upx_byte, wrkmem, mb_wrkmem);
-
     fi->seek(adam_offset + sizeof(ih), SEEK_SET);
     fi->readx(ibuf, usize);
-    fi->readx(wrkmem + 4, rsize);
-    const unsigned overlay = file_size - fi->tell();
 
     if (find_le32(ibuf, UPX_MIN(128u, usize), get_le32("UPX ")) >= 0)
         throwAlreadyPacked();
     if (rsize == 0)
         throwCantPack("file is already compressed with another packer");
 
+    MemBuffer mb_relocs(rsize);
+    SPAN_S_VAR(byte, relocs, mb_relocs);
+    fi->readx(relocs, rsize);
+
+    const unsigned overlay = file_size - fi->tell();
     checkOverlay(overlay);
 
-    unsigned relocsize = 0;
-    // if (rsize)
-    {
-        for (unsigned ic = 4; ic <= rsize; ic += 4)
-            set_le32(wrkmem + ic, get_le32(wrkmem + ic) - 4);
-        relocsize =
-            optimizeReloc32(wrkmem + 4, rsize / 4, wrkmem, ibuf, file_size, true, &big_relocs);
-    }
+    for (unsigned ic = 0; ic < relocnum; ic++)
+        set_le32(relocs + 4 * ic, get_le32(relocs + 4 * ic) - 4);
 
-    wrkmem[relocsize++] = 0;
-    set_le32(wrkmem + relocsize, ih.entry); // save original entry point
-    relocsize += 4;
-    set_le32(wrkmem + relocsize, relocsize + 4);
-    relocsize += 4;
-    memcpy(ibuf + usize, wrkmem, relocsize);
+    MemBuffer mb_orelocs(4 * relocnum + 8192); // relocations + extra_info
+    SPAN_S_VAR(byte, orelocs, mb_orelocs);
+    unsigned orelocsize =
+        optimizeReloc(relocnum, relocs, orelocs, ibuf, usize, 32, true, &big_relocs);
+    mb_relocs.dealloc(); // done
+#if 1
+    // write duplicate end marker; why is this here - historical oversight ???
+    orelocs[orelocsize++] = 0;
+#endif
+    // extra_info
+    set_le32(orelocs + orelocsize, ih.entry); // save original entry point
+    orelocsize += 4;
+    set_le32(orelocs + orelocsize, orelocsize + 4); // save orelocsize
+    orelocsize += 4;
+    memcpy(raw_index_bytes(ibuf, usize, orelocsize), orelocs, orelocsize);
+    mb_orelocs.dealloc(); // done
 
     // prepare packheader
-    ph.u_len = usize + relocsize;
+    ph.u_len = usize + orelocsize;
     // prepare filter
     Filter ft(ph.level);
     ft.buf_len = usize;
@@ -247,7 +250,7 @@ void PackTmt::pack(OutputFile *fo) {
     fo->write(loader, e_len);
     fo->write(obuf, ph.c_len);
     fo->write(loader + lsize - d_len, d_len); // decompressor
-    char rel_entry[4];
+    byte rel_entry[4];
     set_le32(rel_entry, 5 + s_point);
     fo->write(rel_entry, sizeof(rel_entry));
 
@@ -281,32 +284,34 @@ void PackTmt::unpack(OutputFile *fo) {
     // decompress
     decompress(ibuf, obuf);
 
-    // decode relocations
-    const unsigned osize = ph.u_len - get_le32(obuf + (ph.u_len - 4));
-    SPAN_P_VAR(upx_byte, relocs, obuf + osize);
-    const unsigned origstart = get_le32(obuf + (ph.u_len - 8));
+    // read extra_info
+    const unsigned orig_entry = mem_size(1, get_le32(obuf + ph.u_len - 8));
+    const unsigned orelocsize = mem_size(1, get_le32(obuf + ph.u_len - 4));
+    const unsigned osize = mem_size(1, ph.u_len - orelocsize);
 
     // unfilter
     if (ph.filter) {
         Filter ft(ph.level);
         ft.init(ph.filter, 0);
-        ft.cto = (unsigned char) ph.filter_cto;
+        ft.cto = (byte) ph.filter_cto;
         if (ph.version < 11)
-            ft.cto = (unsigned char) (get_le32(obuf + (ph.u_len - 12)) >> 24);
-        ft.unfilter(obuf, ptr_udiff_bytes(relocs, obuf));
+            ft.cto = (byte) (get_le32(obuf + ph.u_len - 12) >> 24);
+        ft.unfilter(obuf, osize);
     }
 
     // decode relocations
-    MemBuffer mb_wrkmem;
-    const unsigned relocn = unoptimizeReloc32(relocs, obuf, mb_wrkmem, true);
-    SPAN_S_VAR(upx_byte, wrkmem, mb_wrkmem);
-    for (unsigned ic = 0; ic < relocn; ic++)
-        set_le32(wrkmem + ic * 4, get_le32(wrkmem + ic * 4) + 4);
+    SPAN_S_VAR(const byte, orelocs, raw_index_bytes(obuf, osize, orelocsize), orelocsize);
+    SPAN_S_VAR(byte, reloc_image, raw_index_bytes(obuf, 0, osize), osize);
+    MemBuffer mb_relocs;
+    const unsigned relocnum = unoptimizeReloc(orelocs, mb_relocs, reloc_image, osize, 32, true);
+    SPAN_S_VAR(byte, relocs, mb_relocs);
+    for (unsigned ic = 0; ic < relocnum; ic++)
+        set_le32(relocs + 4 * ic, get_le32(relocs + 4 * ic) + 4);
 
     memcpy(&oh, &ih, sizeof(oh));
     oh.imagesize = osize;
-    oh.entry = origstart;
-    oh.relocsize = relocn * 4;
+    oh.entry = orig_entry;
+    oh.relocsize = relocnum * 4;
 
     const unsigned overlay = file_size - adam_offset - ih.imagesize - ih.relocsize - sizeof(ih);
     checkOverlay(overlay);
@@ -315,7 +320,7 @@ void PackTmt::unpack(OutputFile *fo) {
     if (fo) {
         fo->write(&oh, sizeof(oh));
         fo->write(obuf, osize);
-        fo->write(raw_bytes(wrkmem, relocn * 4), relocn * 4);
+        fo->write(relocs, relocnum * 4);
     }
 
     // copy the overlay

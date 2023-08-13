@@ -25,6 +25,9 @@
    <markus@oberhumer.com>               <ezerotven+github@gmail.com>
  */
 
+// INFO: not thread-safe; assumes a single UiPacker instance that
+// is exclusively called from main thread
+
 #include "conf.h"
 #include "file.h"
 #include "packer.h"
@@ -76,6 +79,7 @@ struct UiPacker::State {
 #endif
 };
 
+// static
 unsigned UiPacker::total_files = 0;
 unsigned UiPacker::total_files_done = 0;
 upx_uint64_t UiPacker::total_c_len = 0;
@@ -92,18 +96,13 @@ unsigned UiPacker::update_fu_len = 0;
 **************************************************************************/
 
 static const char header_line1[] = "        File size         Ratio      Format      Name\n";
-static char header_line2[] = "   --------------------   ------   -----------   -----------\n";
+static const char header_line2[] = "   --------------------   ------   -----------   -----------\n";
 
-static char progress_filler[4 + 1] = ".*[]";
+static const char progress_filler[4 + 1] = ".*[]";
 
-static void init_global_constants(void) {
+static void init_global_constants(void) noexcept {
 #if 0 && (ACC_OS_DOS16 || ACC_OS_DOS32)
     // FIXME: should test codepage here
-
-    static bool done = false;
-    if (done)
-        return;
-    done = true;
 
 #if 1 && (ACC_OS_DOS32) && defined(__DJGPP__)
     /* check for Windows NT/2000/XP */
@@ -157,13 +156,14 @@ static const char *mkline(upx_uint64_t fu_len, upx_uint64_t fc_len, upx_uint64_t
 //
 **************************************************************************/
 
-UiPacker::UiPacker(const Packer *p_) : ui_pass(0), ui_total_passes(0), p(p_), s(nullptr) {
-    init_global_constants();
+UiPacker::UiPacker(const Packer *p_) : p(p_) {
+    static upx_std_once_flag init_done;
+    upx_std_call_once(init_done, init_global_constants);
 
     cb.reset();
 
     s = new State;
-    memset(s, 0, sizeof(*s));
+    mem_clear(s);
     s->msg_buf[0] = '\r';
 
 #if defined(UI_USE_SCREEN)
@@ -183,10 +183,10 @@ UiPacker::UiPacker(const Packer *p_) : ui_pass(0), ui_total_passes(0), p(p_), s(
         s->mode = M_CB_SCREEN;
 }
 
-UiPacker::~UiPacker() {
+UiPacker::~UiPacker() noexcept {
     cb.reset();
-    delete s;
-    s = nullptr;
+    // owner
+    owner_delete(s);
 }
 
 /*************************************************************************
@@ -353,6 +353,7 @@ void UiPacker::endCallback(bool done) {
 // the callback
 **************************************************************************/
 
+/*static*/
 void __acc_cdecl UiPacker::progress_callback(upx_callback_p cb, unsigned isize, unsigned osize) {
     // printf("%6d %6d %d\n", isize, osize, state);
     UiPacker *self = (UiPacker *) cb->user;
@@ -472,7 +473,7 @@ void UiPacker::uiPackEnd(const OutputFile *fo) {
     printSetNl(0);
 }
 
-void UiPacker::uiPackTotal() {
+/*static*/ void UiPacker::uiPackTotal() {
     uiListTotal();
     uiFooter("Packed");
 }
@@ -503,7 +504,7 @@ void UiPacker::uiUnpackEnd(const OutputFile *fo) {
     printSetNl(0);
 }
 
-void UiPacker::uiUnpackTotal() {
+/*static*/ void UiPacker::uiUnpackTotal() {
     uiListTotal(true);
     uiFooter("Unpacked");
 }
@@ -524,7 +525,7 @@ void UiPacker::uiList() {
 
 void UiPacker::uiListEnd() { uiUpdate(); }
 
-void UiPacker::uiListTotal(bool decompress) {
+/*static*/ void UiPacker::uiListTotal(bool decompress) {
     if (opt->verbose >= 1 && total_files >= 2) {
         char name[32];
         upx_safe_snprintf(name, sizeof(name), "[ %u file%s ]", total_files_done,
@@ -559,7 +560,7 @@ void UiPacker::uiTestEnd() {
     uiUpdate();
 }
 
-void UiPacker::uiTestTotal() { uiFooter("Tested"); }
+/*static*/ void UiPacker::uiTestTotal() { uiFooter("Tested"); }
 
 /*************************************************************************
 // info
@@ -586,14 +587,14 @@ bool UiPacker::uiFileInfoStart() {
 
 void UiPacker::uiFileInfoEnd() { uiUpdate(); }
 
-void UiPacker::uiFileInfoTotal() {}
+/*static*/ void UiPacker::uiFileInfoTotal() {}
 
 /*************************************************************************
 // util
 **************************************************************************/
 
-void UiPacker::uiHeader() {
-    static bool done = false;
+/*static*/ void UiPacker::uiHeader() {
+    static upx_std_atomic(bool) done;
     if (done)
         return;
     done = true;
@@ -604,8 +605,8 @@ void UiPacker::uiHeader() {
     }
 }
 
-void UiPacker::uiFooter(const char *t) {
-    static bool done = false;
+/*static*/ void UiPacker::uiFooter(const char *t) {
+    static upx_std_atomic(bool) done;
     if (done)
         return;
     done = true;
@@ -629,7 +630,7 @@ void UiPacker::uiUpdate(upx_off_t fc_len, upx_off_t fu_len) {
     update_u_len = p->ph.u_len;
 }
 
-void UiPacker::uiConfirmUpdate() {
+/*static*/ void UiPacker::uiConfirmUpdate() {
     total_files_done++;
     total_fc_len += update_fc_len;
     total_fu_len += update_fu_len;

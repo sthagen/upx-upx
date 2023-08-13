@@ -78,12 +78,12 @@ int upx_compress(const upx_bytep src, unsigned src_len, upx_bytep dst, unsigned 
     // force users to provide *dst_len
     assert(*dst_len != 0);
 #endif
-    // for UPX, we always require a reasonably sized outbut buffer
+    // for UPX, we always require a reasonably sized output buffer
     assert(*dst_len >= MemBuffer::getSizeForCompression(src_len));
 
     if (!cresult)
         cresult = &cresult_buffer;
-    memset(cresult, 0, sizeof(*cresult));
+    cresult->reset();
 #if 1
     // debugging aid
     cresult->debug.method = method;

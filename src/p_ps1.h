@@ -30,8 +30,6 @@
  */
 
 #pragma once
-#ifndef UPX_P_PS1_H__
-#define UPX_P_PS1_H__ 1
 
 /*************************************************************************
 // ps1/exe
@@ -41,11 +39,11 @@ class PackPs1 final : public Packer {
     typedef Packer super;
 
 public:
-    PackPs1(InputFile *f);
+    explicit PackPs1(InputFile *f);
     virtual int getVersion() const override { return 13; }
     virtual int getFormat() const override { return UPX_F_PS1_EXE; }
     virtual const char *getName() const override { return "ps1/exe"; }
-    virtual const char *getFullName(const options_t *) const override { return "mipsel.r3000-ps1"; }
+    virtual const char *getFullName(const Options *) const override { return "mipsel.r3000-ps1"; }
     virtual const int *getCompressionMethods(int method, int level) const override;
     virtual const int *getFilters() const override;
 
@@ -56,8 +54,8 @@ public:
     virtual int canUnpack() override;
 
 protected:
-    void putBkupHeader(const unsigned char *src, unsigned char *dst, unsigned *len);
-    bool getBkupHeader(unsigned char *src, unsigned char *dst);
+    void putBkupHeader(const byte *src, byte *dst, unsigned *len);
+    bool getBkupHeader(byte *src, byte *dst);
     bool readBkupHeader();
     virtual void buildLoader(const Filter *ft) override;
     bool findBssSection();
@@ -68,7 +66,7 @@ protected:
 
     struct alignas(1) ps1_exe_t {
         // ident string
-        char id[8];
+        byte id[8];
         // is nullptr
         LE32 text;
         // is nullptr
@@ -86,7 +84,7 @@ protected:
         // saved regs on execution
         LE32 sp, fp, gp0, ra, k0;
         // origin Jap/USA/Europe
-        char origin[60];
+        byte origin[60];
         // backup of the original header (epc - is_len)
         // id & the upx header ...
     };
@@ -99,10 +97,10 @@ protected:
     };
 
     struct alignas(1) ps1_exe_chb_t {
-        unsigned char id;
-        unsigned char len;
+        byte id;
+        byte len;
         LE16 ih_csum;
-        unsigned char ih_bkup;
+        byte ih_bkup;
     };
 
     struct alignas(1) bss_nfo {
@@ -125,7 +123,5 @@ protected:
     // filesize-PS_HDR_SIZE
     unsigned fdata_size;
 };
-
-#endif /* already included */
 
 /* vim:set ts=4 sw=4 et: */

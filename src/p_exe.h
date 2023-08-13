@@ -1,4 +1,4 @@
-/* p_exe.h --
+/* p_exe.h -- dos/exe executable format
 
    This file is part of the UPX executable compressor.
 
@@ -26,8 +26,6 @@
  */
 
 #pragma once
-#ifndef UPX_P_EXE_H__
-#define UPX_P_EXE_H__ 1
 
 /*************************************************************************
 // dos/exe
@@ -37,11 +35,11 @@ class PackExe final : public Packer {
     typedef Packer super;
 
 public:
-    PackExe(InputFile *f);
+    explicit PackExe(InputFile *f);
     virtual int getVersion() const override { return 13; }
     virtual int getFormat() const override { return UPX_F_DOS_EXE; }
     virtual const char *getName() const override { return "dos/exe"; }
-    virtual const char *getFullName(const options_t *) const override { return "i086-dos16.exe"; }
+    virtual const char *getFullName(const Options *) const override { return "i086-dos16.exe"; }
     virtual const int *getCompressionMethods(int method, int level) const override;
     virtual const int *getFilters() const override;
 
@@ -63,9 +61,9 @@ public:
 protected:
     struct exe_header_t;
 
-    virtual int readFileHeader(void);
+    int readFileHeader(void);
 
-    virtual int fillExeHeader(struct exe_header_t *) const;
+    int fillExeHeader(struct exe_header_t *) const;
     virtual void buildLoader(const Filter *ft) override;
     virtual Linker *newLinker() const override;
     void addLoaderEpilogue(int flag);
@@ -80,30 +78,28 @@ protected:
         LE16 max;
         LE16 ss;
         LE16 sp;
-        char _[2]; // checksum
+        byte _[2]; // checksum
         LE16 ip;
         LE16 cs;
         LE16 relocoffs;
-        char __[2]; // overlnum
+        byte __[2]; // overlnum
         LE32 firstreloc;
     };
 
     exe_header_t ih, oh;
 
-    unsigned ih_exesize;
-    unsigned ih_imagesize;
-    unsigned ih_overlay;
-    unsigned relocsize;
+    unsigned ih_exesize = 0;
+    unsigned ih_imagesize = 0;
+    unsigned ih_overlay = 0;
+    unsigned relocsize = 0;
 
-    bool has_9a;
-    bool device_driver;
+    bool has_9a = false;
+    bool device_driver = false;
 
     enum { NORELOC = 1, USEJUMP = 2, SS = 4, SP = 8, MINMEM = 16, MAXMEM = 32 };
 
-    unsigned stack_for_lzma; // stack size required for lzma
-    bool use_clear_dirty_stack;
+    unsigned stack_for_lzma = 0; // stack size required for lzma
+    bool use_clear_dirty_stack = false;
 };
-
-#endif /* already included */
 
 /* vim:set ts=4 sw=4 et: */

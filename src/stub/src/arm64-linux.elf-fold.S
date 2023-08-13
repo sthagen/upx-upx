@@ -1,4 +1,4 @@
-//  aarch64-linux.elf-fold.S -- linkage to C code to process Elf binary
+//  arm64-linux.elf-fold.S -- linkage to C code to process Elf binary
 //
 //  This file is part of the UPX executable compressor.
 //
@@ -34,6 +34,8 @@ NBPW= 8
 #include "arch/arm64/v8/macros.S"
 
 sz_Ehdr= 8*NBPW
+e_type= 16
+ET_EXEC= 2
 sz_Phdr= 7*NBPW
   p_vaddr= 4+4+8
   p_filesz= 4+4+8+8+8
@@ -75,9 +77,9 @@ PATH_MAX= 4096
 //@ are uncompressed.
 
 #define OVERHEAD 2048
-#define MAX_ELF_HDR 512
+#include "MAX_ELF_HDR.S"
 
-get_page_size:
+get_page_mask:
         mov x0,#~0  // all 1's; -1
         add x1,x0,#0  // constant is modified to (1+ count)
         lsl x0,x0,x1  // generate the mask
@@ -161,7 +163,7 @@ xPMASK .req x20
 /* Construct arglist for upx_main */
         mov x7,xPMASK
         mov x6,xelfa  // Elf64_Ehdr (reloc if ET_DYN and not pre-link)
-          sub sp,sp,#MAX_ELF_HDR + OVERHEAD  // alloca
+          sub sp,sp,#MAX_ELF_HDR_64 + OVERHEAD  // alloca
         adr x5,f_unfilter
         mov x4,xfexp  // &f_decompress
         mov x3,xauxv  // new &Elf64_auxv_t
@@ -169,11 +171,15 @@ xPMASK .req x20
         mov w1,wLENC  // total size of compressed data
         mov x0,xADRC  // &b_info
         call upx_main
-          add sp,sp,#MAX_ELF_HDR + OVERHEAD  // un-alloca
+          add sp,sp,#MAX_ELF_HDR_64 + OVERHEAD  // un-alloca
         mov xfexp,x0  // entry address
 
 // Discard pages of compressed input data (includes [ADRC,+LENC) )
         ldr x1,[xelfa,#p_memsz+sz_Phdr+sz_Ehdr]  // Phdr[C_TEXT= 1].p_memsz
+        mov x0,xelfa  // hi &Elf64_Ehdr
+        ldrb w2,[xelfa,#e_type]; cmp w2,#ET_EXEC; bne 1f
+        call brk  // static ET_EXEC also sets the brk
+1:
         mov x0,xelfa  // hi &Elf64_Ehdr
         call munmap  // discard C_TEXT compressed data
 
@@ -439,8 +445,12 @@ brk:
 munmap:
         do_sys __NR_munmap; ret
 
-        .globl mprotect
-mprotect:
+// Sometimes Linux enforces page-aligned address
+Pprotect: .globl Pprotect
+mprotect: .globl mprotect
+        and x8,x0,#-1+ (1<<12)  // FIXME: variable PAGE_SIZE
+        sub x0,x0,x8
+        add x1,x1,x8
         do_sys __NR_mprotect; ret
 
 bits_privanon= -4+ fold_begin  // entry stores: MAP_{PRIVATE|ANON}  QNX vs linux
@@ -454,6 +464,9 @@ mmap_privanon: .globl mmap_privanon
 
         .globl mmap
 mmap:
+        and x8,x0,#-1+ (1<<12)  // FIXME: variable PAGE_SIZE
+        sub x0,x0,x8
+        add x1,x1,x8
         do_sys __NR_mmap; ret
 
         .globl unlink

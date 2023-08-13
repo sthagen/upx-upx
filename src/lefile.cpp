@@ -27,18 +27,17 @@
 
 #include "conf.h"
 #include "file.h"
-#include "util/membuffer.h"
 #include "lefile.h"
 
-LeFile::LeFile(InputFile *f) : fif(f), fof(nullptr), le_offset(0), exe_offset(0) {
+LeFile::LeFile(InputFile *f) noexcept : fif(f) {
     COMPILE_TIME_ASSERT(sizeof(le_header_t) == 196)
     COMPILE_TIME_ASSERT(sizeof(le_object_table_entry_t) == 24)
     COMPILE_TIME_ASSERT(sizeof(le_pagemap_entry_t) == 4)
-    memset(&ih, 0, sizeof ih);
-    memset(&oh, 0, sizeof oh);
+    mem_clear(&ih);
+    mem_clear(&oh);
 }
 
-LeFile::~LeFile() {
+LeFile::~LeFile() noexcept {
     delete[] iobject_table;
     delete[] oobject_table;
     delete[] ifpage_table;
@@ -89,7 +88,7 @@ void LeFile::writePageMap() {
 
 void LeFile::readResidentNames() {
     sores_names = ih.entry_table_offset - ih.resident_names_offset;
-    ires_names = New(upx_byte, sores_names);
+    ires_names = New(byte, sores_names);
     fif->seek(le_offset + ih.resident_names_offset, SEEK_SET);
     fif->readx(ires_names, sores_names);
 }
@@ -102,7 +101,7 @@ void LeFile::writeResidentNames() {
 void LeFile::readEntryTable() {
     soentries = ih.fixup_page_table_offset - ih.entry_table_offset;
     fif->seek(le_offset + ih.entry_table_offset, SEEK_SET);
-    ientries = New(upx_byte, soentries);
+    ientries = New(byte, soentries);
     fif->readx(ientries, soentries);
 }
 
@@ -125,7 +124,7 @@ void LeFile::writeFixupPageTable() {
 
 void LeFile::readFixups() {
     sofixups = get_le32(ifpage_table + pages) - get_le32(ifpage_table);
-    ifixups = New(upx_byte, sofixups);
+    ifixups = New(byte, sofixups);
     fif->seek(le_offset + ih.fixup_record_table_offset, SEEK_SET);
     fif->readx(ifixups, sofixups);
 }
@@ -146,9 +145,11 @@ unsigned LeFile::getImageSize() const {
 
 void LeFile::readImage() {
     soimage = pages * mps;
+    if (!soimage) // late detection, but protect against .alloc(0)
+        throwCantPack("no soimage");
     mb_iimage.alloc(soimage);
     mb_iimage.clear();
-    iimage = mb_iimage;
+    iimage = mb_iimage; // => now a SPAN_S
 
     unsigned ic, jc;
     for (ic = jc = 0; ic < pages; ic++) {
@@ -157,7 +158,7 @@ void LeFile::readImage() {
                           (ipm_entries[ic].m * 0x100 + ipm_entries[ic].l - 1) * mps,
                       SEEK_SET);
             auto bytes = ic != pages - 1 ? mps : ih.bytes_on_last_page;
-            fif->readx(raw_bytes(iimage + jc, bytes), bytes);
+            fif->readx(iimage + jc, bytes);
         }
         jc += mps;
     }
@@ -165,13 +166,13 @@ void LeFile::readImage() {
 
 void LeFile::writeImage() {
     if (fof && oimage != nullptr)
-        fof->write(raw_bytes(oimage, soimage), soimage);
+        fof->write(oimage, soimage);
 }
 
 void LeFile::readNonResidentNames() {
     if (ih.non_resident_name_table_length) {
         sononres_names = ih.non_resident_name_table_length;
-        inonres_names = New(upx_byte, sononres_names);
+        inonres_names = New(byte, sononres_names);
         fif->seek(exe_offset + ih.non_resident_name_table_offset, SEEK_SET);
         fif->readx(inonres_names, sononres_names);
     }
@@ -184,7 +185,7 @@ void LeFile::writeNonResidentNames() {
 
 bool LeFile::readFileHeader() {
 #define H(x) get_le16(header + 2 * (x))
-    upx_byte header[0x40];
+    byte header[0x40];
     le_offset = exe_offset = 0;
     int ic;
 
@@ -217,6 +218,11 @@ bool LeFile::readFileHeader() {
         return false;
     fif->seek(le_offset, SEEK_SET);
     fif->readx(&ih, sizeof(ih));
+    if (mps < 512 || mps > 2097152 || (mps & (mps - 1)) != 0)
+        throwCantPack("file header invalid page size");
+    if (ih.bytes_on_last_page > mps || pages == 0)
+        throwCantPack("bad file header");
+    (void) mem_size(mps, pages); // assert size
     return true;
 #undef H
 }
@@ -224,7 +230,7 @@ bool LeFile::readFileHeader() {
 void LeFile::writeFile(OutputFile *f, bool le) {
     fof = f;
     memcpy(&oh, &ih,
-           (char *) &oh.memory_pages - (char *) &oh); // copy some members of the orig. header
+           (charptr) &oh.memory_pages - (charptr) &oh); // copy some members of the orig. header
     oh.memory_page_size = mps;
     oh.object_table_offset = sizeof(oh);
     oh.object_table_entries = soobject_table;
@@ -257,12 +263,12 @@ void LeFile::writeFile(OutputFile *f, bool le) {
 
 void LeFile::countFixups(unsigned *counts) const {
     const unsigned o = objects;
-    memset(counts, 0, sizeof(unsigned) * (o + 2));
+    memset(counts, 0, mem_size(sizeof(unsigned), o + 2));
     // counts[0..objects-1] - # of 32-bit offset relocations in for that objects
     // counts[objects]      - # of selector fixups
     // counts[objects+1]    - # of self-relative fixups
 
-    const upx_byte *fix = ifixups;
+    const byte *fix = ifixups;
     const unsigned sfixups = get_le32(ifpage_table + pages);
     unsigned ll;
 

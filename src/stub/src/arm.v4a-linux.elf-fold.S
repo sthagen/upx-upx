@@ -27,13 +27,18 @@
 @  <jreiser@users.sourceforge.net>
 @
 
+NBPW= 4
+
 #define ARM_OLDABI 1
 #include "arch/arm/v4a/macros.S"
 #define bkpt .long 0xe7f001f0  /* reserved instr; Linux GNU eabi breakpoint */
 
-sz_Elf32_Ehdr = 13*4
-sz_Elf32_Phdr =  8*4
-p_vaddr= 4+4
+sz_Elf32_Ehdr = 13*NBPW
+e_type= 16
+ET_EXEC= 2
+sz_Elf32_Phdr =  8*NBPW
+p_vaddr= 2*NBPW
+p_memsz= 5*NBPW
 sz_l_info = 12
 sz_p_info = 12
 sz_b_info = 12
@@ -61,8 +66,8 @@ PATH_MAX= 4096
 #endif  /*}*/
 
 #define OVERHEAD 2048
-#define MAX_ELF_HDR 512
 #define call bl
+#include "MAX_ELF_HDR.S"
 
 mflg_data: .int MAP_PRIVATE|MAP_ANONYMOUS  @ overwritten for QNX vs Linux
 
@@ -161,7 +166,7 @@ link_ok:
         @ldr r5,[sp,#F_f_exp]
         ldmia sp!,{r4,r10,r11}  @ LENX, ADRX, elfaddr
 F_delta= 3*4
-        sub sp,sp,#MAX_ELF_HDR + OVERHEAD  @ alloca
+        sub sp,sp,#MAX_ELF_HDR_32 + OVERHEAD  @ alloca
         ldr r9,[r10,#sz_cpr]  @ xi.size  of ELF headers
         mov r8,sp  @ xo.ptr
         ldr r7,[r10,#sz_unc]  @ xo.size
@@ -178,18 +183,18 @@ F_delta= 3*4
 // xo={sz_unc, &tmp_ehdr}, xi={sz_cpr, &b_info}, elfaddr
         call upx_main
         add sp,sp,#(9-4)*4
-        add sp,sp,#MAX_ELF_HDR + OVERHEAD  @ un-alloca
+        add sp,sp,#MAX_ELF_HDR_32 + OVERHEAD  @ un-alloca
 #if DEBUG  //{
         stmdb sp!,{TRACE_REGS}; mov r0,#0x14; bl trace
 #endif  //}
         str r0,[sp,#F_entry - F_delta]  @ entry address
 
 // Discard pages of compressed input data (includes [ADRC,+LENC) )
-        ldr r1,[r11,#p_vaddr+sz_Elf32_Phdr+sz_Elf32_Ehdr]  // Phdr[C_TEXT= 1].p_vaddr
-        ldr r2,[r11,#p_vaddr              +sz_Elf32_Ehdr]  // Phdr[C_BASE= 0].p_vaddr
-        mov r0,r11  // hi &Elf32_Ehdr
-        sub r1,r1,r2
-        call munmap  // discard C_TEXT compressed data
+        ldr r1,[r11,#p_memsz+sz_Elf32_Phdr+sz_Elf32_Ehdr]  // Phdr[C_TEXT= 1].p_memsz
+        //ldrb r0,[r11,#e_type]; cmp r0,#ET_EXEC; bne 1f
+        mov r0,r11; call brk  // also sets the brk
+1:
+        mov r0,r11; call munmap  // discard C_TEXT compressed data
 
 // Map 1 page of /proc/self/exe so that it does not disappear
         ldr r4,[sp],#4  @ pop r4,F_fd
@@ -231,7 +236,7 @@ F_delta= 3*4
 sweep:
         ldr r7,[sp],#-(1<<5)  @ extend stack; read allocate 32 bytes
         str r7,[sp]  @ make it dirty
-        ldr r7,[sp]  @ read alocate again in case dirtying caused COW split
+        ldr r7,[sp]  @ read allocate again in case dirtying caused COW split
         cmp r12,sp; blo sweep
 
         add sp,sp,#(1<<18)  @ pop stack
@@ -247,7 +252,7 @@ sweep:
         mov r7,#0
         mov r12,#0
 #endif  /*}*/
-        ldr pc,[r2,#4 -2*4]  @ Elf32_auxv_t[AT_NULL@.a_type].a_val
+        mov pc,lr
 
 proc_self_exe:
         .ascii "/proc/self/exe"  @ no terminator
@@ -409,14 +414,14 @@ readlink:
 munmap:
         do_sys __NR_munmap; ret
 
-        .globl mprotect
-mprotect:
+// Sometimes Linux enforces page-aligned address
+Pprotect: .globl Pprotect
+mprotect: .globl mprotect
+        ldr r12,m_off4k
+        and r12,r12,r0  // lo frag
+        sub r0,r0,r12  // page align lo end
+        add r1,r1,r12
         do_sys __NR_mprotect; ret
-
-        .globl __clear_cache
-__clear_cache:
-        mov r2,#0
-        do_sys2 __ARM_NR_cacheflush; ret
 
         .globl mmap
 mmap:
@@ -425,8 +430,23 @@ mmap:
         ldr r4,[sp,#3*4]
         mov r5,r5,lsr #12  @ convert to page number
 mmap_do:
+        ldr r12,m_off4k
+        and r12,r12,r0  // lo frag
+        sub r0,r0,r12  // page align lo end
+        add r1,r1,r12
         do_sys __NR_mmap2
         ldmia sp!,{r4,r5,pc}
+
+m_off4k:
+        .word -1+ (1<<PAGE_SHIFT)  // offset mask for 4KiB
+
+        do_sys __NR_mmap2
+        ldmia sp!,{r4,r5,pc}
+
+        .globl __clear_cache
+__clear_cache:
+        mov r2,#0
+        do_sys2 __ARM_NR_cacheflush; ret
 
 get_sys_munmap: .globl get_sys_munmap  // r0= system call instruction
 #if defined(ARMEL_DARWIN)  /*{*/
@@ -450,6 +470,7 @@ mmap_privanon: .globl mmap_privanon
 
 #if 1|DEBUG  /*{*/
 
+__udivsi3: .globl __udivsi3
 div10: .globl div10
         mov ip,r0  @ extra copy used at end
         sub r1,r1,r1  @ hi

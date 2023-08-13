@@ -25,22 +25,19 @@
    <markus@oberhumer.com>               <ezerotven+github@gmail.com>
  */
 
-
 #include "conf.h"
 #include "packer.h"
 #include "linker.h"
-//#include "filter.h"
-
 
 /*************************************************************************
 // compression method util
 **************************************************************************/
 
-bool Packer::isValidCompressionMethod(int method)
+/*static*/ bool Packer::isValidCompressionMethod(int method)
 {
     if (M_IS_LZMA(method))
         return true;
-    return (method >= M_NRV2B_LE32 && method <= M_LZMA);
+    return method >= M_NRV2B_LE32 && method <= M_LZMA;
 }
 
 
@@ -95,6 +92,28 @@ const int *Packer::getDefaultCompressionMethods_le32(int method, int level, int 
 /*************************************************************************
 // loader util
 **************************************************************************/
+
+static bool callsManyTimes(int format) {
+    return
+        UPX_F_LINUX_ELF_i386   ==format
+    ||  UPX_F_LINUX_ELFI_i386  ==format
+    ||  UPX_F_LINUX_ELF64_AMD64==format
+    ||  UPX_F_LINUX_ELF32_ARM  ==format
+    ||  UPX_F_LINUX_ELF32_PPC32   ==format
+    ||  UPX_F_LINUX_ELF64_PPC64LE ==format
+    ||  UPX_F_LINUX_ELF32_ARMEB==format
+    ||  UPX_F_BSD_ELF_i386     ==format
+    ||  UPX_F_VMLINUX_ARM      ==format
+    ||  UPX_F_VMLINUX_ARMEB    ==format
+    ||  UPX_F_VMLINUX_PPC32    ==format
+    ||  UPX_F_VMLINUX_PPC64LE  ==format
+    ||  UPX_F_VMLINUZ_ARM      ==format
+    ||  UPX_F_MACH_PPC32       ==format
+    ||  UPX_F_MACH_PPC64       ==format
+    ||  UPX_F_MACH_i386        ==format
+    ||  UPX_F_DYLIB_i386       ==format
+    ;
+}
 
 const char *Packer::getDecompressorSections() const
 {
@@ -191,33 +210,17 @@ const char *Packer::getDecompressorSections() const
     static const char lzma_elf_fast[] =
         "LZMA_ELF00,LZMA_DEC20,LZMA_DEC30";
 
-    if (ph.method == M_NRV2B_LE32)
+    unsigned const method = forced_method(ph.method);
+    if (method == M_NRV2B_LE32)
         return opt->small ? nrv2b_le32_small : nrv2b_le32_fast;
-    if (ph.method == M_NRV2D_LE32)
+    if (method == M_NRV2D_LE32)
         return opt->small ? nrv2d_le32_small : nrv2d_le32_fast;
-    if (ph.method == M_NRV2E_LE32)
+    if (method == M_NRV2E_LE32)
         return opt->small ? nrv2e_le32_small : nrv2e_le32_fast;
-//    if (ph.method == M_CL1B_LE32)
+//    if (method == M_CL1B_LE32)
 //        return opt->small ? cl1b_le32_small  : cl1b_le32_fast;
-    if (M_IS_LZMA(ph.method)) {
-        if (UPX_F_LINUX_ELF_i386   ==ph.format
-        ||  UPX_F_LINUX_ELFI_i386  ==ph.format
-        ||  UPX_F_LINUX_ELF64_AMD  ==ph.format
-        ||  UPX_F_LINUX_ELF32_ARMEL==ph.format
-        ||  UPX_F_LINUX_ELFPPC32   ==ph.format
-        ||  UPX_F_LINUX_ELFPPC64LE ==ph.format
-        ||  UPX_F_LINUX_ELF32_ARMEB==ph.format
-        ||  UPX_F_BSD_ELF_i386     ==ph.format
-        ||  UPX_F_VMLINUZ_ARMEL    ==ph.format
-        ||  UPX_F_VMLINUX_ARMEL    ==ph.format
-        ||  UPX_F_VMLINUX_ARMEB    ==ph.format
-        ||  UPX_F_VMLINUX_PPC32    ==ph.format
-        ||  UPX_F_VMLINUX_PPC64LE  ==ph.format
-        ||  UPX_F_MACH_PPC32       ==ph.format
-        ||  UPX_F_MACH_PPC64       ==ph.format
-        ||  UPX_F_MACH_i386        ==ph.format
-        ||  UPX_F_DYLIB_i386       ==ph.format
-    ) {
+    if (M_IS_LZMA(method)) {
+        if (callsManyTimes(ph.format)) {
             return opt->small ? lzma_elf_small  : lzma_elf_fast;
         }
         return opt->small ? lzma_small  : lzma_fast;
@@ -243,24 +246,7 @@ unsigned Packer::getDecompressorWrkmemSize() const
 
 void Packer::defineDecompressorSymbols()
 {
-    if (UPX_F_LINUX_ELF_i386   ==ph.format
-    ||  UPX_F_LINUX_ELFI_i386  ==ph.format
-    ||  UPX_F_LINUX_ELF64_AMD  ==ph.format
-    ||  UPX_F_LINUX_ELF32_ARMEL==ph.format
-    ||  UPX_F_LINUX_ELFPPC32   ==ph.format
-    ||  UPX_F_LINUX_ELFPPC64LE ==ph.format
-    ||  UPX_F_LINUX_ELF32_ARMEB==ph.format
-    ||  UPX_F_BSD_ELF_i386     ==ph.format
-    ||  UPX_F_VMLINUZ_ARMEL    ==ph.format
-    ||  UPX_F_VMLINUX_ARMEL    ==ph.format
-    ||  UPX_F_VMLINUX_ARMEB    ==ph.format
-    ||  UPX_F_VMLINUX_PPC32    ==ph.format
-    ||  UPX_F_VMLINUX_PPC64LE  ==ph.format
-    ||  UPX_F_MACH_PPC32       ==ph.format
-    ||  UPX_F_MACH_PPC64       ==ph.format
-    ||  UPX_F_MACH_i386        ==ph.format
-    ||  UPX_F_DYLIB_i386       ==ph.format
-    ) {
+    if (callsManyTimes(ph.format)) {
         // ELF calls the decompressor many times; the parameters change!
         return;
     }
@@ -271,7 +257,7 @@ void Packer::defineDecompressorSymbols()
             (res->lit_context_bits << 0) |
             (res->lit_pos_bits << 8) |
             (res->pos_bits << 16);
-        if (linker->bele->isBE()) // big endian - bswap32
+        if (bele->isBE()) // big endian - bswap32
             properties = bswap32(properties);
 
         linker->defineSymbol("lzma_properties", properties);

@@ -34,6 +34,11 @@
 #endif  /*}*/
 
 #include "include/linux.h"
+// Pprotect is mprotect, but page-aligned on the lo end (Linux requirement)
+unsigned Pprotect(void *, size_t, unsigned);
+#if defined(__mips__)  //{
+  #define Pprotect mprotect
+#endif  //}
 void *mmap(void *, size_t, int, int, int, off_t);
 #if defined(__i386__) || defined(__mips__) || defined(__powerpc__) //{
 #  define mmap_privanon(addr,len,prot,flgs) mmap((addr),(len),(prot), \
@@ -215,8 +220,7 @@ done:
  }
 #endif  /*}*/
 
-#define MAX_ELF_HDR 512  // Elf32_Ehdr + n*Elf32_Phdr must fit in this
-
+#include "MAX_ELF_HDR.c"
 
 /*************************************************************************
 // "file" util
@@ -270,13 +274,6 @@ err_exit(int a)
     exit(127);
 }
 #endif  //}
-
-static void *
-do_brk(void *addr)
-{
-    return brk(addr);
-}
-
 
 /*************************************************************************
 // UPX & NRV stuff
@@ -399,7 +396,7 @@ make_hatch_x86(Elf32_Phdr const *const phdr, ptrdiff_t reloc)
                 * hatch  = escape;
             }
             if (xprot) {
-                mprotect(hatch, 1*sizeof(unsigned), PROT_EXEC|PROT_READ);
+                Pprotect(hatch, 1*sizeof(unsigned), PROT_EXEC|PROT_READ);
             }
             DPRINTF(" hatch at %%p\\n", hatch);
         }
@@ -440,14 +437,16 @@ make_hatch_arm(
         ||   ( (hatch = (void *)(&((Elf32_Ehdr *)phdr->p_vaddr + reloc)->e_ident[8])),
                 (phdr->p_offset==0) )
         // Allocate and use a new page.
-        ||   (  xprot = 1, hatch = mmap(0, PAGE_SIZE, PROT_WRITE|PROT_READ,
+        // Linux on ARM wants PROT_EXEC or else __clear_cache does not work?
+        ||   (  xprot = 1, hatch = mmap(0, PAGE_SIZE, PROT_EXEC|PROT_WRITE|PROT_READ,
                 MAP_PRIVATE|MAP_ANONYMOUS, -1, 0) )
         ) {
+            hatch = (unsigned *)(~3ul & (3+ (unsigned long)hatch));
             hatch[0] = sys_munmap;  // syscall __NR_unmap
             hatch[1] = 0xe1a0f00e;  // mov pc,lr
-            __clear_cache(&hatch[0], &hatch[2]);  // ? needed before mprotect()
+            __clear_cache(&hatch[0], &hatch[2]);  // ? needed before Pprotect()
             if (xprot) {
-                mprotect(hatch, 2*sizeof(unsigned), PROT_EXEC|PROT_READ);
+                Pprotect(hatch, 2*sizeof(unsigned), PROT_EXEC|PROT_READ);
             }
         }
         else {
@@ -476,13 +475,14 @@ make_hatch_mips(
         ||   (  xprot = 1, hatch = mmap(0, PAGE_SIZE, PROT_WRITE|PROT_READ,
                 MAP_PRIVATE|MAP_ANONYMOUS, -1, 0) )
         ) {
+            hatch = (unsigned *)(~3ul & (3+ (unsigned long)hatch));
             hatch[0]= 0x0000000c;  // syscall
 #define RS(r) ((037&(r))<<21)
 #define JR 010
             hatch[1] = RS(30)|JR;  // jr $30  # s8
             hatch[2] = 0x00000000;  //   nop
             if (xprot) {
-                mprotect(hatch, 3*sizeof(unsigned), PROT_EXEC|PROT_READ);
+                Pprotect(hatch, 3*sizeof(unsigned), PROT_EXEC|PROT_READ);
             }
         }
         else {
@@ -514,10 +514,11 @@ make_hatch_ppc32(
         ||   (  xprot = 1, hatch = mmap(0, PAGE_SIZE, PROT_WRITE|PROT_READ,
                 MAP_PRIVATE|MAP_ANONYMOUS, -1, 0) )
         ) {
+            hatch = (unsigned *)(~3ul & (3+ (unsigned long)hatch));
             hatch[0] = 0x44000002;  // sc
             hatch[1] = 0x4e800020;  // blr
             if (xprot) {
-                mprotect(hatch, 2*sizeof(unsigned), PROT_EXEC|PROT_READ);
+                Pprotect(hatch, 2*sizeof(unsigned), PROT_EXEC|PROT_READ);
             }
         }
         else {
@@ -709,11 +710,7 @@ do_xmap(int const fdi, Elf32_Ehdr const *const ehdr, Extent *const xi,
     if (xi && PT_PHDR==phdr->p_type) {
         auxv_up(av, AT_PHDR, phdr->p_vaddr + reloc);
     } else
-    if (PT_LOAD==phdr->p_type
-#if defined(__arm__)  /*{*/
-         &&  phdr->p_memsz
-#endif  /*}*/
-        ) {
+    if (PT_LOAD==phdr->p_type && phdr->p_memsz != 0) {
         if (xi && !phdr->p_offset /*&& ET_EXEC==ehdr->e_type*/) { // 1st PT_LOAD
             // ? Compressed PT_INTERP must not overwrite values from compressed a.out?
             auxv_up(av, AT_PHDR, phdr->p_vaddr + reloc + ehdr->e_phoff);
@@ -741,8 +738,17 @@ do_xmap(int const fdi, Elf32_Ehdr const *const ehdr, Extent *const xi,
 #  define LEN_OVER 0
 #endif  /*}*/
 
-        if (xi) { // compresed source: mprotect(,,prot) later
+        DPRINTF("    prot=%%x\n",
+#if defined(__arm__)  //{
+                    ((PF_X & phdr->p_flags) ? PROT_EXEC : 0) |
+#endif  //}
+                    PROT_WRITE | PROT_READ);
+
+        if (xi) { // compressed source: Pprotect(,,prot) later
             if (addr != mmap_privanon(addr, LEN_OVER + mlen,
+#if defined(__arm__)  //{
+                    ((PF_X & phdr->p_flags) ? PROT_EXEC : 0) |
+#endif  //}
                     PROT_WRITE | PROT_READ, MAP_FIXED) )
                 err_exit(6);
             unpackExtent(xi, &xo, (f_expand *)fdi,
@@ -786,7 +792,7 @@ do_xmap(int const fdi, Elf32_Ehdr const *const ehdr, Extent *const xi,
                 auxv_up(av, AT_NULL, (unsigned)hatch);
             }
 #endif  /*}*/
-            if (0!=mprotect(addr, mlen, prot)) {
+            if (0!=Pprotect(addr, mlen, prot)) {
                 err_exit(10);
 ERR_LAB
             }
@@ -810,7 +816,8 @@ ERR_LAB
     }
     if (xi && ET_DYN!=ehdr->e_type) {
         // Needed only if compressed shell script invokes compressed shell.
-        do_brk((void *)v_brk);
+        // Besides, fold.S needs _Ehdr that is tossed
+        // do_brk((void *)v_brk);
     }
     if (0!=p_reloc) {
         *p_reloc = reloc;
@@ -908,7 +915,7 @@ void *upx_main(
 #endif  //}
 
 #if !defined(__mips__) && !defined(__powerpc__)  /*{*/
-    Elf32_Ehdr *const ehdr = (Elf32_Ehdr *)(void *)xo.buf;  // temp char[MAX_ELF_HDR+OVERHEAD]
+    Elf32_Ehdr *const ehdr = (Elf32_Ehdr *)(void *)xo.buf;  // temp char[MAX_ELF_HDR_32+OVERHEAD]
     // sizeof(Ehdr+Phdrs),   compressed; including b_info header
     size_t const sz_first = xi.size;
 #endif  /*}*/
@@ -927,9 +934,9 @@ void *upx_main(
     xj.buf = CONST_CAST(char *, bi); xj.size = sizeof(*bi) + bi->sz_cpr;
 #endif  //}
 
-    DPRINTF("upx_main av=%%p  szc=%%x  f_exp=%%p  f_unf=%%p  "
+    DPRINTF("upx_main@%%p av=%%p  szc=%%x  f_exp=%%p  f_unf=%%p  "
             "  xo=%%p(%%x %%p)  xi=%%p(%%x %%p)  elfaddr=%%x\\n",
-        av, sz_compressed, f_exp, f_unf, &xo, xo.size, xo.buf,
+        upx_main, av, sz_compressed, f_exp, f_unf, &xo, xo.size, xo.buf,
         &xi, xi.size, xi.buf, elfaddr);
 
 #if defined(__mips__)  //{
@@ -964,7 +971,7 @@ void *upx_main(
         if (0 > fdi) {
             err_exit(18);
         }
-        if (MAX_ELF_HDR!=read(fdi, (void *)ehdr, MAX_ELF_HDR)) {
+        if (MAX_ELF_HDR_32!=read(fdi, (void *)ehdr, MAX_ELF_HDR_32)) {
 ERR_LAB
             err_exit(19);
         }

@@ -26,8 +26,6 @@
  */
 
 #pragma once
-#ifndef UPX_UTIL_H__
-#define UPX_UTIL_H__ 1
 
 /*************************************************************************
 // assert sane memory buffer sizes to protect against integer overflows
@@ -39,9 +37,6 @@ inline bool mem_size_valid_bytes(upx_uint64_t bytes) noexcept { return bytes <= 
 
 bool mem_size_valid(upx_uint64_t element_size, upx_uint64_t n, upx_uint64_t extra1 = 0,
                     upx_uint64_t extra2 = 0) noexcept;
-
-// "new" with asserted size; will throw on invalid size
-#define New(type, n) new type[mem_size_get_n(sizeof(type), n)]
 
 // will throw on invalid size
 upx_rsize_t mem_size(upx_uint64_t element_size, upx_uint64_t n, upx_uint64_t extra1,
@@ -71,11 +66,26 @@ inline void mem_size_assert(upx_uint64_t element_size, upx_uint64_t n) {
     (void) mem_size(element_size, n); // assert size
 }
 
-// will throw on invalid size
-inline void mem_clear(void *p, size_t n) {
-    (void) mem_size(1, n); // assert size
-    memset(p, 0, n);
+// "new" with asserted size; will throw on invalid size
+#if DEBUG
+template <class T>
+T *NewArray(upx_uint64_t n) {
+    size_t bytes = mem_size(sizeof(T), n); // assert size
+    T *array = new T[size_t(n)];
+    if (array != nullptr && bytes > 0) {
+        memset(array, 0xfb, bytes);
+        (void) VALGRIND_MAKE_MEM_UNDEFINED(array, bytes);
+    }
+    return array;
 }
+#define New(type, n) (NewArray<type>((n)))
+#else
+#define New(type, n) new type[mem_size_get_n(sizeof(type), (n))]
+#endif
+
+/*************************************************************************
+// ptr util
+**************************************************************************/
 
 // ptrdiff_t with nullptr checks and asserted size; will throw on failure
 // NOTE: returns size_in_bytes, not number of elements!
@@ -94,19 +104,109 @@ ptr_udiff(const T *a, const U *b) {
     return ptr_udiff_bytes(a, b);
 }
 
+// check that buffers do not overlap; will throw on error
+noinline void uintptr_check_no_overlap(upx_uintptr_t a, size_t a_size, upx_uintptr_t b,
+                                       size_t b_size);
+noinline void uintptr_check_no_overlap(upx_uintptr_t a, size_t a_size, upx_uintptr_t b,
+                                       size_t b_size, upx_uintptr_t c, size_t c_size);
+
+forceinline void ptr_check_no_overlap(const void *a, size_t a_size, const void *b, size_t b_size) {
+    uintptr_check_no_overlap((upx_uintptr_t) a, a_size, (upx_uintptr_t) b, b_size);
+}
+forceinline void ptr_check_no_overlap(const void *a, size_t a_size, const void *b, size_t b_size,
+                                      const void *c, size_t c_size) {
+    uintptr_check_no_overlap((upx_uintptr_t) a, a_size, (upx_uintptr_t) b, b_size,
+                             (upx_uintptr_t) c, c_size);
+}
+
+/*************************************************************************
+// stdlib
+**************************************************************************/
+
+void *upx_calloc(size_t n, size_t element_size);
+
+void upx_memswap(void *a, void *b, size_t n);
+
+void upx_stable_sort(void *array, size_t n, size_t element_size,
+                     int (*compare)(const void *, const void *));
+
+/*************************************************************************
+// OwningPointer(T)
+// simple pointer type alias to explicitly mark ownership of objects; purely
+// cosmetic to improve source code readability, no real functionality
+**************************************************************************/
+
+#if 0
+
+// this works
+#define OwningPointer(T) T *
+
+#elif !(DEBUG)
+
+// this also works
+template <class T>
+using OwningPointer = T *;
+#define OwningPointer(T) OwningPointer<T>
+
+#else
+
+// also works: a trivial class with just a number of no-ops
+template <class T>
+struct OwningPointer final {
+    static_assert(std::is_class_v<T>); // UPX convention
+    typedef typename std::add_lvalue_reference<T>::type reference;
+    typedef typename std::add_lvalue_reference<const T>::type const_reference;
+    typedef typename std::add_pointer<T>::type pointer;
+    typedef typename std::add_pointer<const T>::type const_pointer;
+    pointer ptr;
+    inline OwningPointer(pointer p) noexcept : ptr(p) {}
+    inline operator pointer() noexcept { return ptr; }
+    inline operator const_pointer() const noexcept { return ptr; }
+    inline reference operator*() noexcept { return *ptr; }
+    inline const_reference operator*() const noexcept { return *ptr; }
+    inline pointer operator->() noexcept { return ptr; }
+    inline const_pointer operator->() const noexcept { return ptr; }
+};
+// must overload mem_clear()
+template <class T>
+inline void mem_clear(OwningPointer<T> object) noexcept {
+    mem_clear((T *) object);
+}
+#define OwningPointer(T) OwningPointer<T>
+
+#endif
+
+template <class T>
+inline void owner_delete(OwningPointer(T)(&object)) noexcept {
+    static_assert(std::is_class_v<T>); // UPX convention
+    static_assert(std::is_nothrow_destructible_v<T>);
+    if (object != nullptr) {
+        delete (T *) object;
+        object = nullptr;
+    }
+}
+
+// disable some overloads
+#if defined(__clang__) || __GNUC__ != 7
+template <class T>
+inline void owner_delete(T (&array)[]) noexcept DELETED_FUNCTION;
+#endif
+template <class T, size_t N>
+inline void owner_delete(T (&array)[N]) noexcept DELETED_FUNCTION;
+
 /*************************************************************************
 // misc. support functions
 **************************************************************************/
 
-int find(const void *b, int blen, const void *what, int wlen);
-int find_be16(const void *b, int blen, unsigned what);
-int find_be32(const void *b, int blen, unsigned what);
-int find_be64(const void *b, int blen, upx_uint64_t what);
-int find_le16(const void *b, int blen, unsigned what);
-int find_le32(const void *b, int blen, unsigned what);
-int find_le64(const void *b, int blen, upx_uint64_t what);
+int find(const void *b, int blen, const void *what, int wlen) noexcept;
+int find_be16(const void *b, int blen, unsigned what) noexcept;
+int find_be32(const void *b, int blen, unsigned what) noexcept;
+int find_be64(const void *b, int blen, upx_uint64_t what) noexcept;
+int find_le16(const void *b, int blen, unsigned what) noexcept;
+int find_le32(const void *b, int blen, unsigned what) noexcept;
+int find_le64(const void *b, int blen, upx_uint64_t what) noexcept;
 
-int mem_replace(void *b, int blen, const void *what, int wlen, const void *r);
+int mem_replace(void *b, int blen, const void *what, int wlen, const void *r) noexcept;
 
 char *fn_basename(const char *name);
 int fn_strcmp(const char *n1, const char *n2);
@@ -121,7 +221,5 @@ bool makebakname(char *ofilename, size_t size, const char *ifilename, bool force
 unsigned get_ratio(upx_uint64_t u_len, upx_uint64_t c_len);
 bool set_method_name(char *buf, size_t size, int method, int level);
 void center_string(char *buf, size_t size, const char *s);
-
-#endif /* already included */
 
 /* vim:set ts=4 sw=4 et: */

@@ -91,6 +91,17 @@ TEST_CASE("basic xspan usage") {
         CHECK_NOTHROW(raw_bytes(a0, 0));
         CHECK_THROWS(raw_bytes(a0, 1));
         CHECK_THROWS(raw_index_bytes(a0, 0, 0));
+
+        CHECK(raw_bytes(b0, 0) == buf);
+        CHECK(raw_bytes(bp, 0) == buf);
+        // info: these will fail if we ever add an overload for bounded-arrays
+#if WITH_XSPAN >= 2
+        CHECK(b0.raw_size_in_bytes() == 0u);
+        CHECK(bp.raw_size_in_bytes() == 0u);
+#endif
+        CHECK(raw_bytes(b0, 999999) == buf);
+        CHECK(raw_bytes(bp, 999999) == buf);
+
         CHECK(raw_bytes(c0, 4) == buf);
         CHECK(raw_index_bytes(c0, 1, 3) == buf + 1);
         CHECK(raw_bytes(cp, 4) == buf);
@@ -104,8 +115,6 @@ TEST_CASE("basic xspan usage") {
     }
 
     SUBCASE("XSPAN_x_VAR") {
-        XSPAN_0_VAR(char, a0, nullptr);
-
         XSPAN_0_VAR(char, b0, buf);
         XSPAN_P_VAR(char, bp, buf);
 
@@ -124,7 +133,6 @@ TEST_CASE("basic xspan usage") {
         XSPAN_0_VAR(const char, const z0p, yp);
         XSPAN_0_VAR(const char, const z0s, xs);
 
-        CHECK((a0 == nullptr));
         CHECK(c0 == b0);
         CHECK(cp == bp);
         CHECK(cs == bp);
@@ -133,9 +141,24 @@ TEST_CASE("basic xspan usage") {
         CHECK(x0 == z0p);
         CHECK(xp == z0s);
 
+#if WITH_XSPAN >= 1 || __cplusplus >= 201103L
+        XSPAN_0_VAR(char, a0, nullptr);
+        CHECK((a0 == nullptr));
         CHECK_NOTHROW(raw_bytes(a0, 0));
         CHECK_THROWS(raw_bytes(a0, 1));
         CHECK_THROWS(raw_index_bytes(a0, 0, 0));
+#endif
+
+        CHECK(raw_bytes(b0, 0) == buf);
+        CHECK(raw_bytes(bp, 0) == buf);
+        // info: these will fail if we ever add an overload for bounded-arrays
+#if WITH_XSPAN >= 2
+        CHECK(b0.raw_size_in_bytes() == 0u);
+        CHECK(bp.raw_size_in_bytes() == 0u);
+#endif
+        CHECK(raw_bytes(b0, 999999) == buf);
+        CHECK(raw_bytes(bp, 999999) == buf);
+
         CHECK(raw_bytes(c0, 4) == buf);
         CHECK(raw_index_bytes(c0, 1, 3) == buf + 1);
         CHECK(raw_bytes(cp, 4) == buf);
@@ -592,6 +615,8 @@ TEST_CASE("Span subspan") {
 TEST_CASE("Span constness") {
     static char buf[4] = {0, 1, 2, 3};
 
+    // NOLINTBEGIN(performance-unnecessary-copy-initialization)
+
     XSPAN_0(char) b0(buf, 4);
     XSPAN_P(char) bp(buf, 4);
     XSPAN_S(char) bs(buf, 4);
@@ -611,6 +636,8 @@ TEST_CASE("Span constness") {
     XSPAN_0(const char) x0c(b0);
     XSPAN_P(const char) xpc(bp);
     XSPAN_S(const char) xsc(bs);
+
+    // NOLINTEND(performance-unnecessary-copy-initialization)
 
     CHECK(ptr_diff_bytes(b0, buf) == 0);
     CHECK(ptr_diff_bytes(bp, buf) == 0);
@@ -720,30 +747,52 @@ TEST_CASE("PtrOrSpan char") {
 }
 
 TEST_CASE("PtrOrSpan int") {
-    int buf[8] = {0, 1, 2, 3, 4, 5, 6, 7};
-    XSPAN_P(int) a(buf, XSpanCount(8));
+    int buf[8] = {0, 11, 22, 33, 44, 55, 66, 77};
+    XSPAN_P(const int) a(buf, XSpanCount(8));
     CHECK(a.raw_size_in_bytes() == 8 * sizeof(int));
-    XSPAN_P(int) b = a.subspan(0, 7);
+    XSPAN_P(const int) b = a.subspan(0, 7);
     CHECK(b.raw_size_in_bytes() == 7 * sizeof(int));
-    XSPAN_P(int) c = (b + 1).subspan(0, 6);
+    XSPAN_P(const int) c = (b + 1).subspan(0, 6);
     CHECK(c.raw_size_in_bytes() == 6 * sizeof(int));
     a += 1;
-    CHECK(*a == 1);
-    CHECK(*a++ == 1);
-    CHECK(*++a == 3);
-    CHECK(--*a == 2);
-    CHECK(*a-- == 2);
+    CHECK(a == buf + 1);
+    CHECK(*a == 11);
+    CHECK(*a++ == 11);
+    CHECK(a == buf + 2);
+    CHECK(*a == 22);
+    CHECK(*++a == 33);
+    CHECK(a == buf + 3);
+    CHECK(*a == 33);
+    CHECK(*--a == 22);
+    CHECK(a == buf + 2);
+    CHECK(*a == 22);
+    CHECK(*a-- == 22);
+    CHECK(a == buf + 1);
+    CHECK(*a == 11);
     CHECK(*b == 0);
-    CHECK(*c == 1);
-    a = buf + 7;
+    CHECK(*c == 11);
+    a -= 1;
+    a += 7;
 #ifdef UPX_VERSION_HEX
-    CHECK(get_le32(a) == ne32_to_le32(7));
+    CHECK(get_le32(a) == ne32_to_le32(77));
 #endif
     a++;
 #ifdef UPX_VERSION_HEX
     CHECK_THROWS(get_le32(a));
 #endif
     CHECK_THROWS(raw_bytes(a, 1));
+    CHECK_THROWS(a++);
+    CHECK_THROWS(++a);
+    CHECK_THROWS(a += 1);
+    CHECK(a == buf + 8);
+    a = buf;
+    CHECK_THROWS(a--);
+    CHECK_THROWS(--a);
+    CHECK_THROWS(a -= 1);
+    CHECK_THROWS(a += 9);
+    CHECK(a == buf);
+    a += 8;
+    CHECK(a == buf + 8);
 }
 
 /*************************************************************************
@@ -757,6 +806,9 @@ __acc_static_noinline int foo(T p) {
     r += *p++;
     r += *++p;
     p += 3;
+    r += *p;
+    r += *--p;
+    r += *p--;
     r += *p;
     return r;
 }
@@ -779,11 +831,14 @@ make_span_s(T *ptr, size_t count) {
 } // namespace
 
 TEST_CASE("Span codegen") {
-    char buf[8] = {0, 1, 2, 3, 4, 5, 6, 7};
-    CHECK(foo(buf) == 0 + 2 + 5);
-    CHECK(foo(make_span_0(buf, 8)) == 0 + 2 + 5);
-    CHECK(foo(make_span_p(buf, 8)) == 0 + 2 + 5);
-    CHECK(foo(make_span_s(buf, 8)) == 0 + 2 + 5);
+    upx_uint8_t buf[8] = {0, 1, 2, 3, 4, 5, 6, 7};
+    CHECK(foo(buf) == 0 + 2 + 5 + 4 + 4 + 3);
+    CHECK(foo(make_span_0(buf, 8)) == 0 + 2 + 5 + 4 + 4 + 3);
+    CHECK(foo(make_span_p(buf, 8)) == 0 + 2 + 5 + 4 + 4 + 3);
+    CHECK(foo(make_span_s(buf, 8)) == 0 + 2 + 5 + 4 + 4 + 3);
+    CHECK(foo(XSPAN_0_MAKE(upx_uint8_t, buf, 8)) == 0 + 2 + 5 + 4 + 4 + 3);
+    CHECK(foo(XSPAN_P_MAKE(upx_uint8_t, buf, 8)) == 0 + 2 + 5 + 4 + 4 + 3);
+    CHECK(foo(XSPAN_S_MAKE(upx_uint8_t, buf, 8)) == 0 + 2 + 5 + 4 + 4 + 3);
 }
 
 #endif // WITH_XSPAN >= 2

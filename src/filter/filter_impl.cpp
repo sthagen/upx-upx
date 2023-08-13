@@ -30,7 +30,7 @@
 #include "../filter.h"
 
 static unsigned
-umin(unsigned const a, unsigned const b)
+umin(const unsigned a, const unsigned b)
 {
     return (a<=b) ? a : b;
 }
@@ -168,7 +168,7 @@ umin(unsigned const a, unsigned const b)
 // database for use in class Filter
 **************************************************************************/
 
-const FilterImpl::FilterEntry FilterImpl::filters[] = {
+/*static*/ const FilterImpl::FilterEntry FilterImpl::filters[] = {
     // no filter
     { 0x00, 0,          0, nullptr, nullptr, nullptr },
 
@@ -228,8 +228,13 @@ const FilterImpl::FilterEntry FilterImpl::filters[] = {
     { 0x50, 8, 0x01ffffff, f_ct24arm_le, u_ct24arm_le, s_ct24arm_le },
     { 0x51, 8, 0x01ffffff, f_ct24arm_be, u_ct24arm_be, s_ct24arm_be },
 
+#if 1  //{ old reliable
     // 26-bit calltrick for arm64
     { 0x52, 8, 0x03ffffff, f_ct26arm_le, u_ct26arm_le, s_ct26arm_le },
+#else  //}{ new enhanced, but needs new filter id
+    // 26-bit calltrick for arm64; also 19-bit and 14-bit
+    { 0x52, 8, 0x03ffffff, f_CTarm64_le, u_CTarm64_le, s_CTarm64_le },
+#endif  //}
 
     // 32-bit cto calltrick with jmp and jcc(swap 0x0f/0x8Y) and relative renumbering
     { 0x80, 8, 0x00ffffff, f_ctojr32_e8e9_bswap_le, u_ctojr32_e8e9_bswap_le, s_ctojr32_e8e9_bswap_le },
@@ -261,6 +266,6 @@ const FilterImpl::FilterEntry FilterImpl::filters[] = {
     { 0xd0, 8,          0, f_ppcbxx, u_ppcbxx, s_ppcbxx },
 };
 
-const int FilterImpl::n_filters = TABLESIZE(filters);
+/*static*/ const int FilterImpl::n_filters = TABLESIZE(filters);
 
 /* vim:set ts=4 sw=4 et: */

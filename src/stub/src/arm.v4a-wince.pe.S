@@ -33,8 +33,8 @@
 
 // DEBUG == 0 -> none
 // DEBUG == 1 -> for armpe_tester
-// DEBUG == 2 -> wince - dumps memory
-// DEBUG == 3 -> wince - removes files
+// DEBUG == 2 -> win32 - dumps memory
+// DEBUG == 3 -> win32 - removes files
 
 #define DEBUG 0
 #if DEBUG == 0

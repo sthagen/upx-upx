@@ -25,6 +25,7 @@
  */
 
 
+#define ALLOW_INT_PLUS_MEMBUFFER 1
 #include "conf.h"
 
 #include "file.h"
@@ -93,7 +94,7 @@ static const
 // end of processing by dyld.  Relocation, loading of dependent libraries,
 // etc., already have taken place before decompression.  So the Mach-o
 // headers, the __IMPORT segment, the __LINKEDIT segment, anything
-// that is modifed by relocation, etc., cannot be compressed.
+// that is modified by relocation, etc., cannot be compressed.
 // We simplify arbitrarily by compressing only the __TEXT segment,
 // which must be the first segment.
 
@@ -1662,8 +1663,8 @@ int PackMachBase<T>::canUnpack()
         unsigned const cmd = ptr->cmd;
         unsigned const cmdsize = ptr->cmdsize;
         if (is_bad_linker_command(cmd, cmdsize, headway, lc_seg, sizeof(Addr))) {
-                infoWarning("bad Mach_command[%u]{@0x%lx,+0x%x}: file_size=0x%lx  cmdsize=0x%lx",
-                    j, (unsigned long) (sizeof(mhdri) + ((char const *)ptr - (char const *)rawmseg)), headway,
+                infoWarning("bad Mach_command[%u]{@0x%zx,+0x%x}: file_size=0x%lx  cmdsize=0x%lx",
+                    j, (sizeof(mhdri) + ((char const *)ptr - (char const *)rawmseg)), headway,
                     (unsigned long) file_size, (unsigned long)ptr->cmdsize);
                 throwCantUnpack("file corrupted");
         }
@@ -1672,9 +1673,9 @@ int PackMachBase<T>::canUnpack()
             if ((unsigned long)file_size < segptr->filesize
             ||  (unsigned long)file_size < segptr->fileoff
             ||  (unsigned long)file_size < (segptr->filesize + segptr->fileoff)) {
-                infoWarning("bad Mach_segment_command[%u]{@0x%lx,+0x%x}: file_size=0x%lx  cmdsize=0x%lx"
+                infoWarning("bad Mach_segment_command[%u]{@0x%zx,+0x%x}: file_size=0x%lx  cmdsize=0x%lx"
                       "  filesize=0x%lx  fileoff=0x%lx",
-                    j, (unsigned long) (sizeof(mhdri) + ((char const *)ptr - (char const *)rawmseg)), headway,
+                    j, (sizeof(mhdri) + ((char const *)ptr - (char const *)rawmseg)), headway,
                     (unsigned long) file_size, (unsigned long)ptr->cmdsize,
                     (unsigned long)segptr->filesize, (unsigned long)segptr->fileoff);
                 throwCantUnpack("file corrupted");
@@ -1837,7 +1838,7 @@ int PackMachBase<T>::canUnpack()
                 &&  (Mach_header::MH_MAGIC + (sizeof(Addr)>>3)) == uptr[1]) {
                     return true;
                 }
-                unsigned const magic = get_te32(1+ (char const *)uptr);
+                unsigned const magic = get_te32(&uptr[1]);  // FIXME:  probable bug
                 if ((M_NRV2B_8 == method || M_NRV2E_8 == method)
                 && 0xfc==(0xfc & uptr[0])
                 &&  (Mach_header::MH_MAGIC + (sizeof(Addr)>>3)) == magic) {
@@ -2033,7 +2034,7 @@ bool PackMachBase<T>::canPack()
             if (vma_max < t) {
                 vma_max = t;
             }
-            // Segments need not be contigous (esp. "rust"/"go")
+            // Segments need not be contiguous (esp. "rust"/"go")
             sz_segment = msegcmd[j].filesize + msegcmd[j].fileoff - msegcmd[0].fileoff;
         }
     }

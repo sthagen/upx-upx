@@ -41,7 +41,7 @@
 #pragma warning(disable : 4127) // warning C4127: conditional expression is constant
 #endif
 
-void lzma_compress_config_t::reset() {
+void lzma_compress_config_t::reset() noexcept {
     pos_bits.reset();
     lit_pos_bits.reset();
     lit_context_bits.reset();
@@ -116,7 +116,7 @@ static bool prepare_result(lzma_compress_result_t *res, unsigned src_len, int me
         res->lit_context_bits = (method >> 8) & 15;
     }
 #if 0
-    // DEBUG - set sizes so that we use a maxmimum amount of stack.
+    // DEBUG - set sizes so that we use a maximum amount of stack.
     //  These settings cause res->num_probs == 3147574, i.e. we will
     //  need about 6 MiB of stack during runtime decompression.
     res->lit_pos_bits     = 4;
@@ -194,8 +194,8 @@ static bool prepare_result(lzma_compress_result_t *res, unsigned src_len, int me
     lzma_compress_config_t::num_fast_bytes_t::assertValue(res->num_fast_bytes);
 
     res->num_probs = 1846 + (768u << (res->lit_context_bits + res->lit_pos_bits));
-    // printf("\nlzma_compress config: %u %u %u %u %u\n", res->pos_bits, res->lit_pos_bits,
-    //        res->lit_context_bits, res->dict_size, res->num_probs);
+    NO_printf("\nlzma_compress config: %u %u %u %u %u\n", res->pos_bits, res->lit_pos_bits,
+              res->lit_context_bits, res->dict_size, res->num_probs);
     return true;
 
 error:
@@ -206,14 +206,23 @@ error:
 // compress - cruft because of pseudo-COM layer
 **************************************************************************/
 
+// ensure proper nullptr usage
+// TODO later: examine why we need this in the first place
+#undef NULL
+// NOLINTBEGIN(clang-analyzer-optin.cplusplus.*)
+#define NULL nullptr
+// NOLINTEND(clang-analyzer-optin.cplusplus.*)
+#if defined(__GNUC__)
+#undef __null
+#define __null nullptr
+#endif
+
 #undef MSDOS
 #undef OS2
 #undef _WIN32
 #undef _WIN32_WCE
 #undef COMPRESS_MF_MT
 #undef _NO_EXCEPTIONS
-#undef NULL
-#define NULL nullptr
 #include <lzma-sdk/C/Common/MyInitGuid.h>
 // #include <lzma-sdk/C/7zip/Compress/LZMA/LZMADecoder.h>
 #include <lzma-sdk/C/7zip/Compress/LZMA/LZMAEncoder.h>
@@ -375,7 +384,7 @@ int upx_lzma_compress(const upx_bytep src, unsigned src_len, upx_bytep dst, unsi
         // UPX extra stuff in first byte: 5 high bits convenience for stub decompressor
         unsigned t = res->lit_context_bits + res->lit_pos_bits;
         os.WriteByte(Byte((t << 3) | res->pos_bits));
-        os.WriteByte(Byte((res->lit_pos_bits << 4) | (res->lit_context_bits)));
+        os.WriteByte(Byte((res->lit_pos_bits << 4) | res->lit_context_bits));
 
         // compress
         rh = enc.Code(&is, &os, nullptr, nullptr, &progress);
@@ -399,10 +408,10 @@ int upx_lzma_compress(const upx_bytep src, unsigned src_len, upx_bytep dst, unsi
 
 error:
     *dst_len = (unsigned) os.b_pos;
-    // printf("\nlzma_compress: %d: %u %u %u %u %u, %u - > %u\n", r, res->pos_bits,
-    // res->lit_pos_bits,
-    //        res->lit_context_bits, res->dict_size, res->num_probs, src_len, *dst_len);
-    // printf("%u %u %u\n", is.__m_RefCount, os.__m_RefCount, progress.__m_RefCount);
+    NO_printf("\nlzma_compress: %d: %u %u %u %u %u, %u - > %u\n", r, res->pos_bits,
+              res->lit_pos_bits, res->lit_context_bits, res->dict_size, res->num_probs, src_len,
+              *dst_len);
+    NO_printf("%u %u %u\n", is.__m_RefCount, os.__m_RefCount, progress.__m_RefCount);
     return r;
 }
 
@@ -426,7 +435,7 @@ int upx_lzma_decompress(const upx_bytep src, unsigned src_len, upx_bytep dst, un
     COMPILE_TIME_ASSERT(LZMA_LIT_SIZE == 768)
 
     CLzmaDecoderState s;
-    memset(&s, 0, sizeof(s));
+    mem_clear(&s);
     SizeT src_out = 0, dst_out = 0;
     int r = UPX_E_ERROR;
     int rh;
@@ -458,8 +467,8 @@ int upx_lzma_decompress(const upx_bytep src, unsigned src_len, upx_bytep dst, un
         assert(cresult->result_lzma.lit_context_bits == (unsigned) s.Properties.lc);
         assert(cresult->result_lzma.num_probs == (unsigned) LzmaGetNumProbs(&s.Properties));
         const lzma_compress_result_t *res = &cresult->result_lzma;
-        // printf("\nlzma_decompress config: %u %u %u %u %u\n", res->pos_bits, res->lit_pos_bits,
-        //        res->lit_context_bits, res->dict_size, res->num_probs);
+        NO_printf("\nlzma_decompress config: %u %u %u %u %u\n", res->pos_bits, res->lit_pos_bits,
+                  res->lit_context_bits, res->dict_size, res->num_probs);
         UNUSED(res);
     }
     s.Probs = (CProb *) malloc(sizeof(CProb) * LzmaGetNumProbs(&s.Properties));
@@ -524,13 +533,12 @@ const char *upx_lzma_version_string(void) { return "4.43"; }
 **************************************************************************/
 
 TEST_CASE("upx_lzma_decompress") {
-    typedef const upx_byte C;
-    C *c_data;
-    upx_byte d_buf[16];
+    const byte *c_data;
+    byte d_buf[16];
     unsigned d_len;
     int r;
 
-    c_data = (C *) "\x1a\x03\x00\x7f\xed\x3c\x00\x00\x00";
+    c_data = (const byte *) "\x1a\x03\x00\x7f\xed\x3c\x00\x00\x00";
     d_len = 16;
     r = upx_lzma_decompress(c_data, 9, d_buf, &d_len, M_LZMA, nullptr);
     CHECK((r == 0 && d_len == 16));

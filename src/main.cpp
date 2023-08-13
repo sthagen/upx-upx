@@ -28,9 +28,8 @@
 // main entry, mostly boring stuff; see work.cpp for actual action
 
 #include "conf.h"
-#include "file.h"
-#include "packer.h"
-#include "p_elf.h"
+#include "packer.h"            // Packer::isValidCompressionMethod()
+#include "p_elf.h"             // ELFOSABI_xxx
 #include "compress/compress.h" // upx_ucl_init()
 
 /*************************************************************************
@@ -42,7 +41,7 @@
 #endif
 
 static const char *argv0 = "";
-const char *progname = "";
+const char *progname = "upx";
 
 static acc_getopt_t mfx_getopt;
 #define mfx_optarg mfx_getopt.optarg
@@ -88,8 +87,9 @@ static void do_exit(void) {
 static bool set_eec(int ec, int *eec) {
     if (ec == EXIT_FATAL) {
         *eec = EXIT_ERROR;
-        return 1;
-    } else if (ec < 0 || ec == EXIT_ERROR) {
+        return true;
+    }
+    if (ec < 0 || ec == EXIT_ERROR) {
         *eec = EXIT_ERROR;
     } else if (ec == EXIT_WARN) {
         if (!opt->ignorewarn)
@@ -100,7 +100,7 @@ static bool set_eec(int ec, int *eec) {
     } else {
         assert(0);
     }
-    return 0;
+    return false;
 }
 
 bool main_set_exit_code(int ec) { return set_eec(ec, &exit_code); }
@@ -118,16 +118,6 @@ __acc_static_noinline void e_usage(void) {
     show_usage();
     e_exit(EXIT_USAGE);
 }
-
-#if 0  // UNUSED
-static void e_memory(void)
-{
-    show_head();
-    fflush(con_term);
-    fprintf(stderr,"%s: out of memory\n", argv0);
-    e_exit(EXIT_MEMORY);
-}
-#endif // UNUSED
 
 static void e_method(int m, int l) {
     fflush(con_term);
@@ -159,22 +149,13 @@ static void e_envopt(const char *n) {
 }
 #endif /* defined(OPTIONS_VAR) */
 
-#if 0  // UNUSED
-static void __acc_cdecl_sighandler e_sighandler(int signum)
-{
-    UNUSED(signum);
-    e_exit(EXIT_FATAL);
-}
-#endif // UNUSED
-
 /*************************************************************************
 // check options
 **************************************************************************/
 
 static void check_not_both(bool e1, bool e2, const char *c1, const char *c2) {
     if (e1 && e2) {
-        fprintf(stderr, "%s: ", argv0);
-        fprintf(stderr, "cannot use both '%s' and '%s'\n", c1, c2);
+        fprintf(stderr, "%s: cannot use both '%s' and '%s'\n", argv0, c1, c2);
         e_usage();
     }
 }
@@ -317,9 +298,9 @@ static char *prepare_shortopts(char *buf, const char *n, const struct mfx_option
 template <class T>
 static int getoptvar(T *var, const T min_value, const T max_value, const char *arg_fatal) {
     const char *p = mfx_optarg;
-    char *endptr;
+    char *endptr = nullptr;
     int r = 0;
-    long n;
+    long long n;
     T v;
 
     if (!p || !p[0]) {
@@ -329,18 +310,14 @@ static int getoptvar(T *var, const T min_value, const T max_value, const char *a
     // avoid interpretation as octal value
     while (p[0] == '0' && isdigit(p[1]))
         p++;
-    n = strtol(p, &endptr, 0);
+    n = strtoll(p, &endptr, 0);
     if (*endptr != '\0') {
         r = -2;
         goto error;
     }
     v = (T) n;
-    if (v < min_value) {
+    if ((long long) v != n || v < min_value || v > max_value) {
         r = -3;
-        goto error;
-    }
-    if (v > max_value) {
-        r = -4;
         goto error;
     }
     *var = v;
@@ -521,6 +498,12 @@ static int do_option(int optc, const char *arg) {
     case 545:
         opt->debug.disable_random_id = true;
         break;
+    case 546:
+        opt->debug.use_random_method = true;
+        break;
+    case 547:
+        opt->debug.use_random_filter = true;
+        break;
 
     // misc
     case 512:
@@ -626,7 +609,7 @@ static int do_option(int optc, const char *arg) {
         opt->backup = 1;
         break;
     case 541:
-        if (opt->backup != 1) // do not overide '--backup'
+        if (opt->backup != 1) // do not override '--backup'
             opt->backup = 0;
         break;
     // overlay
@@ -652,22 +635,22 @@ static int do_option(int optc, const char *arg) {
     // CPU
     case 560:
         if (mfx_optarg && strcmp(mfx_optarg, "8086") == 0)
-            opt->cpu = opt->CPU_8086;
+            opt->cpu_x86 = opt->CPU_8086;
         else if (mfx_optarg && strcmp(mfx_optarg, "386") == 0)
-            opt->cpu = opt->CPU_386;
+            opt->cpu_x86 = opt->CPU_386;
         else if (mfx_optarg && strcmp(mfx_optarg, "486") == 0)
-            opt->cpu = opt->CPU_486;
+            opt->cpu_x86 = opt->CPU_486;
         else
             e_optarg(arg);
         break;
     case 561:
-        opt->cpu = opt->CPU_8086;
+        opt->cpu_x86 = opt->CPU_8086;
         break;
     case 563:
-        opt->cpu = opt->CPU_386;
+        opt->cpu_x86 = opt->CPU_386;
         break;
     case 564:
-        opt->cpu = opt->CPU_486;
+        opt->cpu_x86 = opt->CPU_486;
         break;
     //
     case 600:
@@ -829,10 +812,12 @@ int main_get_options(int argc, char **argv) {
 
         // debug options
         {"debug", 0x10, N, 'D'},
-        {"dump-stub-loader", 0x31, N, 544},  // for internal debugging
-        {"fake-stub-version", 0x31, N, 542}, // for internal debugging
-        {"fake-stub-year", 0x31, N, 543},    // for internal debugging
-        {"disable-random-id", 0x10, N, 545}, // for internal debugging
+        {"dump-stub-loader", 0x31, N, 544},        // for internal debugging
+        {"fake-stub-version", 0x31, N, 542},       // for internal debugging
+        {"fake-stub-year", 0x31, N, 543},          // for internal debugging
+        {"disable-random-id", 0x90, N, 545},       // for internal debugging
+        {"debug-use-random-method", 0x90, N, 546}, // for internal debugging
+        {"debug-use-random-filter", 0x90, N, 547}, // for internal debugging
 
         // backup options
         {"backup", 0x10, N, 'k'},
@@ -974,11 +959,10 @@ int main_get_options(int argc, char **argv) {
     int optc, longind;
     char shortopts[256];
 
-    prepare_shortopts(shortopts, "123456789hH?V", longopts),
-        acc_getopt_init(&mfx_getopt, 1, argc, argv);
+    prepare_shortopts(shortopts, "123456789hH?V", longopts);
+    acc_getopt_init(&mfx_getopt, 1, argc, argv);
     mfx_getopt.progname = progname;
     mfx_getopt.opterr = handle_opterr;
-    opt->o_unix.osabi0 = Elf32_Ehdr::ELFOSABI_LINUX;
     while ((optc = acc_getopt(&mfx_getopt, shortopts, longopts, &longind)) >= 0) {
         if (do_option(optc, argv[mfx_optind - 1]) != 0)
             e_usage();
@@ -1008,7 +992,7 @@ void main_get_envoptions() {
         {"verbose", 0, N, 'v'},     // verbose mode
 
         // debug options
-        {"disable-random-id", 0x10, N, 545}, // for internal debugging
+        {"disable-random-id", 0x90, N, 545}, // for internal debugging
 
         // backup options
         {"backup", 0x10, N, 'k'},
@@ -1088,7 +1072,7 @@ void main_get_envoptions() {
 
     /* alloc temp argv */
     if (targc > 1)
-        targv = (const char **) calloc(targc + 1, sizeof(char *));
+        targv = (const char **) upx_calloc(targc + 1, sizeof(char *));
     if (targv == nullptr) {
         free(env);
         return;
@@ -1174,7 +1158,7 @@ int upx_main(int argc, char *argv[]) {
         if (dt_res == 2)
             fprintf(stderr, "%s: doctest requested program exit; Stop.\n", argv0);
         else
-            fprintf(stderr, "%s: internal error: doctest failed\n", argv0);
+            fprintf(stderr, "%s: internal error: doctest check failed\n", argv0);
         e_exit(EXIT_INIT);
     }
 
@@ -1188,7 +1172,7 @@ int upx_main(int argc, char *argv[]) {
         char *p;
         bool allupper = true;
         for (p = prog; *p; p++)
-            if (islower((unsigned char) *p))
+            if (islower((uchar) *p))
                 allupper = false;
         if (allupper)
             fn_strlwr(prog);
@@ -1256,7 +1240,7 @@ int upx_main(int argc, char *argv[]) {
         e_exit(EXIT_OK);
         break;
     default:
-        /* ??? */
+        assert(false); // should not happen
         break;
     }
 
@@ -1333,10 +1317,23 @@ int __acc_cdecl_main main(int argc, char *argv[]) {
     // srand((int) time(nullptr));
     srand((int) clock());
 
+    // info: main() is implicitly "noexcept", so we need a try block
+#if 0
     int r = upx_main(argc, argv);
+#else
+    int r;
+    try {
+        r = upx_main(argc, argv);
+    } catch (const Throwable &e) {
+        printErr("unknown", e);
+        std::terminate();
+    } catch (...) {
+        std::terminate();
+    }
+#endif
 
 #if 0 && defined(__GLIBC__)
-    //malloc_stats();
+    // malloc_stats();
 #endif
     return r;
 }

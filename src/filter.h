@@ -26,8 +26,6 @@
  */
 
 #pragma once
-#ifndef UPX_FILTER_H__
-#define UPX_FILTER_H__ 1
 
 /*************************************************************************
 // A filter is a reversible operation that modifies a given
@@ -46,18 +44,15 @@
 // to absolute addresses so that the buffer compresses better.
 **************************************************************************/
 
-class Filter {
+class Filter final {
 public:
-    Filter(int level) {
-        clevel = level;
-        init();
-    }
-    void init(int id = 0, unsigned addvalue = 0);
+    explicit Filter(int level) noexcept;
+    void init(int id = 0, unsigned addvalue = 0) noexcept;
 
-    bool filter(upx_byte *buf, unsigned buf_len);
-    void unfilter(upx_byte *buf, unsigned buf_len, bool verify_checksum = false);
+    bool filter(SPAN_0(byte) buf, unsigned buf_len);
+    void unfilter(SPAN_0(byte) buf, unsigned buf_len, bool verify_checksum = false);
     void verifyUnfilter();
-    bool scan(const upx_byte *buf, unsigned buf_len);
+    bool scan(SPAN_0(const byte) buf, unsigned buf_len);
 
     static bool isValidFilter(int filter_id);
     static bool isValidFilter(int filter_id, const int *allowed_filters);
@@ -65,7 +60,7 @@ public:
 public:
     // Will be set by each call to filter()/unfilter().
     // Read-only afterwards.
-    upx_byte *buf = nullptr;
+    byte *buf = nullptr;
     unsigned buf_len = 0;
 
     // Checksum of the buffer before applying the filter
@@ -77,7 +72,7 @@ public:
     const int *preferred_ctos = nullptr;
 
     // Input/output parameters used by various filters
-    unsigned char cto; // call trick offset
+    byte cto; // call trick offset
 
     // Output used by various filters. Read only.
     unsigned calls;
@@ -105,6 +100,8 @@ class FilterImpl {
     friend class Filter;
 
 private:
+    explicit FilterImpl() noexcept DELETED_FUNCTION;
+
     struct FilterEntry {
         int id; // 0 .. 255
         unsigned min_buf_len;
@@ -122,7 +119,5 @@ private:
     static const FilterEntry filters[];
     static const int n_filters; // number of filters[]
 };
-
-#endif /* already included */
 
 /* vim:set ts=4 sw=4 et: */

@@ -27,12 +27,14 @@
 #include "../conf.h"
 #include "compress.h"
 #include "../util/membuffer.h"
+// NOLINTBEGIN(clang-analyzer-optin.performance.Padding)
+#define ZLIB_CONST 1
 #include <zlib/zlib.h>
 #include <zlib/deflate.h>
+// NOLINTEND(clang-analyzer-optin.performance.Padding)
 
-void zlib_compress_config_t::reset() {
-    mem_clear(this, sizeof(*this));
-
+void zlib_compress_config_t::reset() noexcept {
+    mem_clear(this);
     mem_level.reset();
     window_bits.reset();
     strategy.reset();
@@ -62,6 +64,8 @@ static int convert_errno_from_zlib(int zr) {
         return UPX_E_ERROR;
     case -7: // UPX extra
         return UPX_E_INPUT_OVERRUN;
+    default:
+        break;
     }
     return UPX_E_ERROR;
 }
@@ -100,7 +104,7 @@ int upx_zlib_compress(const upx_bytep src, unsigned src_len, upx_bytep dst, unsi
     z_stream s;
     s.zalloc = (alloc_func) nullptr;
     s.zfree = (free_func) nullptr;
-    s.next_in = ACC_UNCONST_CAST(upx_bytep, src);
+    s.next_in = src;
     s.avail_in = src_len;
     s.next_out = dst;
     s.avail_out = *dst_len;
@@ -149,7 +153,7 @@ int upx_zlib_decompress(const upx_bytep src, unsigned src_len, upx_bytep dst, un
     z_stream s;
     s.zalloc = (alloc_func) nullptr;
     s.zfree = (free_func) nullptr;
-    s.next_in = ACC_UNCONST_CAST(upx_bytep, src);
+    s.next_in = src;
     s.avail_in = src_len;
     s.next_out = dst;
     s.avail_out = *dst_len;
@@ -287,13 +291,12 @@ TEST_CASE("compress_zlib") {
 #endif // DEBUG
 
 TEST_CASE("upx_zlib_decompress") {
-    typedef const upx_byte C;
-    C *c_data;
-    upx_byte d_buf[16];
+    const byte *c_data;
+    byte d_buf[16];
     unsigned d_len;
     int r;
 
-    c_data = (C *) "\xfb\xff\x1f\x15\x00\x00";
+    c_data = (const byte *) "\xfb\xff\x1f\x15\x00\x00";
     d_len = 16;
     r = upx_zlib_decompress(c_data, 6, d_buf, &d_len, M_DEFLATE, nullptr);
     CHECK((r == 0 && d_len == 16));

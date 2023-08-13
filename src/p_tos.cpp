@@ -1,4 +1,4 @@
-/* p_tos.cpp --
+/* p_tos.cpp -- atari/tos executable format
 
    This file is part of the UPX executable compressor.
 
@@ -25,8 +25,10 @@
    <markus@oberhumer.com>               <ezerotven+github@gmail.com>
  */
 
-#include "conf.h"
+// atari/tos: lots of micro-optimizations because this was written at a time
+//   where bytes and CPU cycles really mattered
 
+#include "conf.h"
 #include "file.h"
 #include "filter.h"
 #include "packer.h"
@@ -50,14 +52,14 @@ PackTos::PackTos(InputFile *f) : super(f) {
     COMPILE_TIME_ASSERT_ALIGNED1(tos_header_t)
 }
 
+Linker *PackTos::newLinker() const { return new ElfLinkerM68k; }
+
 const int *PackTos::getCompressionMethods(int method, int level) const {
     bool small = ih.fh_text + ih.fh_data <= 256 * 1024;
     return Packer::getDefaultCompressionMethods_8(method, level, small);
 }
 
 const int *PackTos::getFilters() const { return nullptr; }
-
-Linker *PackTos::newLinker() const { return new ElfLinkerM68k; }
 
 void PackTos::LinkerSymbols::LoopInfo::init(unsigned count_, bool allow_dbra) {
     count = value = count_;
@@ -223,11 +225,9 @@ void PackTos::buildLoader(const Filter *ft) {
 #define F_FASTLOAD 0x01 // don't zero heap
 #define F_ALTLOAD 0x02  // OK to load in alternate ram
 #define F_ALTALLOC 0x04 // OK to malloc from alt. ram
-#define F_SMALLTPA                                                                                 \
-    0x08                // used in MagiC: TPA can be allocated
-                        // as specified in the program header
-                        // rather than the biggest free memory
-                        // block
+#define F_SMALLTPA 0x08
+// used in MagiC: TPA can be allocated as specified in the program header
+// rather than the biggest free memory block
 #define F_MEMFLAGS 0xf0 // reserved for future use
 #define F_SHTEXT 0x800  // program's text may be shared
 
@@ -260,7 +260,7 @@ int PackTos::readFileHeader() {
     fi->readx(&ih, FH_SIZE);
     if (ih.fh_magic != 0x601a)
         return 0;
-    if (FH_SIZE + ih.fh_text + ih.fh_data + ih.fh_sym > (unsigned) file_size)
+    if (0ull + FH_SIZE + ih.fh_text + ih.fh_data + ih.fh_sym > file_size_u)
         return 0;
     return UPX_F_ATARI_TOS;
 }
@@ -297,44 +297,45 @@ bool PackTos::checkFileHeader() {
 // relocs
 **************************************************************************/
 
-// Check relocation for errors to make sure our loader can handle it.
-static int check_relocs(const upx_byte *relocs, unsigned rsize, unsigned isize, unsigned *nrelocs,
-                        unsigned *relocsize, unsigned *overlay) {
+// Check relocations for errors to make sure our loader can handle them
+static bool check_relocs(const byte *relocs, unsigned rsize, unsigned image_size,
+                         unsigned *relocnum, unsigned *relocsize, unsigned *overlay) {
+    assert(rsize >= 4);
+    assert(image_size >= 4);
     unsigned fixup = get_be32(relocs);
+    if (fixup == 0 || fixup >= image_size)
+        return false;
     unsigned last_fixup = fixup;
     unsigned i = 4;
 
-    assert(isize >= 4);
-    assert(fixup > 0);
-
-    *nrelocs = 1;
+    *relocnum = 1;
     for (;;) {
         if (fixup & 1) // must be word-aligned
-            return -1;
-        if (fixup + 4 > isize) // too far
-            return -1;
+            return false;
+        if (fixup + 4 > image_size) // out of bounds
+            return false;
         if (i >= rsize) // premature EOF in relocs
-            return -1;
+            return false;
         unsigned c = relocs[i++];
-        if (c == 0) // end marker
+        if (c == 0) // EOF end marker
             break;
         else if (c == 1) // increase fixup, no reloc
             fixup += 254;
         else if (c & 1) // must be word-aligned
-            return -1;
+            return false;
         else // next reloc is here
         {
             fixup += c;
             if (fixup - last_fixup < 4) // overlapping relocation
-                return -1;
+                return false;
             last_fixup = fixup;
-            *nrelocs += 1;
+            *relocnum += 1;
         }
     }
 
     *relocsize = i;
     *overlay = rsize - i;
-    return 0;
+    return true;
 }
 
 /*************************************************************************
@@ -345,14 +346,14 @@ bool PackTos::canPack() {
     if (!readFileHeader())
         return false;
 
-    unsigned char buf[768];
+    byte buf[768];
     fi->readx(buf, sizeof(buf));
     checkAlreadyPacked(buf, sizeof(buf));
 
     if (!checkFileHeader())
         throwCantPack("unsupported header flags");
     if (file_size < 1024)
-        throwCantPack("program is too small");
+        throwCantPack("program is too small for atari/tos");
 
     return true;
 }
@@ -370,7 +371,7 @@ void PackTos::fileInfo() {
 
 void PackTos::pack(OutputFile *fo) {
     unsigned t;
-    unsigned nrelocs = 0;
+    unsigned relocnum = 0;
     unsigned relocsize = 0;
     unsigned overlay = 0;
 
@@ -391,7 +392,7 @@ void PackTos::pack(OutputFile *fo) {
     symbols.up31_base_a6 = 65536 + 1;
 
     // read file
-    const unsigned isize = file_size - i_sym;
+    const unsigned isize = file_size_u - i_sym;
     ibuf.alloc(isize);
     fi->seek(FH_SIZE, SEEK_SET);
     // read text + data
@@ -402,7 +403,7 @@ void PackTos::pack(OutputFile *fo) {
         throwCantPackExact();
     fi->seek(i_sym, SEEK_CUR);
     // read relocations + overlay
-    overlay = file_size - (FH_SIZE + i_text + i_data + i_sym);
+    overlay = file_size_u - (FH_SIZE + i_text + i_data + i_sym);
     fi->readx(ibuf + t, overlay);
 
 #if TESTING
@@ -426,14 +427,13 @@ void PackTos::pack(OutputFile *fo) {
     } else if (ih.fh_reloc != 0)
         relocsize = 0;
     else {
-        int r = check_relocs(ibuf + t, overlay, t, &nrelocs, &relocsize, &overlay);
-        if (r != 0)
+        if (!check_relocs(ibuf + t, overlay, t, &relocnum, &relocsize, &overlay))
             throwCantPack("bad relocation table");
         symbols.need_reloc = true;
     }
 
 #if TESTING
-    printf("xx2: %d relocs: %d, overlay: %d, t: %d\n", nrelocs, relocsize, overlay, t);
+    printf("xx2: %d relocs: %d, overlay: %d, t: %d\n", relocnum, relocsize, overlay, t);
 #endif
 
     checkOverlay(overlay);
@@ -451,7 +451,7 @@ void PackTos::pack(OutputFile *fo) {
     // Now the data in ibuf[0..t] looks like this:
     //   text + data + relocs + original file header
     // After compression this will become the first part of the
-    // data segement. The second part will be the decompressor.
+    // data segment. The second part will be the decompressor.
 
     // alloc buffer (4096 is for decompressor and the various alignments)
     obuf.allocForCompression(t, 4096);
@@ -704,7 +704,7 @@ void PackTos::unpack(OutputFile *fo) {
 
     // write original header & decompressed file
     if (fo) {
-        unsigned overlay = file_size - (FH_SIZE + ih.fh_text + ih.fh_data);
+        unsigned overlay = file_size_u - (FH_SIZE + ih.fh_text + ih.fh_data);
         if (ih.fh_reloc == 0 && overlay >= 4)
             overlay -= 4; // this is our empty fixup
         checkOverlay(overlay);

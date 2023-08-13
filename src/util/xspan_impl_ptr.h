@@ -51,18 +51,37 @@ private:
     pointer ptr;
 
     // enforce config invariants at constructor time - static functions
-    static forceinline pointer makePtr(pointer p) { return p; }
-    // inverse logic for ensuring valid pointers from existing objets
-    forceinline pointer ensurePtr() const { return ptr; }
+    static inline pointer makePtr(pointer p) { return p; }
+    // inverse logic for ensuring valid pointers from existing objects
+    inline pointer ensurePtr() const { return ptr; }
     // debug
-    forceinline void assertInvariants() const {}
+    inline void assertInvariants() const noexcept {}
 
 public:
 #if XSPAN_CONFIG_ENABLE_IMPLICIT_CONVERSION || 1
-    operator pointer() const { return ptr; }
+    // Ptr always provides automatic conversion to underlying type because
+    // it has limited functionality
+    operator pointer() const noexcept { return ptr; }
 #endif
 
-    inline ~CSelf() {}
+#if DEBUG
+    ~CSelf() noexcept {
+        try {
+            invalidate();
+        } catch (...) {
+            std::terminate();
+        }
+    }
+#else
+    forceinline ~CSelf() noexcept {}
+#endif
+    noinline void invalidate() {
+        assertInvariants();
+        // poison the pointer: point to non-null invalid address
+        ptr = (pointer) XSPAN_GET_POISON_VOID_PTR();
+        // ptr = (pointer) (void *) &ptr; // point to self
+        assertInvariants();
+    }
     inline CSelf() { assertInvariants(); }
 
     // constructors from pointers
@@ -106,7 +125,7 @@ public:
         return assign(Self(other));
     }
 
-    // comparision
+    // comparison
 
     bool operator==(pointer other) const { return ptr == other; }
     template <class U>
@@ -172,12 +191,12 @@ public:
 #endif
 
 private:
-    forceinline pointer check_deref(pointer p) const { return p; }
-    forceinline pointer check_deref(pointer p, ptrdiff_t n) const { return p + n; }
-    forceinline pointer check_add(pointer p, ptrdiff_t n) const { return p + n; }
+    static forceinline pointer check_deref(pointer p) noexcept { return p; }
+    static forceinline pointer check_deref(pointer p, ptrdiff_t n) noexcept { return p + n; }
+    static forceinline pointer check_add(pointer p, ptrdiff_t n) noexcept { return p + n; }
 
 public: // raw access
-    pointer raw_ptr() const { return ptr; }
+    pointer raw_ptr() const noexcept { return ptr; }
 
     pointer raw_bytes(size_t bytes) const {
         assertInvariants();
@@ -214,8 +233,12 @@ XSPAN_NAMESPACE_END
 #if 1
 
 #define C XSPAN_NS(Ptr)
+template <class T>
+class MemBufferBase;
+#define D MemBufferBase
 #include "xspan_fwd.h"
 #undef C
+#undef D
 
 #endif
 

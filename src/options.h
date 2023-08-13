@@ -26,14 +26,20 @@
  */
 
 #pragma once
-#ifndef UPX_OPTIONS_H__
-#define UPX_OPTIONS_H__ 1
+
+struct Options;
+extern Options *opt;      // global options, see class PackMaster for per-file local options
+#define options_t Options // old name
+
+#if WITH_THREADS
+extern std::mutex opt_lock_mutex;
+#endif
 
 /*************************************************************************
-// globals
+// command line options
 **************************************************************************/
 
-// options - command
+// main command
 enum {
     CMD_NONE,
     CMD_COMPRESS,
@@ -46,7 +52,7 @@ enum {
     CMD_VERSION,
 };
 
-struct options_t final {
+struct Options final {
     int cmd;
 
     // compression options
@@ -89,7 +95,9 @@ struct options_t final {
         const char *dump_stub_loader;
         char fake_stub_version[4 + 1];     // for internal debugging
         char fake_stub_year[4 + 1];        // for internal debugging
-        bool getopt_throw_instead_of_exit; // for doctest
+        bool getopt_throw_instead_of_exit; // for internal doctest checks
+        bool use_random_method;            // for internal debugging
+        bool use_random_filter;            // for internal debugging
     } debug;
 
     // overlay handling
@@ -97,20 +105,20 @@ struct options_t final {
     int overlay;
 
     // CRP - Compression Runtime Parameters (undocumented and subject to change)
-    // see struct XXX_compress_config_t
-    struct crp_t {
+    struct {
         lzma_compress_config_t crp_lzma;
         ucl_compress_config_t crp_ucl;
         zlib_compress_config_t crp_zlib;
-        void reset() {
+        zstd_compress_config_t crp_zstd;
+        void reset() noexcept {
             crp_lzma.reset();
             crp_ucl.reset();
             crp_zlib.reset();
+            crp_zstd.reset();
         }
-    };
-    crp_t crp;
+    } crp;
 
-    // CPU
+    // CPU options for i086/i386
     enum {
         CPU_DEFAULT = 0,
         CPU_8086 = 1,
@@ -118,7 +126,7 @@ struct options_t final {
         CPU_386 = 3,
         CPU_486 = 4,
     };
-    int cpu;
+    int cpu_x86;
 
     // options for various executable formats
     struct {
@@ -161,11 +169,7 @@ struct options_t final {
         const char *keep_resource;
     } win32_pe;
 
-    void reset();
+    void reset() noexcept;
 };
-
-extern struct options_t *opt;
-
-#endif /* already included */
 
 /* vim:set ts=4 sw=4 et: */

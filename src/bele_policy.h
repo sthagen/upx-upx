@@ -25,9 +25,7 @@
    <markus@oberhumer.com>               <ezerotven+github@gmail.com>
  */
 
-#ifndef UPX_BELE_H__
-#error "this is an internal include file"
-#endif
+// this is an internal include file private to bele.h
 
 /*************************************************************************
 //
@@ -37,20 +35,20 @@
 // CTP - Compile-Time Polymorphism (templates)
 #define V static inline
 #define S static int __acc_cdecl_qsort
-#define C /*empty*/
+#define C noexcept
 #elif defined(BELE_RTP)
 // RTP - Run-Time Polymorphism (virtual functions)
 #define V virtual
 #define S virtual int
-#define C const
+#define C const noexcept
 #else
 #error
 #endif
 
 #if defined(BELE_RTP)
 struct AbstractPolicy {
-    inline AbstractPolicy() {}
-    virtual inline ~AbstractPolicy() {}
+    explicit inline AbstractPolicy() noexcept {}
+    virtual inline ~AbstractPolicy() noexcept {}
     V bool isBE() C = 0;
     V bool isLE() C = 0;
 
@@ -80,10 +78,11 @@ struct AbstractPolicy {
     S u64_compare_signed(const void *a, const void *b) C = 0;
 
 private:
-    // disable copy, assignment and move assignment
-    AbstractPolicy(const AbstractPolicy &) = delete;
-    AbstractPolicy &operator=(const AbstractPolicy &) = delete;
-    AbstractPolicy &operator=(AbstractPolicy &&) = delete;
+    // disable copy and move
+    AbstractPolicy(const AbstractPolicy &) DELETED_FUNCTION;
+    AbstractPolicy &operator=(const AbstractPolicy &) DELETED_FUNCTION;
+    AbstractPolicy(AbstractPolicy &&) noexcept DELETED_FUNCTION;
+    AbstractPolicy &operator=(AbstractPolicy &&) noexcept DELETED_FUNCTION;
     // disable dynamic allocation
     ACC_CXX_DISABLE_NEW_DELETE
 };
@@ -91,7 +90,7 @@ private:
 
 #if defined(BELE_RTP)
 #undef C
-#define C const override
+#define C const noexcept override
 #endif
 
 struct BEPolicy
@@ -99,7 +98,7 @@ struct BEPolicy
     final : public AbstractPolicy
 #endif
 {
-    inline BEPolicy() {}
+    explicit inline BEPolicy() noexcept {}
 #if defined(BELE_CTP)
     typedef N_BELE_RTP::BEPolicy RTP_Policy;
 #elif defined(BELE_RTP)
@@ -147,10 +146,11 @@ struct BEPolicy
     }
 
 private:
-    // disable copy, assignment and move assignment
-    BEPolicy(const BEPolicy &) = delete;
-    BEPolicy &operator=(const BEPolicy &) = delete;
-    BEPolicy &operator=(BEPolicy &&) = delete;
+    // disable copy and move
+    BEPolicy(const BEPolicy &) DELETED_FUNCTION;
+    BEPolicy &operator=(const BEPolicy &) DELETED_FUNCTION;
+    BEPolicy(BEPolicy &&) noexcept DELETED_FUNCTION;
+    BEPolicy &operator=(BEPolicy &&) noexcept DELETED_FUNCTION;
     // disable dynamic allocation
     ACC_CXX_DISABLE_NEW_DELETE
 };
@@ -160,7 +160,7 @@ struct LEPolicy
     final : public AbstractPolicy
 #endif
 {
-    inline LEPolicy() {}
+    explicit inline LEPolicy() noexcept {}
 #if defined(BELE_CTP)
     typedef N_BELE_RTP::LEPolicy RTP_Policy;
 #elif defined(BELE_RTP)
@@ -208,39 +208,24 @@ struct LEPolicy
     }
 
 private:
-    // disable copy, assignment and move assignment
-    LEPolicy(const LEPolicy &) = delete;
-    LEPolicy &operator=(const LEPolicy &) = delete;
-    LEPolicy &operator=(LEPolicy &&) = delete;
+    // disable copy and move
+    LEPolicy(const LEPolicy &) DELETED_FUNCTION;
+    LEPolicy &operator=(const LEPolicy &) DELETED_FUNCTION;
+    LEPolicy(LEPolicy &&) noexcept DELETED_FUNCTION;
+    LEPolicy &operator=(LEPolicy &&) noexcept DELETED_FUNCTION;
     // disable dynamic allocation
     ACC_CXX_DISABLE_NEW_DELETE
 };
 
-// native policy (aka host policy)
+// Native Endianness policy (aka host policy)
 #if (ACC_ABI_BIG_ENDIAN)
+typedef BEPolicy NEPolicy;
 typedef BEPolicy HostPolicy;
 #elif (ACC_ABI_LITTLE_ENDIAN)
+typedef LEPolicy NEPolicy;
 typedef LEPolicy HostPolicy;
 #else
 #error "ACC_ABI_ENDIAN"
-#endif
-
-#if 0 /* UNUSED */
-struct HostAlignedPolicy {
-#if defined(BELE_CTP)
-    enum { isBE = HostPolicy::isBE, isLE = HostPolicy::isLE };
-#endif
-
-    typedef upx_uint16_t U16;
-    typedef upx_uint32_t U32;
-    typedef upx_uint64_t U64;
-
-    static void compileTimeAssertions() {
-        COMPILE_TIME_ASSERT(sizeof(U16) == 2)
-        COMPILE_TIME_ASSERT(sizeof(U32) == 4)
-        COMPILE_TIME_ASSERT(sizeof(U64) == 8)
-    }
-};
 #endif
 
 #undef V

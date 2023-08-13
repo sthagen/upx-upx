@@ -1,6 +1,7 @@
 /.hg*
 /.vscode*
 /Makevars.global*
+/Testing*
 /build*
 /maint*
 /vendor*
@@ -8,21 +9,32 @@
 GNUmakefile
 MMakefile
 Makevars.local*
+compile_flags.txt
+Tmp*
 tmp*
 
 *.a
+*.bz2
 *.d
 *.dll
+*.dylib
 *.exe
+*.gz
 *.lib
 *.map
 *.o
 *.obj
 *.out
+*.patch
 *.py[cdo]
+*.rar
 *.so
 *.swp
+*.tmp
 *.ttp
+*.xz
+*.zip
+*.zst
 
 doc/*.man
 doc/*.ps

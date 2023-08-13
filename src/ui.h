@@ -26,8 +26,6 @@
  */
 
 #pragma once
-#ifndef UPX_UI_H__
-#define UPX_UI_H__ 1
 
 class OutputFile;
 class Packer;
@@ -38,10 +36,10 @@ class Packer;
 
 class UiPacker final {
 public:
-    UiPacker(const Packer *p_);
+    explicit UiPacker(const Packer *p_);
 
 public:
-    virtual ~UiPacker();
+    virtual ~UiPacker() noexcept;
 
     static void uiConfirmUpdate();
     static void uiPackTotal();
@@ -81,19 +79,19 @@ public:
     static void uiHeader();
     static void uiFooter(const char *n);
 
-    int ui_pass;
-    int ui_total_passes;
+    int ui_pass = 0;
+    int ui_total_passes = 0;
 
 protected:
     virtual void printInfo(int nl = 0);
-    const Packer *p = nullptr;
+    const Packer *const p; // reference
 
     // callback
-    upx_callback_t cb;
+    upx_callback_t cb = {};
 
     // internal state
     struct State;
-    State *s = nullptr;
+    OwningPointer(State) s = nullptr; // owner
 
     // totals
     static unsigned total_files;
@@ -107,7 +105,5 @@ protected:
     static unsigned update_fc_len;
     static unsigned update_fu_len;
 };
-
-#endif /* already included */
 
 /* vim:set ts=4 sw=4 et: */

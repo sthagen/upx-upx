@@ -26,8 +26,6 @@
  */
 
 #pragma once
-#ifndef UPX_P_WCLE_H__
-#define UPX_P_WCLE_H__ 1
 
 /*************************************************************************
 // watcom/le
@@ -37,11 +35,11 @@ class PackWcle final : public Packer, public LeFile {
     typedef Packer super;
 
 public:
-    PackWcle(InputFile *f) : super(f), LeFile(f) { bele = &N_BELE_RTP::le_policy; }
+    explicit PackWcle(InputFile *f) : super(f), LeFile(f) { bele = &N_BELE_RTP::le_policy; }
     virtual int getVersion() const override { return 13; }
     virtual int getFormat() const override { return UPX_F_WATCOM_LE; }
     virtual const char *getName() const override { return "watcom/le"; }
-    virtual const char *getFullName(const options_t *) const override {
+    virtual const char *getFullName(const Options *) const override {
         return "i386-dos32.watcom.le";
     }
     virtual const int *getCompressionMethods(int method, int level) const override;
@@ -83,11 +81,9 @@ protected:
     // temporary copy of the object descriptors
     MemBuffer iobject_desc;
 
-    int big_relocs;
-    bool has_extra_code;
-    unsigned neweip;
+    int big_relocs = 0;
+    bool has_extra_code = false;
+    unsigned neweip = 0;
 };
-
-#endif /* already included */
 
 /* vim:set ts=4 sw=4 et: */

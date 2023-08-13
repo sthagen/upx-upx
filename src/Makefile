@@ -1,12 +1,13 @@
 #
-# UPX Makefile - needs GNU make
+# UPX src Makefile - needs GNU make and CMake >= 3.13
+# Copyright (C) Markus Franz Xaver Johannes Oberhumer
 #
 
-# IMPORTANT NOTE: this Makefile is deprecated - please
-#   directly use the CMake build instead!
+# NOTE: this Makefile is deprecated - please directly use the CMake build
+# instead. And see the top-level Makefile for some pre-defined CMake
+# build configurations.
 
 MAKEFLAGS += -r
-.SUFFIXES:
 export SHELL = /bin/sh
 
 ifndef srcdir
@@ -21,6 +22,7 @@ endif
 # redirect to top-level CMake build
 #
 
+# NOTE that top-level Makefile .DEFAULT_GOAL is build/release
 .DEFAULT_GOAL = build/debug
 
 build/debug:   $(top_srcdir)/build/debug/upx
@@ -35,11 +37,14 @@ $(top_srcdir)/build/debug/upx: PHONY
 $(top_srcdir)/build/release/upx: PHONY
 	$(MAKE) -C $(top_srcdir) build/release
 
+.NOTPARALLEL: # because the actual builds use "cmake --parallel"
 .PHONY: PHONY
-.NOTPARALLEL:
+.SECONDEXPANSION:
+.SUFFIXES:
 
 #
 # "make run-testsuite"
+# see https://github.com/upx/upx-testsuite.git
 #
 
 # search for the UPX testsuite -- git clone https://github.com/upx/upx-testsuite.git
@@ -56,19 +61,19 @@ endif
 endif
 
 # run the UPX testsuite
-# The expected (old) checksums are in $(top_srcdir)/.github/travis_testsuite_1-expected_sha256sums.sh
-# The   actual (new) checksums are in ./tmp-testsuite/testsuite_1/.sha256sums.recreate
+# The expected (old) checksums are in $(top_srcdir)/misc/testsuite/upx_testsuite_1-expected_sha256sums.sh
+# The   actual (new) checksums are in ./tmp-upx-testsuite/testsuite_1/.sha256sums.recreate
 ifneq ($(wildcard $(upx_testsuite_SRCDIR)/files/packed/.),)
-ifneq ($(wildcard $(top_srcdir)/.github/travis_testsuite_1.sh),)
+ifneq ($(wildcard $(top_srcdir)/misc/testsuite/upx_testsuite_1.sh),)
 run-testsuite: run-testsuite-release
 run-testsuite-%: export upx_testsuite_SRCDIR   := $(upx_testsuite_SRCDIR)
-run-testsuite-%: export upx_testsuite_BUILDDIR := ./tmp-testsuite
+run-testsuite-%: export upx_testsuite_BUILDDIR := ./tmp-upx-testsuite
 run-testsuite-debug: export upx_exe := $(top_srcdir)/build/debug/upx
 run-testsuite-debug: PHONY $(top_srcdir)/build/debug/upx
-	time -p bash $(top_srcdir)/.github/travis_testsuite_1.sh
+	time -p bash $(top_srcdir)/misc/testsuite/upx_testsuite_1.sh
 run-testsuite-release: export upx_exe := $(top_srcdir)/build/release/upx
 run-testsuite-release: PHONY $(top_srcdir)/build/release/upx
-	time -p bash $(top_srcdir)/.github/travis_testsuite_1.sh
+	time -p bash $(top_srcdir)/misc/testsuite/upx_testsuite_1.sh
 endif
 endif
 
@@ -79,15 +84,14 @@ endif
 # automatically format some C++ source code files
 ifeq ($(shell uname),Linux)
 # Markus loves clang-format, but John hates it; find a compromise
-CLANG_FORMAT_EXCLUDE_FILES += conf.h miniacc.h version.h help.cpp
-CLANG_FORMAT_EXCLUDE_FILES += p_elf.h p_elf_enum.h p_lx_% p_mach% p_unix% p_vmli%
-CLANG_FORMAT_EXCLUDE_FILES += packer_c.cpp packer_f.cpp
+CLANG_FORMAT_EXCLUDE_FILES += conf.h miniacc.h version.h packer_c.cpp
+CLANG_FORMAT_EXCLUDE_FILES += p_elf.h p_elf_enum.h p_lx_% p_mach% p_unix% p_vmlin%
 CLANG_FORMAT_EXCLUDE_FILES += compress/compress.h filter/filter_impl.cpp
 CLANG_FORMAT_FILES := $(sort $(wildcard *.[ch]* ../maint/src/*.[ch]* [cu]*/*.[ch]*))
 CLANG_FORMAT_FILES := $(filter-out $(CLANG_FORMAT_EXCLUDE_FILES),$(CLANG_FORMAT_FILES))
 clang-format: PHONY $(CLANG_FORMAT_FILES)
 	@echo "running upx-clang-format"
-	@$(top_srcdir)/misc/scripts/upx-clang-format -i $(CLANG_FORMAT_FILES)
+	@$(top_srcdir)/misc/scripts/upx-clang-format.sh -i $(CLANG_FORMAT_FILES)
 endif
 
 #
@@ -100,7 +104,7 @@ CHECK_WHITESPACE = $(top_srcdir)/misc/scripts/check_whitespace.sh $(top_srcdir)
 ifneq ($(wildcard $(top_srcdir)/.git/.),)
 CHECK_WHITESPACE = $(top_srcdir)/misc/scripts/check_whitespace_git.sh $(top_srcdir)
 endif
-check-whitespace : PHONY ; $(CHECK_WHITESPACE)
+check-whitespace: PHONY; $(CHECK_WHITESPACE)
 endif
 
 # vim:set ts=8 sw=8 noet:
