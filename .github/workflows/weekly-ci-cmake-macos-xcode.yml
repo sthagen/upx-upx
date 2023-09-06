@@ -22,7 +22,7 @@ jobs:
           - { os: macos-13, run_test: false } # TODO: enable once UPX fully works on macos-13
     steps:
       - name: 'Check out code'
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with: { submodules: true }
       - { name: 'Config cmake Xcode',        run: 'cmake -S . -B build/xcode -G Xcode' }
       - { name: 'Build cmake Xcode default', run: 'cmake --build build/xcode' }

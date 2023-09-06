@@ -28,7 +28,7 @@ jobs:
           - { os: windows-2022, vsversion: 2022, arch: amd64, clang_cl: true }
     steps:
       - name: 'Check out code'
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with: { submodules: true }
       - name: 'Set up Developer Command Prompt'
         uses: ilammy/msvc-dev-cmd@v1
