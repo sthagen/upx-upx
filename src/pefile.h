@@ -59,7 +59,7 @@ protected:
     virtual void defineSymbols(unsigned ncsection, unsigned upxsection, unsigned sizeof_oh,
                                unsigned isize_isplit, unsigned s1addr) = 0;
     virtual void addNewRelocations(Reloc &, unsigned) {}
-    void callProcessRelocs(Reloc &rel, unsigned &ic);
+    void callProcessStubRelocs(Reloc &rel, unsigned &ic);
     void callProcessResources(Resource &res, unsigned &ic);
     virtual unsigned getProcessImportParam(unsigned) { return 0; }
     virtual void setOhDataBase(const pe_section_t *osection) = 0;
@@ -106,7 +106,6 @@ protected:
     upx_uint64_t ilinkerGetAddress(const char *, const char *) const;
 
     virtual void processRelocs() = 0;
-    void processRelocs(Reloc *);
     void rebuildRelocs(SPAN_S(byte) &, unsigned bits, unsigned flags, upx_uint64_t imagebase);
     MemBuffer mb_orelocs;
     SPAN_0(byte) orelocs = nullptr;
@@ -233,7 +232,6 @@ protected:
         PEDIR_EXCEPTION = 3, // Exception table
         PEDIR_SECURITY = 4,  // Certificate table (file pointer)
         PEDIR_BASERELOC = 5,
-        PEDIR_RELOC = PEDIR_BASERELOC,
         PEDIR_DEBUG = 6,
         PEDIR_ARCHITECTURE = 7, // Architecture-specific data
         PEDIR_GLOBALPTR = 8,    // Global pointer
@@ -359,14 +357,14 @@ protected:
     };
 
     class Interval : private noncopyable {
-        unsigned capacity;
-        void *base;
+        unsigned capacity = 0;
+        void *base = nullptr;
     public:
         struct interval {
             unsigned start, len;
-        } *ivarr;
-
-        unsigned ivnum;
+        };
+        struct interval *ivarr = nullptr;
+        unsigned ivnum = 0;
 
         explicit Interval(void *b);
         ~Interval() noexcept;
@@ -385,25 +383,39 @@ protected:
     };
 
     class Reloc : private noncopyable {
-        byte *start;
-        unsigned size;
+        // these are set in constructor
+        byte *start = nullptr;
+        unsigned start_size_in_bytes = 0;
+        bool start_did_alloc = false;
+        SPAN_0(byte) start_buf = nullptr;
 
-        void newRelocPos(void *p);
+        struct alignas(1) BaseReloc { // IMAGE_BASE_RELOCATION
+            LE32 virtual_address;
+            LE32 size_of_block;
+            // LE16 rel1[COUNT]; // COUNT == (size_of_block - 8) / 2
+        };
+        struct RelocationBlock {
+            SPAN_0(BaseReloc) rel = nullptr;
+            SPAN_0(LE16) rel1 = nullptr;
+            unsigned count = 0;
+            void reset() noexcept;
+        };
+        RelocationBlock rb;                   // current RelocationBlock
+        bool readFromRelocationBlock(byte *); // set rb
 
-        struct reloc;
-        reloc *rel;
-        LE16 *rel1;
-        unsigned counts[16];
+        unsigned counts[16] = {};
 
+        void initSpans();
     public:
-        explicit Reloc(byte *, unsigned);
+        explicit Reloc(byte *ptr, unsigned bytes);
         explicit Reloc(unsigned relocnum);
+        ~Reloc() noexcept;
         //
-        bool next(unsigned &pos, unsigned &type);
+        bool next(unsigned &result_pos, unsigned &result_type);
         const unsigned *getcounts() const { return counts; }
         //
         void add(unsigned pos, unsigned type);
-        void finish(byte *&p, unsigned &size);
+        void finish(byte *(&result_ptr), unsigned &result_size); // => transfer ownership
     };
 
     class Resource : private noncopyable {
@@ -503,7 +515,7 @@ protected:
     void pack0(OutputFile *fo, unsigned subsystem_mask, upx_uint64_t default_imagebase,
                bool last_section_rsrc_only);
     virtual void unpack(OutputFile *fo) override;
-    virtual int canUnpack() override;
+    virtual tribool canUnpack() override;
 
     virtual void readPeHeader() override;
 
@@ -564,7 +576,7 @@ protected:
     void pack0(OutputFile *fo, unsigned subsystem_mask, upx_uint64_t default_imagebase);
 
     virtual void unpack(OutputFile *fo) override;
-    virtual int canUnpack() override;
+    virtual tribool canUnpack() override;
 
     virtual void readPeHeader() override;
 

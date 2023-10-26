@@ -29,6 +29,7 @@
 **************************************************************************/
 
 #if CLANG_FORMAT_DUMMY_CLASS
+template <class T>
 class CSelf {
 #endif
 
@@ -58,7 +59,7 @@ private:
 
 // debug - internal sanity check; also serves as pseudo-documentation
 #if DEBUG
-    noinline void assertInvariants() const {
+    noinline void assertInvariants() const may_throw {
         if __acc_cte (configRequirePtr)
             assert(ptr != nullptr);
         if __acc_cte (configRequireBase)
@@ -113,10 +114,8 @@ forceinline ~CSelf() noexcept {}
 #endif
     noinline void invalidate() {
         assertInvariants();
-        // poison the pointer: point to non-null invalid address
-        ptr = (pointer) XSPAN_GET_POISON_VOID_PTR();
-        // ptr = (pointer) (void *) &ptr; // point to self
-        base = ptr;
+        ptr_invalidate_and_poison(ptr); // point to non-null invalid address
+        base = ptr;                     // point to non-null invalid address
         size_in_bytes = 0;
         assertInvariants();
     }
@@ -272,7 +271,7 @@ public:
     Self &operator=(MemBuffer &mb) { return assign(Self(mb)); }
 #endif
 
-    Self subspan(ptrdiff_t offset, ptrdiff_t count) {
+    Self subspan(ptrdiff_t offset, ptrdiff_t count) const {
         pointer begin = check_add(ptr, offset);
         pointer end = check_add(begin, count);
         if (begin <= end)
@@ -281,49 +280,57 @@ public:
             return Self(Unchecked, end, (begin - end) * sizeof(T), end);
     }
 
-    bool operator==(pointer other) const { return ptr == other; }
+    template <class U>
+    inline CSelf<U> type_cast() const {
+        typedef CSelf<U> R;
+        typedef typename R::pointer rpointer;
+        return R(R::Unchecked, reinterpret_cast<rpointer>(ptr), size_in_bytes,
+                 reinterpret_cast<rpointer>(base));
+    }
+
+    bool operator==(pointer other) const noexcept { return ptr == other; }
     template <class U>
     XSPAN_REQUIRES_CONVERTIBLE_R(bool)
-    operator==(U *other) const {
+    operator==(U *other) const noexcept {
         return ptr == other;
     }
-    bool operator!=(pointer other) const { return ptr != other; }
+    bool operator!=(pointer other) const noexcept { return ptr != other; }
     template <class U>
     XSPAN_REQUIRES_CONVERTIBLE_R(bool)
-    operator!=(U *other) const {
+    operator!=(U *other) const noexcept {
         return ptr != other;
     }
 
     template <class U>
     XSPAN_REQUIRES_CONVERTIBLE_R(bool)
-    operator==(const PtrOrSpan<U> &other) const {
+    operator==(const PtrOrSpan<U> &other) const noexcept {
         return ptr == other.ptr;
     }
     template <class U>
     XSPAN_REQUIRES_CONVERTIBLE_R(bool)
-    operator==(const PtrOrSpanOrNull<U> &other) const {
+    operator==(const PtrOrSpanOrNull<U> &other) const noexcept {
         return ptr == other.ptr;
     }
     template <class U>
     XSPAN_REQUIRES_CONVERTIBLE_R(bool)
-    operator==(const Span<U> &other) const {
+    operator==(const Span<U> &other) const noexcept {
         return ptr == other.ptr;
     }
 
     template <class U>
     XSPAN_REQUIRES_CONVERTIBLE_R(bool)
-    operator!=(const PtrOrSpan<U> &other) const {
-        return !(*this == other);
+    operator!=(const PtrOrSpan<U> &other) const noexcept {
+        return ptr != other.ptr;
     }
     template <class U>
     XSPAN_REQUIRES_CONVERTIBLE_R(bool)
-    operator!=(const PtrOrSpanOrNull<U> &other) const {
-        return !(*this == other);
+    operator!=(const PtrOrSpanOrNull<U> &other) const noexcept {
+        return ptr != other.ptr;
     }
     template <class U>
     XSPAN_REQUIRES_CONVERTIBLE_R(bool)
-    operator!=(const Span<U> &other) const {
-        return !(*this == other);
+    operator!=(const Span<U> &other) const noexcept {
+        return ptr != other.ptr;
     }
 
     // check for notNull here
@@ -443,7 +450,7 @@ public: // raw access
         return ptr;
     }
 
-    // like C++ std::span
+    // like C++20 std::span
     pointer data() const noexcept { return ptr; }
     pointer data(size_t bytes) const { return raw_bytes(bytes); } // UPX extra
     // size_type size() const { return size_bytes() / sizeof(element_type); } // NOT USED

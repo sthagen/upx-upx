@@ -562,7 +562,6 @@ PackMachBase<T>::compare_segment_command(void const *const aa, void const *const
     unsigned const xb = b->cmd - lc_seg;
            if (xa < xb)        return -1;  // LC_SEGMENT first
            if (xa > xb)        return  1;
-           if (0 != xa)        return  0;  // not LC_SEGMENT
     // Ascending by .fileoff so that find_SEGMENT_gap works
     if (a->fileoff < b->fileoff)
                                return -1;
@@ -572,9 +571,20 @@ PackMachBase<T>::compare_segment_command(void const *const aa, void const *const
     if (a->vmaddr < b->vmaddr) return -1;
     if (a->vmaddr > b->vmaddr) return  1;
     // Descending by .vmsize
-    if (a->vmsize)             return -1;  // 'a' is first
-    if (b->vmsize)             return  1;  // 'a' is last
+    if ((a->vmsize != 0) != (b->vmsize != 0))
+        return (a->vmsize != 0) ? -1 : 1;
     // What could remain?
+    // try to make sort order deterministic and just compare more fields
+#define CMP(field) \
+    if (a->field != b->field) return a->field < b->field ? -1 : 1
+    CMP(vmsize);
+    CMP(cmdsize);
+    CMP(filesize);
+    CMP(maxprot);
+    CMP(initprot);
+    CMP(nsects);
+    CMP(flags);
+#undef CMP
     return 0;
 }
 
@@ -1540,7 +1550,7 @@ void PackMachBase<T>::unpack(OutputFile *fo)
     }
 
     // Put LC_SEGMENT together at the beginning
-    qsort(msegcmd, ncmds, sizeof(*msegcmd), compare_segment_command);
+    upx_qsort(msegcmd, ncmds, sizeof(*msegcmd), compare_segment_command);
     n_segment = 0;
     for (unsigned j= 0; j < ncmds; ++j) {
         n_segment += (lc_seg==msegcmd[j].cmd);
@@ -1615,7 +1625,7 @@ void PackMachBase<T>::unpack(OutputFile *fo)
 
 // The prize is the value of overlay_offset: the offset of compressed data
 template <class T>
-int PackMachBase<T>::canUnpack()
+tribool PackMachBase<T>::canUnpack()
 {
     unsigned const lc_seg = lc_seg_info[sizeof(Addr)>>3].segment_cmd;
     fi->seek(0, SEEK_SET);
@@ -1924,7 +1934,7 @@ upx_uint64_t PackMachBase<T>::get_mod_init_func(Mach_segment_command const *segp
 }
 
 template <class T>
-bool PackMachBase<T>::canPack()
+tribool PackMachBase<T>::canPack()
 {
     unsigned const lc_seg = lc_seg_info[sizeof(Addr)>>3].segment_cmd;
     fi->seek(0, SEEK_SET);
@@ -2015,7 +2025,7 @@ bool PackMachBase<T>::canPack()
     }
 
     // Put LC_SEGMENT together at the beginning
-    qsort(msegcmd, ncmds, sizeof(*msegcmd), compare_segment_command);
+    upx_qsort(msegcmd, ncmds, sizeof(*msegcmd), compare_segment_command);
 
     if (lc_seg==msegcmd[0].cmd && 0==msegcmd[0].vmaddr
     &&  !strcmp("__PAGEZERO", msegcmd[0].segname)) {
@@ -2219,6 +2229,13 @@ bool PackMachBase<T>::canPack()
             break;
         }
     }
+#if !defined(DEBUG)
+    // disable macOS packing in Release builds until we do support macOS 13+
+    //   https://github.com/upx/upx/issues/612
+    if (my_cputype == CPU_TYPE_X86_64 || my_cputype == CPU_TYPE_ARM64)
+        if (!opt->darwin_macho.force_macos)
+            throwCantPack("macOS is currently not supported (try --force-macos)");
+#endif
     return true;
 }
 
@@ -2484,7 +2501,7 @@ void PackMachFat::unpack(OutputFile *fo)
     }
 }
 
-bool PackMachFat::canPack()
+tribool PackMachFat::canPack()
 {
     struct Mach_fat_arch const *const arch = &fat_head.arch[0];
 
@@ -2552,7 +2569,7 @@ bool PackMachFat::canPack()
     return true;
 }
 
-int PackMachFat::canUnpack()
+tribool PackMachFat::canUnpack()
 {
     struct Mach_fat_arch const *const arch = &fat_head.arch[0];
 

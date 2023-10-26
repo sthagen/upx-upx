@@ -26,8 +26,6 @@
  */
 
 #pragma once
-#ifndef UPX_P_DJGPP2_H__
-#define UPX_P_DJGPP2_H__ 1
 
 /*************************************************************************
 // djgpp2/coff
@@ -50,8 +48,8 @@ public:
     virtual void pack(OutputFile *fo) override;
     virtual void unpack(OutputFile *fo) override;
 
-    virtual bool canPack() override;
-    virtual int canUnpack() override;
+    virtual tribool canPack() override;
+    virtual tribool canUnpack() override;
 
 protected:
     void handleStub(OutputFile *fo);
@@ -103,7 +101,5 @@ protected:
 
     void stripDebug();
 };
-
-#endif /* already included */
 
 /* vim:set ts=4 sw=4 et: */

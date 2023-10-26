@@ -64,7 +64,7 @@ static void handle_opterr(acc_getopt_p g, const char *f, void *v) {
 static int exit_code = EXIT_OK;
 
 #if (WITH_GUI)
-__acc_static_noinline void do_exit(void) { throw exit_code; }
+static noinline void do_exit(void) { throw exit_code; }
 #else
 #if defined(__GNUC__)
 static void do_exit(void) __attribute__((__noreturn__));
@@ -105,14 +105,14 @@ static bool set_eec(int ec, int *eec) {
 
 bool main_set_exit_code(int ec) { return set_eec(ec, &exit_code); }
 
-__acc_static_noinline void e_exit(int ec) {
+static noinline void e_exit(int ec) {
     if (opt->debug.getopt_throw_instead_of_exit)
         throw ec;
     (void) main_set_exit_code(ec);
     do_exit();
 }
 
-__acc_static_noinline void e_usage(void) {
+static noinline void e_usage(void) {
     if (opt->debug.getopt_throw_instead_of_exit)
         throw EXIT_USAGE;
     show_usage();
@@ -160,7 +160,7 @@ static void check_not_both(bool e1, bool e2, const char *c1, const char *c2) {
     }
 }
 
-static void check_options(int i, int argc) {
+static void check_and_update_options(int i, int argc) {
     assert(i <= argc);
 
     if (opt->cmd != CMD_COMPRESS) {
@@ -198,6 +198,16 @@ static void check_options(int i, int argc) {
             e_usage();
         }
     }
+    check_not_both(opt->force_overwrite, opt->preserve_link, "--force-overwrite", "--link");
+    check_not_both(opt->to_stdout, opt->preserve_link, "--stdout", "--link");
+
+#if defined(__unix__)
+    static_assert(HAVE_LSTAT);
+#else
+    // preserve_link is currently silently ignored on non-Unix platforms
+    // (we may revisit this decision later if there is some actual use-case)
+    opt->preserve_link = false;
+#endif
 }
 
 /*************************************************************************
@@ -210,7 +220,7 @@ static void e_help(void) {
 }
 
 static void set_term(FILE *f) {
-    if (f)
+    if (f != nullptr)
         con_term = f;
     else
         con_term = acc_isatty(STDIN_FILENO) ? stderr : stdout;
@@ -363,6 +373,9 @@ static int do_option(int optc, const char *arg) {
         break;
     case 909:
         set_cmd(CMD_FILEINFO);
+        break;
+    case 910:
+        set_cmd(CMD_SYSINFO);
         break;
     case 'h':
     case 'H':
@@ -521,6 +534,14 @@ static int do_option(int optc, const char *arg) {
     case 519:
         opt->no_env = true;
         break;
+    case 530:
+        // NOTE: only use "preserve_link" if you really need it, e.g. it can fail
+        //   with ETXTBSY and other unexpected errors; renaming files is much safer
+        opt->preserve_link = true;
+        break;
+    case 531:
+        opt->preserve_link = false;
+        break;
     case 526:
         opt->preserve_mode = false;
         break;
@@ -652,54 +673,27 @@ static int do_option(int optc, const char *arg) {
     case 564:
         opt->cpu_x86 = opt->CPU_486;
         break;
-    //
+
+    // atari/tos
+    case 650:
+        opt->atari_tos.split_segments = true;
+        break;
+    // darwin/macho
+    case 690:
+        opt->darwin_macho.force_macos = true;
+        break;
+    // dos/exe
     case 600:
         opt->dos_exe.force_stub = true;
         break;
     case 601:
         opt->dos_exe.no_reloc = true;
         break;
+    // djgpp2/coff
     case 610:
         opt->djgpp2_coff.coff = true;
         break;
-    case 620:
-        opt->watcom_le.le = true;
-        break;
-    case 630:
-        opt->win32_pe.compress_exports = 1;
-        if (mfx_optarg && mfx_optarg[0])
-            getoptvar(&opt->win32_pe.compress_exports, 0, 1, arg);
-        // printf("compress_exports: %d\n", opt->win32_pe.compress_exports);
-        break;
-    case 631:
-        opt->win32_pe.compress_icons = 1;
-        if (mfx_optarg && mfx_optarg[0])
-            getoptvar(&opt->win32_pe.compress_icons, 0, 3, arg);
-        // printf("compress_icons: %d\n", opt->win32_pe.compress_icons);
-        break;
-    case 632:
-        opt->win32_pe.compress_resources = 1;
-        if (mfx_optarg && mfx_optarg[0])
-            getoptvar(&opt->win32_pe.compress_resources, 0, 1, arg);
-        // printf("compress_resources: %d\n", opt->win32_pe.compress_resources);
-        break;
-    case 633:
-        // opt->win32_pe.strip_loadconf - OBSOLETE - IGNORED
-        break;
-    case 634:
-        opt->win32_pe.strip_relocs = 1;
-        if (mfx_optarg && mfx_optarg[0])
-            getoptvar(&opt->win32_pe.strip_relocs, 0, 1, arg);
-        // printf("strip_relocs: %d\n", opt->win32_pe.strip_relocs);
-        break;
-    case 635:
-        if (!mfx_optarg || !mfx_optarg[0])
-            e_optarg(arg);
-        opt->win32_pe.keep_resource = mfx_optarg;
-        break;
-    case 650:
-        opt->atari_tos.split_segments = true;
-        break;
+    // o_unix
     case 660:
         getoptvar(&opt->o_unix.blocksize, 8192u, ~0u, arg);
         break;
@@ -727,6 +721,19 @@ static int do_option(int optc, const char *arg) {
     case 669: // OpenBSD
         opt->o_unix.osabi0 = Elf32_Ehdr::ELFOSABI_OPENBSD;
         break;
+    case 674:
+        opt->o_unix.unmap_all_pages = true; // val ?
+        break;
+    case 675:
+        opt->o_unix.preserve_build_id = true;
+        break;
+    case 676:
+        opt->o_unix.android_shlib = true;
+        break;
+    case 677:
+        opt->o_unix.force_pie = true;
+        break;
+    // ps1/exe
     case 670:
         opt->ps1_exe.boot_only = true;
         break;
@@ -740,17 +747,45 @@ static int do_option(int optc, const char *arg) {
     case 673:
         opt->ps1_exe.do_8mib = false;
         break;
-    case 674:
-        opt->o_unix.unmap_all_pages = true; // val ?
+    // watcom/le
+    case 620:
+        opt->watcom_le.le = true;
         break;
-    case 675:
-        opt->o_unix.preserve_build_id = true;
+    // win32/pe
+    case 630:
+        opt->win32_pe.compress_exports = 1;
+        if (mfx_optarg && mfx_optarg[0])
+            getoptvar(&opt->win32_pe.compress_exports, 0, 1, arg);
+        // printf("compress_exports: %d\n", opt->win32_pe.compress_exports);
         break;
-    case 676:
-        opt->o_unix.android_shlib = true;
+    case 631:
+        opt->win32_pe.compress_icons = 1;
+        if (mfx_optarg && mfx_optarg[0])
+            getoptvar(&opt->win32_pe.compress_icons, 0, 3, arg);
+        // printf("compress_icons: %d\n", opt->win32_pe.compress_icons);
         break;
-    case 677:
-        opt->o_unix.force_pie = true;
+    case 632:
+        opt->win32_pe.compress_resources = 1;
+        if (mfx_optarg && mfx_optarg[0]) {
+            int value = 0;
+            getoptvar(&value, 0, 1, arg);
+            opt->win32_pe.compress_resources = bool(value);
+        }
+        // printf("compress_resources: %d\n", opt->win32_pe.compress_resources);
+        break;
+    case 633:
+        // opt->win32_pe.strip_loadconf - OBSOLETE - IGNORED
+        break;
+    case 634:
+        opt->win32_pe.strip_relocs = 1;
+        if (mfx_optarg && mfx_optarg[0])
+            getoptvar(&opt->win32_pe.strip_relocs, 0, 1, arg);
+        // printf("strip_relocs: %d\n", opt->win32_pe.strip_relocs);
+        break;
+    case 635:
+        if (!mfx_optarg || !mfx_optarg[0])
+            e_optarg(arg);
+        opt->win32_pe.keep_resource = mfx_optarg;
         break;
 
 #if !defined(DOCTEST_CONFIG_DISABLE)
@@ -786,6 +821,8 @@ int main_get_options(int argc, char **argv) {
         {"help", 0, N, 'h' + 256},     // give help
         {"license", 0, N, 'L'},        // display software license
         {"list", 0, N, 'l'},           // list compressed exe
+        {"sysinfo", 0x90, N, 910},     // display system info // undocumented and subject to change
+        {"sys-info", 0x90, N, 910},    // display system info // undocumented and subject to change
         {"test", 0, N, 't'},           // test compressed file integrity
         {"uncompress", 0, N, 'd'},     // decompress
         {"version", 0, N, 'V' + 256},  // display version number
@@ -794,8 +831,10 @@ int main_get_options(int argc, char **argv) {
         {"force", 0, N, 'f'},              // force overwrite of output files
         {"force-compress", 0, N, 'f'},     //   and compression of suspicious files
         {"force-overwrite", 0x90, N, 529}, // force overwrite of output files
+        {"link", 0x90, N, 530},            // preserve hard link
         {"info", 0, N, 'i'},               // info mode
         {"no-env", 0x10, N, 519},          // no environment var
+        {"no-link", 0x90, N, 531},         // do not preserve hard link [default]
         {"no-mode", 0x10, N, 526},         // do not preserve mode (permissions)
         {"no-owner", 0x10, N, 527},        // do not preserve ownership
         {"no-progress", 0, N, 516},        // no progress bar
@@ -882,15 +921,15 @@ int main_get_options(int argc, char **argv) {
         {"crp-zlib-st", 0x31, N, 823},
 
         // atari/tos
-        {"split-segments", 0x10, N, 650},
+        {"split-segments", 0x90, N, 650},
+        // darwin/macho
+        {"force-macos", 0x90, N, 690}, // undocumented temporary until we fix macOS 13+
         // djgpp2/coff
-        {"coff", 0x10, N, 610},          // produce COFF output
-                                         // dos/com
-                                         // dos/exe
-                                         //{"force-stub",             0x10, 0, 600},
-        {"no-reloc", 0x10, N, 601},      // no reloc. record into packer dos/exe
-                                         // dos/sys
-                                         // unix
+        {"coff", 0x90, N, 610}, // produce COFF output
+        // dos/exe
+        //{"force-stub", 0x10, N, 600},
+        {"no-reloc", 0x10, N, 601}, // no reloc. record into packer dos/exe
+        // o_unix
         {"blocksize", 0x31, N, 660},     // --blocksize=
         {"force-execve", 0x90, N, 661},  // force linux/386 execve format
         {"is_ptinterp", 0x10, N, 663},   // linux/elf386 PT_INTERP program
@@ -908,21 +947,21 @@ int main_get_options(int argc, char **argv) {
         {"preserve-build-id", 0, N, 675},
         {"android-shlib", 0, N, 676},
         {"force-pie", 0x90, N, 677},
+        // ps1/exe
+        {"boot-only", 0x90, N, 670},
+        {"no-align", 0x90, N, 671},
+        {"8-bit", 0x90, N, 672},
+        {"8mib-ram", 0x90, N, 673},
+        {"8mb-ram", 0x90, N, 673},
         // watcom/le
-        {"le", 0x10, N, 620}, // produce LE output
-                              // win32/pe
+        {"le", 0x90, N, 620}, // produce LE output
+        // win32/pe
         {"compress-exports", 2, N, 630},
         {"compress-icons", 2, N, 631},
         {"compress-resources", 2, N, 632},
         {"strip-loadconf", 0x12, N, 633}, // OBSOLETE - IGNORED
         {"strip-relocs", 0x12, N, 634},
         {"keep-resource", 0x31, N, 635},
-        // ps1/exe
-        {"boot-only", 0x10, N, 670},
-        {"no-align", 0x10, N, 671},
-        {"8-bit", 0x10, N, 672},
-        {"8mib-ram", 0x10, N, 673},
-        {"8mb-ram", 0x10, N, 673},
 
 #if !defined(DOCTEST_CONFIG_DISABLE)
         // [doctest] Query flags - the program quits after them. Available:
@@ -1028,8 +1067,6 @@ void main_get_envoptions() {
         {"no-lzma", 0x10, N, 722}, // disable all_methods_use_lzma
         {"prefer-nrv", 0x10, N, 723},
         {"prefer-ucl", 0x10, N, 724},
-        // compression settings
-        // compression runtime parameters
 
         // win32/pe
         {"compress-exports", 2, N, 630},
@@ -1144,7 +1181,7 @@ static void first_options(int argc, char **argv) {
 // main entry point
 **************************************************************************/
 
-int upx_main(int argc, char *argv[]) {
+int upx_main(int argc, char *argv[]) may_throw {
     int i;
     static char default_argv0[] = "upx";
     assert(argc >= 1); // sanity check
@@ -1227,12 +1264,16 @@ int upx_main(int argc, char *argv[]) {
         break;
     case CMD_FILEINFO:
         break;
-    case CMD_LICENSE:
-        show_license();
+    case CMD_SYSINFO:
+        show_sysinfo(OPTIONS_VAR);
         e_exit(EXIT_OK);
         break;
     case CMD_HELP:
         show_help(1);
+        e_exit(EXIT_OK);
+        break;
+    case CMD_LICENSE:
+        show_license();
         e_exit(EXIT_OK);
         break;
     case CMD_VERSION:
@@ -1248,7 +1289,7 @@ int upx_main(int argc, char *argv[]) {
     if (argc == 1)
         e_help();
     set_term(stderr);
-    check_options(i, argc);
+    check_and_update_options(i, argc);
     int num_files = argc - i;
     if (num_files < 1) {
         if (opt->verbose >= 2)
@@ -1304,7 +1345,7 @@ int _dowildcard = -1;
 }
 #endif
 
-int __acc_cdecl_main main(int argc, char *argv[]) {
+int __acc_cdecl_main main(int argc, char *argv[]) /*noexcept*/ {
 #if 0 && (ACC_OS_DOS32) && defined(__DJGPP__)
     // LFN=n may cause problems with 2.03's _rename and mkdir under WinME
     putenv("LFN=y");

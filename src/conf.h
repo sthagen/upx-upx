@@ -34,6 +34,19 @@
 #include "headers.h"
 #include "version.h"
 
+#if !defined(__has_attribute)
+#define __has_attribute(x) 0
+#endif
+#if !defined(__has_builtin)
+#define __has_builtin(x) 0
+#endif
+#if !defined(__has_feature)
+#define __has_feature(x) 0
+#endif
+
+// reserve name "upx" for namespace
+namespace upx {}
+
 ACC_COMPILE_TIME_ASSERT_HEADER(CHAR_BIT == 8)
 ACC_COMPILE_TIME_ASSERT_HEADER(sizeof(short) == 2)
 ACC_COMPILE_TIME_ASSERT_HEADER(sizeof(int) == 4)
@@ -85,37 +98,26 @@ inline void upx_std_call_once(upx_std_once_flag &flag, NoexceptCallable &&f) {
 }
 #endif // WITH_THREADS
 
-// <type_traits> upx_std_is_bounded_array: same as C++20 std::is_bounded_array
-template <class T>
-struct upx_std_is_bounded_array : public std::false_type {};
-template <class T, size_t N>
-struct upx_std_is_bounded_array<T[N]> : public std::true_type {};
-template <class T>
-inline constexpr bool upx_std_is_bounded_array_v = upx_std_is_bounded_array<T>::value;
-
 // <type_traits> upx_is_integral is overloaded for BE16 & friends; see bele.h
 template <class T>
 struct upx_is_integral : public std::is_integral<T> {};
 template <class T>
 inline constexpr bool upx_is_integral_v = upx_is_integral<T>::value;
 
-// <type_traits> util: is_same_all and is_same_any means std::is_same for multiple types
-template <class T, class... Ts>
-struct is_same_all : public std::conjunction<std::is_same<T, Ts>...> {};
-template <class T, class... Ts>
-inline constexpr bool is_same_all_v = is_same_all<T, Ts...>::value;
-template <class T, class... Ts>
-struct is_same_any : public std::disjunction<std::is_same<T, Ts>...> {};
-template <class T, class... Ts>
-inline constexpr bool is_same_any_v = is_same_any<T, Ts...>::value;
-
 #if (ACC_ARCH_M68K && ACC_OS_TOS && ACC_CC_GNUC) && defined(__MINT__)
-// horrible hack for broken compiler
+// horrible hack for broken compiler / ABI
 #define upx_fake_alignas_1      __attribute__((__aligned__(1),__packed__))
+#define upx_fake_alignas_2      __attribute__((__aligned__(2)))
+#define upx_fake_alignas_4      __attribute__((__aligned__(2))) // object file maximum 2 ???
 #define upx_fake_alignas_16     __attribute__((__aligned__(2))) // object file maximum 2 ???
 #define upx_fake_alignas__(x)   upx_fake_alignas_ ## x
 #define alignas(x)              upx_fake_alignas__(x)
+#define upx_alignas_max         upx_fake_alignas_4
 #endif
+#ifndef upx_alignas_max
+#define upx_alignas_max         alignas(std::max_align_t)
+#endif
+
 
 /*************************************************************************
 // core
@@ -123,6 +125,8 @@ inline constexpr bool is_same_any_v = is_same_any<T, Ts...>::value;
 
 // protect against integer overflows and malicious header fields
 // see C 11 standard, Annex K
+//
+// this limits uncompressed_size to about 682 MiB (715_128_832 bytes)
 typedef size_t upx_rsize_t;
 #define UPX_RSIZE_MAX       UPX_RSIZE_MAX_MEM
 #define UPX_RSIZE_MAX_MEM   (768 * 1024 * 1024)   // DO NOT CHANGE !!!
@@ -170,6 +174,7 @@ typedef upx_int64_t upx_off_t;
 #else
 #define noinline        __acc_noinline
 #endif
+#define forceinline_constexpr forceinline constexpr
 #define likely          __acc_likely
 #define unlikely        __acc_unlikely
 #define very_likely     __acc_very_likely
@@ -194,13 +199,15 @@ typedef upx_int64_t upx_off_t;
 #undef small
 #undef tos
 #undef unix
-#if defined(__linux__) && !defined(__unix__)
+#if (ACC_OS_POSIX) && !defined(__unix__)
 #  define __unix__ 1
+#endif
+#if (ACC_OS_CYGWIN || ACC_OS_DOS16 || ACC_OS_DOS32 || ACC_OS_EMX || ACC_OS_OS2 || ACC_OS_OS216 || ACC_OS_WIN16 || ACC_OS_WIN32 || ACC_OS_WIN64)
+#  undef __unix
+#  undef __unix__
 #endif
 #if (ACC_OS_DOS32) && defined(__DJGPP__)
 #  undef sopen
-#  undef __unix
-#  undef __unix__
 #endif
 
 #if defined(HAVE_DUP) && (HAVE_DUP + 0 == 0)
@@ -324,10 +331,6 @@ inline void NO_fprintf(FILE *, const char *, ...) noexcept attribute_format(2, 3
 inline void NO_printf(const char *, ...) noexcept {}
 inline void NO_fprintf(FILE *, const char *, ...) noexcept {}
 
-#if !defined(__has_builtin)
-#  define __has_builtin(x)      0
-#endif
-
 #if __has_builtin(__builtin_memcpy_inline)
 #  define upx_memcpy_inline     __builtin_memcpy_inline
 #elif __has_builtin(__builtin_memcpy)
@@ -379,13 +382,6 @@ inline const T& UPX_MAX(const T& a, const T& b) { if (a < b) return b; return a;
 template <class T>
 inline const T& UPX_MIN(const T& a, const T& b) { if (a < b) return a; return b; }
 
-template <size_t Size>
-struct UnsignedSizeOf {
-    static_assert(Size >= 1 && Size <= UPX_RSIZE_MAX_MEM);
-    static constexpr unsigned value = unsigned(Size);
-};
-#define usizeof(expr)   (UnsignedSizeOf<sizeof(expr)>::value)
-
 template <class T>
 inline void mem_clear(T *object) noexcept {
     static_assert(std::is_class_v<T>); // UPX convention
@@ -427,41 +423,13 @@ noinline void throwAssertFailed(const char *expr, const char *file, int line, co
 #define assert_noexcept assert
 #endif
 
-class noncopyable {
-protected:
-    inline noncopyable() noexcept {}
-    inline ~noncopyable() noexcept = default;
-private:
-    noncopyable(const noncopyable &) noexcept DELETED_FUNCTION; // copy constructor
-    noncopyable& operator=(const noncopyable &) noexcept DELETED_FUNCTION; // copy assignment
-    noncopyable(noncopyable &&) noexcept DELETED_FUNCTION; // move constructor
-    noncopyable& operator=(noncopyable &&) noexcept DELETED_FUNCTION; // move assignment
-};
+#include "util/cxxlib.h"
+using upx::is_same_any_v;
+using upx::noncopyable;
+using upx::tribool;
+using upx::OptVar;
+#define usizeof(expr)   (upx::UnsignedSizeOf<sizeof(expr)>::value)
 
-
-namespace compile_time {
-constexpr size_t string_len(const char *a) {
-    return *a == '\0' ? 0 : 1 + string_len(a + 1);
-}
-constexpr bool string_eq(const char *a, const char *b) {
-    return *a == *b && (*a == '\0' || string_eq(a + 1, b + 1));
-}
-constexpr bool string_lt(const char *a, const char *b) {
-    return (uchar)*a < (uchar)*b || (*a != '\0' && *a == *b && string_lt(a + 1, b + 1));
-}
-constexpr bool string_ne(const char *a, const char *b) {
-    return !string_eq(a, b);
-}
-constexpr bool string_gt(const char *a, const char *b) {
-    return string_lt(b, a);
-}
-constexpr bool string_le(const char *a, const char *b) {
-    return !string_lt(b, a);
-}
-constexpr bool string_ge(const char *a, const char *b) {
-    return !string_lt(a, b);
-}
-} // namespace compile_time
 
 /*************************************************************************
 // constants
@@ -632,52 +600,6 @@ struct upx_callback_t {
 // compression - config_t
 **************************************************************************/
 
-template <class T, T default_value_, T min_value_, T max_value_>
-struct OptVar final {
-    static_assert(std::is_integral_v<T>);
-    typedef T value_type;
-    static constexpr T default_value = default_value_;
-    static constexpr T min_value = min_value_;
-    static constexpr T max_value = max_value_;
-    static_assert(min_value <= default_value && default_value <= max_value);
-
-    static void assertValue(const T &v) noexcept {
-        // info: this generates annoying warnings "unsigned >= 0 is always true"
-        //assert_noexcept(v >= min_value);
-        assert_noexcept(v == min_value || v >= min_value + 1);
-        assert_noexcept(v <= max_value);
-    }
-    void assertValue() const noexcept {
-        assertValue(v);
-    }
-
-    OptVar() noexcept : v(default_value), is_set(false) { }
-    OptVar& operator= (const T &other) noexcept {
-        assertValue(other);
-        v = other;
-        is_set = true;
-        return *this;
-    }
-
-    void reset() noexcept { v = default_value; is_set = false; }
-    operator T () const noexcept { return v; }
-
-    T v;
-    bool is_set;
-};
-
-
-// optional assignments
-template <class T, T a, T b, T c>
-inline void oassign(OptVar<T,a,b,c> &self, const OptVar<T,a,b,c> &other) noexcept {
-    if (other.is_set) { self.v = other.v; self.is_set = true; }
-}
-template <class T, T a, T b, T c>
-inline void oassign(T &v, const OptVar<T,a,b,c> &other) noexcept {
-    if (other.is_set) { v = other.v; }
-}
-
-
 struct lzma_compress_config_t {
     typedef OptVar<unsigned,  2u, 0u,   4u> pos_bits_t;             // pb
     typedef OptVar<unsigned,  0u, 0u,   4u> lit_pos_bits_t;         // lp
@@ -812,7 +734,7 @@ extern const char *progname;
 bool main_set_exit_code(int ec);
 int main_get_options(int argc, char **argv);
 void main_get_envoptions();
-int upx_main(int argc, char *argv[]);
+int upx_main(int argc, char *argv[]) may_throw;
 
 // msg.cpp
 void printSetNl(int need_nl) noexcept;
@@ -829,14 +751,15 @@ void infoHeader();
 void infoWriting(const char *what, upx_int64_t size);
 
 // work.cpp
-void do_one_file(const char *iname, char *oname);
-int do_files(int i, int argc, char *argv[]);
+void do_one_file(const char *iname, char *oname) may_throw;
+int do_files(int i, int argc, char *argv[]) may_throw;
 
 // help.cpp
 extern const char gitrev[];
 void show_header();
 void show_help(int verbose=0);
 void show_license();
+void show_sysinfo(const char *options_var);
 void show_usage();
 void show_version(bool one_line=false);
 
@@ -844,6 +767,7 @@ void show_version(bool one_line=false);
 unsigned upx_adler32(const void *buf, unsigned len, unsigned adler=1);
 unsigned upx_crc32  (const void *buf, unsigned len, unsigned crc=0);
 
+// clang-format off
 int upx_compress           ( const upx_bytep src, unsigned  src_len,
                                    upx_bytep dst, unsigned* dst_len,
                                    upx_callback_p cb,
@@ -860,14 +784,15 @@ int upx_test_overlap       ( const upx_bytep buf,
                                    unsigned* dst_len,
                                    int method,
                              const upx_compress_result_t *cresult );
+// clang-format on
 
 
 #include "util/snprintf.h"   // must get included first!
+#include "util/util.h"
 #include "options.h"
 #include "except.h"
 #include "bele.h"
 #include "console/console.h"
-#include "util/util.h"
 // xspan
 #include "util/raw_bytes.h"
 #include "util/xspan.h"

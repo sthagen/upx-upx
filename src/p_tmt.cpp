@@ -87,7 +87,7 @@ void PackTmt::buildLoader(const Filter *ft) {
 **************************************************************************/
 
 int PackTmt::readFileHeader() {
-#define H(x) get_le16(h + 2 * (x))
+#define H(x)  get_le16(h + 2 * (x))
 #define H4(x) get_le32(h + (x))
     byte h[0x40];
     int ic;
@@ -150,7 +150,7 @@ int PackTmt::readFileHeader() {
 #undef H
 }
 
-bool PackTmt::canPack() {
+tribool PackTmt::canPack() {
     if (!readFileHeader())
         return false;
     return true;
@@ -265,7 +265,7 @@ void PackTmt::pack(OutputFile *fo) {
         throwNotCompressible();
 }
 
-int PackTmt::canUnpack() {
+tribool PackTmt::canUnpack() {
     if (!readFileHeader())
         return false;
     fi->seek(adam_offset, SEEK_SET);

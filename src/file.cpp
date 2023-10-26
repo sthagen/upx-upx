@@ -33,6 +33,7 @@
 **************************************************************************/
 
 /*static*/ void FileBase::chmod(const char *name, int mode) {
+    assert(name != nullptr && name[0] != 0);
 #if HAVE_CHMOD
     if (::chmod(name, mode) != 0)
         throwIOException(name, errno);
@@ -51,24 +52,34 @@
         throwIOException("rename error", errno);
 }
 
+/*static*/ bool FileBase::unlink_noexcept(const char *name) noexcept {
+    assert_noexcept(name != nullptr && name[0] != 0);
+    bool success = ::unlink(name) == 0;
+#if HAVE_CHMOD
+    if (!success)
+        success = (::chmod(name, 0666) == 0 && ::unlink(name) == 0);
+#endif
+    return success;
+}
+
 /*static*/ void FileBase::unlink(const char *name) {
-    if (::unlink(name) != 0)
+    if (!unlink_noexcept(name))
         throwIOException(name, errno);
 }
 
 /*************************************************************************
-//
+// FileBase
 **************************************************************************/
 
 FileBase::~FileBase() may_throw {
 #if 0 && defined(__GNUC__) // debug
     if (isOpen())
-        fprintf(stderr,"%s: %s\n", _name, __PRETTY_FUNCTION__);
+        fprintf(stderr, "%s: %s\n", _name, __PRETTY_FUNCTION__);
 #endif
-
-    // FIXME: we should use close() during exception unwinding but
-    //        closex() otherwise
-    closex();
+    if (std::uncaught_exceptions() == 0)
+        closex(); // may_throw
+    else
+        close_noexcept(); // currently in exception unwinding, use noexcept variant
 }
 
 bool FileBase::do_sopen() {
@@ -93,7 +104,7 @@ bool FileBase::do_sopen() {
     return true;
 }
 
-bool FileBase::close() noexcept {
+bool FileBase::close_noexcept() noexcept {
     bool ok = true;
     if (isOpen() && _fd != STDIN_FILENO && _fd != STDOUT_FILENO && _fd != STDERR_FILENO)
         if (::close(_fd) == -1)
@@ -108,7 +119,7 @@ bool FileBase::close() noexcept {
 }
 
 void FileBase::closex() may_throw {
-    if (!close())
+    if (!close_noexcept())
         throwIOException("close failed", errno);
 }
 
@@ -121,14 +132,14 @@ upx_off_t FileBase::seek(upx_off_t off, int whence) {
         if (off < 0)
             throwIOException("bad seek 2");
         off += _offset;
-    }
-    if (whence == SEEK_END) {
+    } else if (whence == SEEK_END) {
         if (off > 0)
             throwIOException("bad seek 3");
         off += _offset + _length;
         whence = SEEK_SET;
-    }
-    // SEEK_CUR falls through to here
+    } else if (whence == SEEK_CUR) {
+    } else
+        throwInternalError("bad seek: whence");
     upx_off_t l = ::lseek(_fd, off, whence);
     if (l < 0)
         throwIOException("seek error", errno);
@@ -152,11 +163,11 @@ void FileBase::set_extent(upx_off_t offset, upx_off_t length) {
 upx_off_t FileBase::st_size() const { return _length; }
 
 /*************************************************************************
-//
+// InputFile
 **************************************************************************/
 
 void InputFile::sopen(const char *name, int flags, int shflags) {
-    close();
+    closex();
     _name = name;
     _flags = flags;
     _shflags = shflags;
@@ -202,11 +213,11 @@ upx_off_t InputFile::seek(upx_off_t off, int whence) {
 upx_off_t InputFile::st_size_orig() const { return _length_orig; }
 
 /*************************************************************************
-//
+// OutputFile
 **************************************************************************/
 
 void OutputFile::sopen(const char *name, int flags, int shflags, int mode) {
-    close();
+    closex();
     _name = name;
     _flags = flags;
     _shflags = shflags;
@@ -228,7 +239,7 @@ void OutputFile::sopen(const char *name, int flags, int shflags, int mode) {
 }
 
 bool OutputFile::openStdout(int flags, bool force) {
-    close();
+    closex();
     int fd = STDOUT_FILENO;
     if (!force && acc_isatty(fd))
         return false;

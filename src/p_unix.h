@@ -55,8 +55,8 @@ public:
     virtual void pack(OutputFile *fo) override;
     virtual void unpack(OutputFile *fo) override;
 
-    virtual bool canPack() override;
-    virtual int  canUnpack() override; // bool, except -1: format known, but not packed
+    virtual tribool canPack() override;
+    virtual tribool canUnpack() override; // bool, except -1: format known, but not packed
     int find_overlay_offset(MemBuffer const &buf);
 
 protected:
@@ -90,7 +90,7 @@ protected:
         );
     unsigned total_in, total_out;  // unpack
 
-    int exetype;
+    int exetype;  // 0: unknown; 1: ELF; 2: pre-ELF; -1: /bin/sh; -2: Java
     unsigned blocksize;
     unsigned progid;              // program id
     unsigned overlay_offset;      // used when decompressing

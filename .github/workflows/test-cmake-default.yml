@@ -3,7 +3,8 @@
 name: 'Test - CMake default build type'
 on: [workflow_dispatch]
 env:
-  CMAKE_REQUIRED_QUIET: OFF
+  CMAKE_REQUIRED_QUIET: "OFF"
+  CTEST_OUTPUT_ON_FAILURE: "ON"
   DEBIAN_FRONTEND: noninteractive
 
 jobs:
@@ -16,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: 'Check out code'
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with: { submodules: true }
       - name: 'Config, build, test and install'
         run: |
@@ -33,7 +34,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: 'Check out code'
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with: { submodules: true }
       - name: 'Config, build, test and install'
         run: |
@@ -51,10 +52,10 @@ jobs:
     runs-on: windows-2022
     steps:
       - name: 'Check out code'
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with: { submodules: true }
       - name: 'Set up Developer Command Prompt'
-        uses: ilammy/msvc-dev-cmd@v1
+        uses: ilammy/msvc-dev-cmd@cec98b9d092141f74527d0afa6feb2af698cfe89 # v1.12.1
         with:
           vsversion: 2022
           arch: amd64
@@ -80,7 +81,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: 'Check out code'
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with: { submodules: true }
       - name: 'Config, build, test and install'
         run: |
@@ -100,10 +101,10 @@ jobs:
     runs-on: windows-2022
     steps:
       - name: 'Check out code'
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with: { submodules: true }
       - name: 'Set up Developer Command Prompt'
-        uses: ilammy/msvc-dev-cmd@v1
+        uses: ilammy/msvc-dev-cmd@cec98b9d092141f74527d0afa6feb2af698cfe89 # v1.12.1
         with:
           vsversion: 2022
           arch: amd64
@@ -120,7 +121,7 @@ jobs:
     runs-on: macos-12
     steps:
       - name: 'Check out code'
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with: { submodules: true }
       - name: 'Config, build, test and install'
         run: |

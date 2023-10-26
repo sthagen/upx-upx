@@ -111,14 +111,14 @@ void PackWinCeArm::processTls(Interval *) // pass 1
 // pack
 **************************************************************************/
 
-bool PackWinCeArm::canPack() {
+tribool PackWinCeArm::canPack() {
     if (!readFileHeader())
         return false;
     checkMachine(ih.cpu);
     if (ih.cpu != IMAGE_FILE_MACHINE_ARM && ih.cpu != IMAGE_FILE_MACHINE_THUMB)
         return false;
     use_thumb_stub |= ih.cpu == IMAGE_FILE_MACHINE_THUMB || (ih.entry & 1) == 1;
-    // FIXME later: don't misuse opt->cpu_x86, need an extra option for thumb
+    // HACK FIXME later: don't misuse opt->cpu_x86, need an extra option to force thumb stub
     use_thumb_stub |= (opt->cpu_x86 == opt->CPU_8086);
     return true;
 }

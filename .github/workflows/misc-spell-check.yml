@@ -3,17 +3,19 @@
 
 name: 'Misc - Spell check'
 on:
+  schedule: [cron: '55 0 * * 3'] # run weekly Wednesday 00:55 UTC
   workflow_dispatch:
 env:
   DEBIAN_FRONTEND: noninteractive
 jobs:
   job-spell-check:
+    if: github.repository_owner == 'upx'
     name: 'Spell check'
     runs-on: ubuntu-latest
     steps:
       - name: 'Check out code'
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with: { submodules: false }
       - name: 'Spell check with crate-ci/typos'
-        uses: crate-ci/typos@master
+        uses: crate-ci/typos@c004e98018d8621614d1ca516eed8ca2d04b365a # v1.16.20
         with: { config: ./.github/typos_config.toml }

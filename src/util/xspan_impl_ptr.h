@@ -55,7 +55,7 @@ private:
     // inverse logic for ensuring valid pointers from existing objects
     inline pointer ensurePtr() const { return ptr; }
     // debug
-    inline void assertInvariants() const noexcept {}
+    forceinline void assertInvariants() const noexcept {}
 
 public:
 #if XSPAN_CONFIG_ENABLE_IMPLICIT_CONVERSION || 1
@@ -77,9 +77,7 @@ public:
 #endif
     noinline void invalidate() {
         assertInvariants();
-        // poison the pointer: point to non-null invalid address
-        ptr = (pointer) XSPAN_GET_POISON_VOID_PTR();
-        // ptr = (pointer) (void *) &ptr; // point to self
+        ptr_invalidate_and_poison(ptr); // point to non-null invalid address
         assertInvariants();
     }
     inline CSelf() { assertInvariants(); }
@@ -109,7 +107,7 @@ public:
     // assignment
     Self &operator=(const Self &other) { return assign(other); }
 
-    // FIXME: this is not called !!
+    // FIXME: this is not called??
     template <class U>
     XSPAN_REQUIRES_CONVERTIBLE_R(Self &)
     operator=(U *other) {
@@ -117,7 +115,7 @@ public:
         return assign(Self(other));
     }
 
-    // FIXME: this is not called !!
+    // FIXME: this is not called??
     template <class U>
     XSPAN_REQUIRES_CONVERTIBLE_R(Self &)
     operator=(const CSelf<U> &other) {
@@ -125,17 +123,24 @@ public:
         return assign(Self(other));
     }
 
+    template <class U>
+    inline CSelf<U> type_cast() const {
+        typedef CSelf<U> R;
+        typedef typename R::pointer rpointer;
+        return R(reinterpret_cast<rpointer>(ptr));
+    }
+
     // comparison
 
-    bool operator==(pointer other) const { return ptr == other; }
+    bool operator==(pointer other) const noexcept { return ptr == other; }
     template <class U>
     XSPAN_REQUIRES_CONVERTIBLE_R(bool)
-    operator==(U *other) const {
+    operator==(U *other) const noexcept {
         return ptr == other;
     }
     template <class U>
     XSPAN_REQUIRES_CONVERTIBLE_R(bool)
-    operator==(const Ptr<U> &other) const {
+    operator==(const Ptr<U> &other) const noexcept {
         return ptr == other.ptr;
     }
 

@@ -47,6 +47,7 @@ enum {
     CMD_TEST,
     CMD_LIST,
     CMD_FILEINFO,
+    CMD_SYSINFO,
     CMD_HELP,
     CMD_LICENSE,
     CMD_VERSION,
@@ -81,6 +82,7 @@ struct Options final {
     bool no_env;
     bool no_progress;
     const char *output_name;
+    bool preserve_link;
     bool preserve_mode;
     bool preserve_ownership;
     bool preserve_timestamp;
@@ -133,6 +135,9 @@ struct Options final {
         bool split_segments;
     } atari_tos;
     struct {
+        bool force_macos; // undocumented temporary option until we fix macOS 13+ support
+    } darwin_macho;
+    struct {
         bool coff;
     } djgpp2_coff;
     struct {
@@ -163,8 +168,8 @@ struct Options final {
     struct {
         int compress_exports;
         int compress_icons;
-        int compress_resources;
-        signed char compress_rt[25]; // 25 == RT_LAST
+        upx::TriBool<upx_int8_t> compress_resources;
+        upx::TriBool<upx_int8_t> compress_rt[25]; // 25 == RT_LAST
         int strip_relocs;
         const char *keep_resource;
     } win32_pe;

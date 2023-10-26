@@ -9,11 +9,12 @@ name: 'CI'
 on: [push, workflow_dispatch]
 
 env:
-  CMAKE_REQUIRED_QUIET: OFF
+  CMAKE_REQUIRED_QUIET: "OFF"
+  CTEST_OUTPUT_ON_FAILURE: "ON"
   DEBIAN_FRONTEND: noninteractive
   UPX_CMAKE_BUILD_FLAGS: --verbose
-  # 2023-07-30
-  ZIG_DIST_VERSION: 0.11.0-dev.4320+6f0a613b6
+  # 2023-10-24
+  ZIG_DIST_VERSION: 0.12.0-dev.1245+a07f288eb
 
 jobs:
   job-rebuild-and-verify-stubs:
@@ -41,7 +42,7 @@ jobs:
           # install upx-stubtools
           wget -q -O - https://github.com/upx/upx-stubtools/releases/download/v20221212/bin-upx-20221212.tar.xz | tar -xJ
       - name: 'Check out code'
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with: { submodules: true }
       - name: 'Rebuild and verify stubs'
         run: |
@@ -57,7 +58,7 @@ jobs:
           if ! git diff --quiet; then git diff; exit 1; fi
 
   job-linux-cmake: # uses cmake + make
-    if: ${{ true }}
+    if: true
     needs: [ job-rebuild-and-verify-stubs ]
     name: ${{ format('{0} cmake', matrix.os) }}
     runs-on: ${{ matrix.os }}
@@ -75,7 +76,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y g++-multilib g++-mingw-w64-i686 g++-mingw-w64-x86-64
       - name: 'Check out code'
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with: { submodules: true }
       - name: 'Check out test suite'
         run: 'git clone --depth=1 https://github.com/upx/upx-testsuite ../deps/upx-testsuite'
@@ -127,6 +128,9 @@ jobs:
         run: |
           make -C build/extra/gcc-m32/debug test
           make -C build/extra/gcc-m32/release test
+      - name: 'Run file system test suite'
+        run: |
+          env -C build/extra/gcc/release bash "$PWD"/misc/testsuite/test_symlinks.sh
       - name: 'Run test suite build/extra/gcc/release'
         run: |
           export upx_testsuite_SRCDIR="$(readlink -en ../deps/upx-testsuite)"
@@ -134,7 +138,7 @@ jobs:
           env -C build/extra/gcc/release upx_exe=./upx bash "$testsuite_1"
 
   job-macos-cmake: # uses cmake + make
-    if: ${{ true }}
+    if: true
     needs: [ job-rebuild-and-verify-stubs ]
     name: ${{ format('{0} cmake', matrix.os) }}
     runs-on: ${{ matrix.os }}
@@ -142,6 +146,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # NOTE: macos does not have "env -C"; only with coreutils
+          # NOTE: macos-11 does not have "readlink -f"; only on macos >= 12 or with coreutils
           - { os: macos-11, gcc: gcc-10, gxx: 'g++-10', testsuite: true }
           - { os: macos-12, gcc: gcc-11, gxx: 'g++-11', testsuite: true }
           - { os: macos-13, gcc: gcc-12, gxx: 'g++-12', testsuite: true }
@@ -156,7 +162,7 @@ jobs:
             if ! brew install coreutils; then brew update && brew install coreutils; fi
           fi
       - name: 'Check out code'
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with: { submodules: true }
       - name: 'Check out test suite'
         if: ${{ matrix.testsuite }}
@@ -200,7 +206,15 @@ jobs:
         if: ${{ !contains(matrix.os, 'macos-13') }} # FIXME: UPX on macos-13 is broken => disable self-test for now
         run: |
           make -C build/extra/clang/debug test
-          make -C build/extra/clang/release test
+#         make -C build/extra/clang/release test
+      - name: 'Run file system test suite'
+        if: ${{ matrix.testsuite }} # for coreutils readlink
+        run: |
+          ## macos-11 does not have "readlink -f"
+          ##   testsuite="$(readlink -fn ./misc/testsuite/test_symlinks.sh)"
+          ##   (cd build/extra/clang/release && upx_exe=./upx bash "$testsuite")
+          export PATH="/usr/local/opt/coreutils/libexec/gnubin:$PATH"
+          env -C build/extra/clang/release bash "$PWD"/misc/testsuite/test_symlinks.sh
       - name: 'Run test suite build/extra/clang/release'
         if: ${{ matrix.testsuite }}
         run: |
@@ -210,7 +224,7 @@ jobs:
           env -C build/extra/clang/release upx_exe=./upx bash "$testsuite_1"
 
   job-windows-cmake: # uses cmake + msbuild
-    if: ${{ true }}
+    if: true
     needs: [ job-rebuild-and-verify-stubs ]
     name: ${{ format('{0} cmake', matrix.name) }}
     runs-on: ${{ matrix.os }}
@@ -218,19 +232,16 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # windows-2019 used to work but got broken with the 20220821.1 runner-image
-          # update; we cannot download that image for inspection, and debugging the
-          # remote image is painful, so disable for now
-          ####- { name: windows-2019-amd64, os: windows-2019, vsversion: 2019, arch: amd64 }
+          - { name: windows-2019-amd64, os: windows-2019, vsversion: 2019, arch: amd64 }
           - { name: windows-2022-amd64, os: windows-2022, vsversion: 2022, arch: amd64 }
     steps:
       - name: 'Check out code'
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with: { submodules: true }
       - name: 'Check out test suite'
         run: 'git clone --depth=1 https://github.com/upx/upx-testsuite ../deps/upx-testsuite'
       - name: 'Set up Developer Command Prompt'
-        uses: ilammy/msvc-dev-cmd@v1
+        uses: ilammy/msvc-dev-cmd@cec98b9d092141f74527d0afa6feb2af698cfe89 # v1.12.1
         with:
           vsversion: ${{ matrix.vsversion }}
           arch: ${{ matrix.arch }}
@@ -265,7 +276,7 @@ jobs:
           env -C build/release/Release upx_exe=./upx bash "$testsuite_1"
 
   job-windows-toolchains: # build "by hand" using cmd.exe
-    if: ${{ true }}
+    if: true
     needs: [ job-rebuild-and-verify-stubs ]
     name: ${{ format('windows {0}', matrix.name) }}
     runs-on: ${{ matrix.os }}
@@ -287,7 +298,7 @@ jobs:
           - { name: i386-win32-vs2022,    os: windows-2022, vsversion: 2022, arch: amd64_x86 }
     steps:
       - name: 'Check out code'
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with: { submodules: true }
       - name: 'Prepare sources and Check out test suite'
         shell: bash
@@ -295,7 +306,7 @@ jobs:
           git clone --depth=1 https://github.com/upx/upx-testsuite ../deps/upx-testsuite
           mkdir -p -v build/$C/$B/{bzip2,ucl,upx,zlib,zstd}
       - name: 'Set up Developer Command Prompt'
-        uses: ilammy/msvc-dev-cmd@v1
+        uses: ilammy/msvc-dev-cmd@cec98b9d092141f74527d0afa6feb2af698cfe89 # v1.12.1
         with:
           vsversion: ${{ matrix.vsversion }}
           arch: ${{ matrix.arch }}
@@ -306,7 +317,7 @@ jobs:
           where cl & where link
           set RUN_CL=cl ${{ matrix.cl_machine_flags }} -MT
           set RUN_LIB=link -lib ${{ matrix.link_machine_flags }}
-          set DEFS=-D_CRT_NONSTDC_NO_WARNINGS -D_CRT_SECURE_NO_WARNINGS
+          set DEFS=-D_CRT_NONSTDC_NO_WARNINGS -D_CRT_SECURE_NO_WARNINGS -DWIN32_LEAN_AND_MEAN
           set BDIR=%H%\build\%C%\%B%
           git rev-parse --short=12 HEAD > %BDIR%\upx\.GITREV.txt
           @REM ===== build bzip2 =====
@@ -372,7 +383,7 @@ jobs:
           env -C build/$C/$B/upx upx_exe=./upx.exe bash "$testsuite_1"
 
   job-linux-zigcc: # uses cmake + make
-    if: ${{ true }}
+    if: github.repository_owner == 'upx'
     needs: [ job-rebuild-and-verify-stubs ]
     name: ${{ format('zigcc {0} {1}', matrix.zig_target, matrix.zig_pic) }}
     runs-on: ubuntu-latest
@@ -392,6 +403,7 @@ jobs:
           - { zig_target: arm-linux-musleabihf }
           # { zig_target: arm-linux-musleabihf, zig_pic: -fPIE }
           # { zig_target: i386-linux-musl }
+          # { zig_target: i386-linux-musl, zig_pic: -fPIE }
           - { zig_target: i386-windows-gnu }
           # { zig_target: mips-linux-musl }
           # { zig_target: mipsel-linux-musl }
@@ -422,7 +434,7 @@ jobs:
           # this seems to be needed when running in a container (beause of UID mismatch??)
           git config --global --add safe.directory '*'
       - name: 'Check out code'
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with: { submodules: true }
       - name: ${{ format('Install Zig {0}', env.ZIG_DIST_VERSION) }}
         shell: bash
@@ -484,5 +496,3 @@ jobs:
         run: |
           (cd build/zig/${ZIG_TARGET}${ZIG_PIC}/release && DESTDIR=$PWD/Install-with-cmake cmake --install .)
           (cd build/zig/${ZIG_TARGET}${ZIG_PIC}/release && DESTDIR=$PWD/Install-with-make  make install)
-
-# vim:set ts=2 sw=2 et:

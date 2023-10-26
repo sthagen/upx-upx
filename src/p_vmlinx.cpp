@@ -98,7 +98,18 @@ PackVmlinuxBase<T>::compare_Phdr(void const *aa, void const *bb)
             if (xa > xb)         return  1;
     if (a->p_paddr < b->p_paddr) return -1;  // ascending by .p_paddr
     if (a->p_paddr > b->p_paddr) return  1;
-    return  0;
+    // What could remain?
+    // try to make sort order deterministic and just compare more fields
+#define CMP(field) \
+    if (a->field != b->field) return a->field < b->field ? -1 : 1
+    CMP(p_offset);
+    CMP(p_vaddr);
+    CMP(p_filesz);
+    CMP(p_memsz);
+    CMP(p_flags);
+    CMP(p_align);
+#undef CMP
+    return 0;
 }
 
 template <class T>
@@ -143,7 +154,7 @@ typename T::Shdr const *PackVmlinuxBase<T>::getElfSections()
 }
 
 template <class T>
-bool PackVmlinuxBase<T>::canPack()
+tribool PackVmlinuxBase<T>::canPack()
 {
     fi->seek(0, SEEK_SET);
     fi->readx(&ehdri, sizeof(ehdri));
@@ -194,7 +205,7 @@ bool PackVmlinuxBase<T>::canPack()
     fi->readx(phdri, ehdri.e_phnum * sizeof(*phdri));
 
     // Put PT_LOAD together at the beginning, ascending by .p_paddr.
-    qsort(phdri, ehdri.e_phnum, sizeof(*phdri), compare_Phdr);
+    upx_qsort(phdri, ehdri.e_phnum, sizeof(*phdri), compare_Phdr);
 
     // Find convex hull of physical addresses, and count the PT_LOAD.
     // Ignore ".bss": .p_filesz < .p_memsz
@@ -553,7 +564,7 @@ void PackVmlinuxBase<T>::pack(OutputFile *fo)
 }
 
 template <class T>
-int PackVmlinuxBase<T>::canUnpack()
+tribool PackVmlinuxBase<T>::canUnpack()
 {
     fi->seek(0, SEEK_SET);
     fi->readx(&ehdri, sizeof(ehdri));
@@ -1227,8 +1238,9 @@ Linker* PackVmlinuxAMD64::newLinker() const
 
 
 // instantiate instances
-template class PackVmlinuxBase<ElfClass_LE32>;
 template class PackVmlinuxBase<ElfClass_BE32>;
+// template class PackVmlinuxBase<ElfClass_BE64>; // not used
+template class PackVmlinuxBase<ElfClass_LE32>;
 template class PackVmlinuxBase<ElfClass_LE64>;
 
 /* vim:set ts=4 sw=4 et: */

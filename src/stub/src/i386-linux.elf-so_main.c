@@ -287,9 +287,8 @@ make_hatch_i386(
         }
         else { // Does not fit at hi end of .text, so must use a new page "permanently"
             int mfd = memfd_create(addr_string("upx"), 0);  // the directory entry
-            //ftruncate(mfd, 4);
             write(mfd, &escape, 4);
-            hatch = mmap(0, 4, PROT_READ|PROT_EXEC, MAP_SHARED, mfd, 0);
+            hatch = mmap(0, 4, PROT_READ|PROT_EXEC, MAP_PRIVATE, mfd, 0);
             close(mfd);
         }
     }
@@ -298,6 +297,8 @@ make_hatch_i386(
 }
 #elif defined(__arm__)  /*}{*/
 extern unsigned get_sys_munmap(void);
+extern int upxfd_create(void);  // early 32-bit Android lacks memfd_create
+#define SEEK_SET 0
 
 static void *
 make_hatch_arm32(
@@ -324,10 +325,9 @@ make_hatch_arm32(
             __clear_cache(&hatch[0], &hatch[2]);
         }
         else { // Does not fit at hi end of .text, so must use a new page "permanently"
-            int mfd = memfd_create(addr_string("upx"), 0);  // the directory entry
-            //ftruncate(mfd, 2*4);
+            int mfd = upxfd_create();  // the directory entry
             write(mfd, &code, 2*4);
-            hatch = Pmap(0, 2*4, PROT_READ|PROT_EXEC, MAP_SHARED, mfd, 0);
+            hatch = Pmap(0, 2*4, PROT_READ|PROT_EXEC, MAP_PRIVATE, mfd, 0);
             close(mfd);
         }
     }
@@ -553,15 +553,18 @@ upx_so_main(  // returns &escape_hatch
     DPRINTF("base=%%p\\n", base);
 
     if (phdr->p_flags & PF_X) {
+#if defined(__arm__)  //{
+        int mfd = upxfd_create();
+#else  //}{
         int mfd = memfd_create(addr_string("upx"), 0);
+#endif  //}
         unsigned mfd_len = 0ul - page_mask;
-        ftruncate(mfd, mfd_len);
         Pwrite(mfd, elf_tmp, binfo->sz_unc);  // de-compressed Elf_Ehdr and Elf_Phdrs
         Pwrite(mfd, binfo->sz_unc + va_load, mfd_len - binfo->sz_unc);  // rest of 1st page
 
         Punmap(va_load, mfd_len);  // make SELinux forget any previous protection
         Elf32_Addr va_mfd = (Elf32_Addr)Pmap(va_load, mfd_len, PF_to_PROT(phdr),
-            MAP_FIXED|MAP_SHARED, mfd, 0); (void)va_mfd;
+            MAP_FIXED|MAP_PRIVATE, mfd, 0); (void)va_mfd;
 
         close(mfd);
     }
@@ -605,8 +608,21 @@ upx_so_main(  // returns &escape_hatch
             // Cannot set PROT_EXEC except via mmap() into a region (Linux "vma")
             // that has never had PROT_WRITE.  So use a Linux-only "memory file"
             // to hold the contents.
+#if defined(__arm__)  //{ Emulate: Android "ABI" has inconsistent __NR_ftruncate.
+            mfd = upxfd_create();  // anonymous file in /dev/shm with 0700 permission
+            size_t goal = x1.size;
+            while (0 < goal) { // /dev/shm limits to 8KiB at a time!!
+                ssize_t len = Pwrite(mfd, x1.buf, goal);
+                if (len < 0) {
+                    break;  // give up: will SIGSEGV or SIGBUS later
+                }
+                goal -= len;
+            }
+            lseek(mfd, 0, SEEK_SET);
+#else  //}{
             mfd = memfd_create(addr_string("upx"), 0);  // the directory entry
             ftruncate(mfd, x1.size);  // Allocate the pages in the file.
+#endif  //}
             Pwrite(mfd, x1.buf, frag);  // Save lo fragment of contents on first page.
             Punmap(x1.buf, x1.size);
             mfd_addr = Pmap(x1.buf, x1.size, PROT_READ|PROT_WRITE, MAP_FIXED|MAP_SHARED, mfd, 0);
@@ -640,7 +656,7 @@ upx_so_main(  // returns &escape_hatch
             DPRINTF("mfd mmap addr=%%p  len=%%p\\n", (phdr->p_vaddr + base + pfx), al_bi.sz_unc);
             Punmap(mfd_addr, frag + al_bi.sz_unc);  // Discard RW mapping; mfd has the bytes
             Pmap((char *)(phdr->p_vaddr + base + pfx), al_bi.sz_unc, PF_to_PROT(phdr),
-                MAP_FIXED|MAP_SHARED, mfd, 0);
+                MAP_FIXED|MAP_PRIVATE, mfd, 0);
             close(mfd);
         }
         else { // easy

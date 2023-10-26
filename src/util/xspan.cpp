@@ -33,7 +33,7 @@ XSPAN_NAMESPACE_BEGIN
 // debugging stats
 struct XSpanStats {
     upx_std_atomic(size_t) check_range_counter;
-    // these normally will be zero, but doctest checks will populate them
+    // these usually will be zero, but internal doctest checks will populate them; see dt_xspan.cpp
     upx_std_atomic(size_t) fail_nullptr;
     upx_std_atomic(size_t) fail_nullbase;
     upx_std_atomic(size_t) fail_not_same_base;
@@ -77,6 +77,7 @@ void xspan_check_range(const void *ptr, const void *base, ptrdiff_t size_in_byte
     if very_unlikely (base == nullptr)
         xspan_fail_range_nullbase();
 #if defined(__SANITIZE_ADDRESS__)
+    // info: pointers are out of range deliberately during internal doctest checks; see dt_xspan.cpp
     const acc_intptr_t off = (acc_uintptr_t) ptr - (acc_uintptr_t) base;
 #else
     const ptrdiff_t off = (const charptr) ptr - (const charptr) base;

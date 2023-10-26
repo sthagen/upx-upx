@@ -28,7 +28,7 @@
 #pragma once
 
 class OutputFile;
-class Packer;
+class PackerBase;
 
 /*************************************************************************
 //
@@ -36,7 +36,7 @@ class Packer;
 
 class UiPacker final {
 public:
-    explicit UiPacker(const Packer *p_);
+    explicit UiPacker(const PackerBase *);
 
 public:
     virtual ~UiPacker() noexcept;
@@ -84,7 +84,7 @@ public:
 
 protected:
     virtual void printInfo(int nl = 0);
-    const Packer *const p; // reference
+    const PackerBase *const pb; // reference, required
 
     // callback
     upx_callback_t cb = {};
@@ -93,7 +93,7 @@ protected:
     struct State;
     OwningPointer(State) s = nullptr; // owner
 
-    // totals
+    // static totals
     static unsigned total_files;
     static unsigned total_files_done;
     static upx_uint64_t total_c_len;

@@ -7,12 +7,8 @@
 # instead. And see the top-level Makefile for some pre-defined CMake
 # build configurations.
 
-MAKEFLAGS += -r
-export SHELL = /bin/sh
-
 ifndef srcdir
-  srcdir := $(dir $(lastword $(MAKEFILE_LIST)))
-  srcdir := $(shell echo '$(srcdir)' | sed 's,/*$$,,' || echo 'ERROR')
+  srcdir := $(patsubst %/,%,$(dir $(lastword $(MAKEFILE_LIST))))
 endif
 ifndef top_srcdir
   top_srcdir := $(srcdir)/..
@@ -27,20 +23,21 @@ endif
 
 build/debug:   $(top_srcdir)/build/debug/upx
 build/release: $(top_srcdir)/build/release/upx
-# shortcuts
-all: build/debug build/release
-debug: build/debug
-release: build/release
-
-$(top_srcdir)/build/debug/upx: PHONY
-	$(MAKE) -C $(top_srcdir) build/debug
-$(top_srcdir)/build/release/upx: PHONY
-	$(MAKE) -C $(top_srcdir) build/release
 
 .NOTPARALLEL: # because the actual builds use "cmake --parallel"
 .PHONY: PHONY
 .SECONDEXPANSION:
 .SUFFIXES:
+
+# shortcuts (all => debug + release)
+debug:   build/debug
+release: build/release
+all build/all: build/debug build/release
+
+$(top_srcdir)/build/debug/upx: PHONY
+	$(MAKE) -C $(top_srcdir) build/debug
+$(top_srcdir)/build/release/upx: PHONY
+	$(MAKE) -C $(top_srcdir) build/release
 
 #
 # "make run-testsuite"
@@ -78,33 +75,31 @@ endif
 endif
 
 #
+# "make check-whitespace"
+#
+
+ifneq ($(wildcard /usr/bin/env),) # needs bash, perl, xargs, etc.
+CHECK_WHITESPACE = $(top_srcdir)/misc/scripts/check_whitespace.sh $(top_srcdir)
+ifneq ($(wildcard $(top_srcdir)/.git/.),)
+CHECK_WHITESPACE = $(top_srcdir)/misc/scripts/check_whitespace_git.sh $(top_srcdir)
+endif
+check-whitespace: PHONY; $(CHECK_WHITESPACE)
+endif
+
+#
 # "make clang-format"
 #
 
 # automatically format some C++ source code files
 ifeq ($(shell uname),Linux)
 # Markus loves clang-format, but John hates it; find a compromise
-CLANG_FORMAT_EXCLUDE_FILES += conf.h miniacc.h version.h packer_c.cpp
+CLANG_FORMAT_EXCLUDE_FILES += conf.h miniacc.h stub/%.h
 CLANG_FORMAT_EXCLUDE_FILES += p_elf.h p_elf_enum.h p_lx_% p_mach% p_unix% p_vmlin%
-CLANG_FORMAT_EXCLUDE_FILES += compress/compress.h filter/filter_impl.cpp
-CLANG_FORMAT_FILES := $(sort $(wildcard *.[ch]* ../maint/src/*.[ch]* [cu]*/*.[ch]*))
+CLANG_FORMAT_FILES := $(sort $(wildcard *.[ch]* ../maint/src/*.[ch]* */*.[ch]*))
 CLANG_FORMAT_FILES := $(filter-out $(CLANG_FORMAT_EXCLUDE_FILES),$(CLANG_FORMAT_FILES))
 clang-format: PHONY $(CLANG_FORMAT_FILES)
 	@echo "running upx-clang-format"
 	@$(top_srcdir)/misc/scripts/upx-clang-format.sh -i $(CLANG_FORMAT_FILES)
-endif
-
-#
-# "make check-whitespace"
-#
-
-CHECK_WHITESPACE =
-ifeq ($(shell uname),Linux)
-CHECK_WHITESPACE = $(top_srcdir)/misc/scripts/check_whitespace.sh $(top_srcdir)
-ifneq ($(wildcard $(top_srcdir)/.git/.),)
-CHECK_WHITESPACE = $(top_srcdir)/misc/scripts/check_whitespace_git.sh $(top_srcdir)
-endif
-check-whitespace: PHONY; $(CHECK_WHITESPACE)
 endif
 
 # vim:set ts=8 sw=8 noet:

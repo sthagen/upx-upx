@@ -70,12 +70,18 @@ inline void mem_size_assert(upx_uint64_t element_size, upx_uint64_t n) {
 #if DEBUG
 template <class T>
 T *NewArray(upx_uint64_t n) {
+    COMPILE_TIME_ASSERT(std::is_standard_layout<T>::value)
+    COMPILE_TIME_ASSERT(std::is_trivially_copyable<T>::value)
+    COMPILE_TIME_ASSERT(std::is_trivially_default_constructible<T>::value)
     size_t bytes = mem_size(sizeof(T), n); // assert size
     T *array = new T[size_t(n)];
+#if !defined(__SANITIZE_MEMORY__)
     if (array != nullptr && bytes > 0) {
         memset(array, 0xfb, bytes);
         (void) VALGRIND_MAKE_MEM_UNDEFINED(array, bytes);
     }
+#endif
+    UNUSED(bytes);
     return array;
 }
 #define New(type, n) (NewArray<type>((n)))
@@ -119,6 +125,16 @@ forceinline void ptr_check_no_overlap(const void *a, size_t a_size, const void *
                              (upx_uintptr_t) c, c_size);
 }
 
+// invalidate and poison a pointer: point to a non-null invalid address
+// - resulting pointer should crash on dereference
+// - this should be efficient, so no mmap() guard page etc.
+// - this should play nice with runtime checkers like ASAN, MSAN, valgrind, etc.
+// - this should play nice with static analyzers like clang-tidy etc.
+template <class T>
+inline void ptr_invalidate_and_poison(T *(&ptr)) noexcept {
+    ptr = (T *) (void *) 251; // 0x000000fb // NOLINT(performance-no-int-to-ptr)
+}
+
 /*************************************************************************
 // stdlib
 **************************************************************************/
@@ -127,75 +143,29 @@ void *upx_calloc(size_t n, size_t element_size);
 
 void upx_memswap(void *a, void *b, size_t n);
 
-void upx_stable_sort(void *array, size_t n, size_t element_size,
-                     int (*compare)(const void *, const void *));
+typedef int(__acc_cdecl_qsort *upx_compare_func_t)(const void *, const void *);
+typedef void (*upx_sort_func_t)(void *array, size_t n, size_t element_size, upx_compare_func_t);
 
-/*************************************************************************
-// OwningPointer(T)
-// simple pointer type alias to explicitly mark ownership of objects; purely
-// cosmetic to improve source code readability, no real functionality
-**************************************************************************/
+void upx_gnomesort(void *array, size_t n, size_t element_size, upx_compare_func_t compare);
+void upx_shellsort_memswap(void *array, size_t n, size_t element_size, upx_compare_func_t compare);
+void upx_shellsort_memcpy(void *array, size_t n, size_t element_size, upx_compare_func_t compare);
 
-#if 0
+// this wraps std::stable_sort()
+template <size_t ElementSize>
+void upx_std_stable_sort(void *array, size_t n, upx_compare_func_t compare);
 
-// this works
-#define OwningPointer(T) T *
-
-#elif !(DEBUG)
-
-// this also works
-template <class T>
-using OwningPointer = T *;
-#define OwningPointer(T) OwningPointer<T>
-
+// #define UPX_CONFIG_USE_STABLE_SORT 1
+#if UPX_CONFIG_USE_STABLE_SORT
+// use std::stable_sort(); NOTE: requires that "element_size" is constexpr!
+#define upx_qsort(a, n, element_size, compare)                                                     \
+    upx_std_stable_sort<(element_size)>((a), (n), (compare))
 #else
-
-// also works: a trivial class with just a number of no-ops
-template <class T>
-struct OwningPointer final {
-    static_assert(std::is_class_v<T>); // UPX convention
-    typedef typename std::add_lvalue_reference<T>::type reference;
-    typedef typename std::add_lvalue_reference<const T>::type const_reference;
-    typedef typename std::add_pointer<T>::type pointer;
-    typedef typename std::add_pointer<const T>::type const_pointer;
-    pointer ptr;
-    inline OwningPointer(pointer p) noexcept : ptr(p) {}
-    inline operator pointer() noexcept { return ptr; }
-    inline operator const_pointer() const noexcept { return ptr; }
-    inline reference operator*() noexcept { return *ptr; }
-    inline const_reference operator*() const noexcept { return *ptr; }
-    inline pointer operator->() noexcept { return ptr; }
-    inline const_pointer operator->() const noexcept { return ptr; }
-};
-// must overload mem_clear()
-template <class T>
-inline void mem_clear(OwningPointer<T> object) noexcept {
-    mem_clear((T *) object);
-}
-#define OwningPointer(T) OwningPointer<T>
-
+// use libc qsort(); good enough for our use cases
+#define upx_qsort qsort
 #endif
-
-template <class T>
-inline void owner_delete(OwningPointer(T)(&object)) noexcept {
-    static_assert(std::is_class_v<T>); // UPX convention
-    static_assert(std::is_nothrow_destructible_v<T>);
-    if (object != nullptr) {
-        delete (T *) object;
-        object = nullptr;
-    }
-}
-
-// disable some overloads
-#if defined(__clang__) || __GNUC__ != 7
-template <class T>
-inline void owner_delete(T (&array)[]) noexcept DELETED_FUNCTION;
-#endif
-template <class T, size_t N>
-inline void owner_delete(T (&array)[N]) noexcept DELETED_FUNCTION;
 
 /*************************************************************************
-// misc. support functions
+// misc support functions
 **************************************************************************/
 
 int find(const void *b, int blen, const void *what, int wlen) noexcept;

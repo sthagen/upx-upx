@@ -27,109 +27,87 @@
 
 #pragma once
 
+#include "packhead.h"
 #include "util/membuffer.h"
 
 class InputFile;
 class OutputFile;
-class Packer;
 class UiPacker;
 class Filter;
 
 /*************************************************************************
-// PackHeader
-// also see stub/src/include/header.S
-**************************************************************************/
-
-class PackHeader final {
-    friend class Packer;
-
-    // these are strictly private to friend Packer
-    explicit PackHeader() noexcept;
-    void putPackHeader(SPAN_S(byte) p);
-    bool decodePackHeaderFromBuf(SPAN_S(const byte) b, int blen);
-
-public:
-    int getPackHeaderSize() const;
-
-public:
-    // fields stored in compressed file
-    // enum { magic = UPX_MAGIC_LE32 };
-    int version;
-    int format; // executable format
-    int method; // compresison method
-    int level;  // compresison level 1..10
-    unsigned u_len;
-    unsigned c_len;
-    unsigned u_adler;
-    unsigned c_adler;
-    unsigned u_file_size;
-    int filter;
-    int filter_cto;
-    int n_mru; // FIXME: rename to filter_misc
-    int header_checksum;
-
-    // support fields for verifying decompression
-    unsigned saved_u_adler;
-    unsigned saved_c_adler;
-
-    // info fields set by decodePackHeaderFromBuf()
-    unsigned buf_offset;
-
-    // info fields set by Packer::compress()
-    upx_compress_result_t compress_result;
-    // unsigned min_offset_found;
-    unsigned max_offset_found;
-    // unsigned min_match_found;
-    unsigned max_match_found;
-    // unsigned min_run_found;
-    unsigned max_run_found;
-    unsigned first_offset_found;
-    // unsigned same_match_offsets_found;
-
-    // info fields set by Packer::compressWithFilters()
-    unsigned overlap_overhead;
-};
-
-bool ph_skipVerify(const PackHeader &ph) noexcept;
-void ph_decompress(PackHeader &ph, SPAN_P(const byte) in, SPAN_P(byte) out, bool verify_checksum,
-                   Filter *ft);
-bool ph_testOverlappingDecompression(const PackHeader &ph, SPAN_P(const byte) buf,
-                                     unsigned overlap_overhead);
-
-/*************************************************************************
-// abstract base class for packers
+// purely abstract minimal base class for all packers
 //
-// FIXME later: this class is way too fat and badly needs a decomposition
+// clients: PackMaster, UiPacker
 **************************************************************************/
 
-class Packer {
+class PackerBase {
     friend class UiPacker;
-
 protected:
-    explicit Packer(InputFile *f);
-
+    explicit PackerBase(InputFile *f);
 public:
-    virtual ~Packer() noexcept;
-    virtual void assertPacker() const;
-
+    virtual ~PackerBase() noexcept {}
     // getVersion() enables detecting forward incompatibility of unpack()
     // by old upx when newer upx changes the format of compressed output.
     virtual int getVersion() const = 0;
-    // A unique integer ID for this executable format. See conf.h.
+    // A unique integer ID for this executable format; see UPX_F_xxx in conf.h.
     virtual int getFormat() const = 0;
     virtual const char *getName() const = 0;
     virtual const char *getFullName(const Options *) const = 0;
     virtual const int *getCompressionMethods(int method, int level) const = 0;
     virtual const int *getFilters() const = 0;
 
+    // canPack() should throw a cantPackException explaining why it cannot pack
+    // a recognized format.
+    // canPack() can also return -1 to fail early; see class PackMaster
+    virtual tribool canPack() = 0;
+    // canUnpack() should throw a cantUnpackException explaining why it cannot pack
+    // a recognized format.
+    // canUnpack() can also return -1 to fail early; see class PackMaster
+    virtual tribool canUnpack() = 0;
+
     // PackMaster entries
-    void initPackHeader();
-    void updatePackHeader();
-    void doPack(OutputFile *fo);
-    void doUnpack(OutputFile *fo);
-    void doTest();
-    void doList();
-    void doFileInfo();
+    virtual void assertPacker() const = 0;
+    virtual void initPackHeader() = 0;
+    virtual void updatePackHeader() = 0;
+    virtual void doPack(OutputFile *fo) = 0;
+    virtual void doUnpack(OutputFile *fo) = 0;
+    virtual void doTest() = 0;
+    virtual void doList() = 0;
+    virtual void doFileInfo() = 0;
+
+protected:
+    InputFile *const fi;                // reference
+    union {                             // unnamed union
+        const upx_int64_t file_size;    // must get set by constructor
+        const upx_uint64_t file_size_u; // (explicitly unsigned)
+    };
+    PackHeader ph; // must be filled by canUnpack(); also used by UiPacker
+};
+
+/*************************************************************************
+// abstract default implementation class for packers
+//
+// Packer can be viewed as "PackerDefaultImplV1"; it is grown historically
+// and still would benefit from a decomposition
+**************************************************************************/
+
+class Packer : public PackerBase {
+protected:
+    explicit Packer(InputFile *f);
+
+public:
+    virtual ~Packer() noexcept;
+
+    // PackMaster entries
+    virtual void assertPacker() const override;
+    virtual void initPackHeader() final override;
+    virtual void updatePackHeader() final override;
+    virtual void doPack(OutputFile *fo) final override;
+    virtual void doUnpack(OutputFile *fo) final override;
+    virtual void doTest() final override;
+    virtual void doList() final override;
+    virtual void doFileInfo() final override;
 
     // unpacker capabilities
     virtual bool canUnpackVersion(int version) const { return (version >= 8); }
@@ -147,14 +125,6 @@ protected:
     virtual void test();
     virtual void list();
     virtual void fileInfo();
-
-public:
-    // canPack() should throw a cantPackException eplaining why it
-    // cannot pack a recognized format.
-    virtual bool canPack() = 0;
-    // canUnpack() can return -1 meaning "format recognized, but file
-    // is definitely not packed". See packmast.cpp try_unpack().
-    virtual int canUnpack() = 0;
 
 protected:
     // main compression drivers
@@ -196,10 +166,10 @@ protected:
     void verifyOverlappingDecompression(byte *o_ptr, unsigned o_size, Filter *ft = nullptr);
 
     // packheader handling
-    virtual int patchPackHeader(void *b, int blen);
-    virtual bool getPackHeader(const void *b, int blen, bool allow_incompressible = false);
-    virtual bool readPackHeader(int len, bool allow_incompressible = false);
-    virtual void checkAlreadyPacked(const void *b, int blen);
+    virtual int patchPackHeader(void *b, int blen) final;
+    virtual bool getPackHeader(const void *b, int blen, bool allow_incompressible = false) final;
+    virtual bool readPackHeader(int len, bool allow_incompressible = false) final;
+    virtual void checkAlreadyPacked(const void *b, int blen) final;
 
     // loader core
     virtual void buildLoader(const Filter *ft) = 0;
@@ -327,14 +297,8 @@ protected:
 
 protected:
     const N_BELE_RTP::AbstractPolicy *bele = nullptr; // target endianness
-    InputFile *fi = nullptr;
 
-    union {                        // unnamed union
-        upx_int64_t file_size = 0; // will get set by constructor
-        upx_uint64_t file_size_u;  // explicitly unsigned
-    };
-
-    PackHeader ph = PackHeader{}; // must be filled by canUnpack()
+    // PackHeader
     int ph_format = -1;
     int ph_version = -1;
 
@@ -362,9 +326,5 @@ private:
     Packer(Packer &&) noexcept DELETED_FUNCTION;
     Packer &operator=(Packer &&) noexcept DELETED_FUNCTION;
 };
-
-int force_method(int method) noexcept;     // (0x80ul<<24)|method
-int forced_method(int method) noexcept;    // (0x80ul<<24)|method ==> method
-int is_forced_method(int method) noexcept; // predicate
 
 /* vim:set ts=4 sw=4 et: */

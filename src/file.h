@@ -37,11 +37,11 @@ protected:
     virtual ~FileBase() may_throw;
 
 public:
-    bool close() noexcept;
+    bool close_noexcept() noexcept;
     void closex() may_throw;
-    bool isOpen() const { return _fd >= 0; }
-    int getFd() const { return _fd; }
-    const char *getName() const { return _name; }
+    bool isOpen() const noexcept { return _fd >= 0; }
+    int getFd() const noexcept { return _fd; }
+    const char *getName() const noexcept { return _name; }
 
     virtual upx_off_t seek(upx_off_t off, int whence);
     upx_off_t tell() const;
@@ -50,9 +50,10 @@ public:
 
 public:
     // static file-related util functions; will throw on error
-    static void chmod(const char *name, int mode);
-    static void rename(const char *old_, const char *new_);
-    static void unlink(const char *name);
+    static void chmod(const char *name, int mode) may_throw;
+    static void rename(const char *old_, const char *new_) may_throw;
+    static void unlink(const char *name) may_throw;
+    static bool unlink_noexcept(const char *name) noexcept;
 
 protected:
     bool do_sopen();

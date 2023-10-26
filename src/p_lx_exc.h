@@ -29,6 +29,7 @@
  */
 
 
+#pragma once
 #ifndef __UPX_P_LX_EXC_H
 #define __UPX_P_LX_EXC_H 1
 
@@ -54,7 +55,7 @@ public:
     virtual const int *getFilters() const override;
     virtual void buildLoader(const Filter *) override;
 
-    virtual bool canPack() override;
+    virtual tribool canPack() override;
 
 protected:
     virtual void pack1(OutputFile *, Filter &) override;  // generate executable header

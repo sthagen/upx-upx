@@ -11,7 +11,7 @@
 if(DEFINED UPX_CONFIG_CMAKE_MINIMUM_REQUIRED_VERSION)
     cmake_minimum_required(VERSION "${UPX_CONFIG_CMAKE_MINIMUM_REQUIRED_VERSION}" FATAL_ERROR)
 else()
-    cmake_minimum_required(VERSION 3.8.0 FATAL_ERROR) # CMake >= 3.8 is needed for CXX_STANDARD 17
+    cmake_minimum_required(VERSION 3.8 FATAL_ERROR) # CMake >= 3.8 is needed for CXX_STANDARD 17
 endif()
 
 # compilation config options
@@ -54,11 +54,11 @@ function(upx_cache_bool_vars)
     list(REMOVE_AT ARGV 0)
     foreach(var ${ARGV})
         set(value ${default_value})
-        if(DEFINED UPX_CACHE_${var})
+        if(DEFINED UPX_CACHE_${var})            # cached
             set(value "${UPX_CACHE_${var}}")
-        elseif(DEFINED ${var})
+        elseif(DEFINED ${var})                  # defined via "cmake -DXXX=YYY"
             set(value "${${var}}")
-        elseif("$ENV{${var}}" MATCHES "^(0|1|OFF|ON|FALSE|TRUE)$")
+        elseif("$ENV{${var}}" MATCHES "^(0|1|OFF|ON|FALSE|TRUE)$") # environment
             set(value "$ENV{${var}}")
             set(UPX_CACHE_ORIGIN_FROM_ENV_${var} TRUE CACHE INTERNAL "" FORCE)
         endif()
@@ -141,7 +141,7 @@ if(NOT is_multi_config AND NOT CMAKE_BUILD_TYPE)
 endif()
 
 # CMake init
-project(upx VERSION 4.1.0 LANGUAGES C CXX)
+project(upx VERSION 4.2.0 LANGUAGES C CXX)
 
 # set the default multi-config build type to "Release"
 if(is_multi_config)
@@ -155,10 +155,12 @@ if(is_multi_config)
     set(CMAKE_CONFIGURATION_TYPES "${c}" CACHE STRING "List of supported configuration types." FORCE)
 endif()
 
-# set MSVC_FRONTEND
-set(MSVC_FRONTEND 0)
-if(MSVC OR CMAKE_C_COMPILER_FRONTEND_VARIANT MATCHES "^MSVC")
+# set MSVC_FRONTEND and MINGW
+if(NOT DEFINED MSVC_FRONTEND AND (MSVC OR CMAKE_C_COMPILER_FRONTEND_VARIANT MATCHES "^MSVC"))
     set(MSVC_FRONTEND 1)
+endif()
+if(NOT DEFINED MINGW AND CMAKE_C_PLATFORM_ID MATCHES "^MinGW")
+    set(MINGW 1)
 endif()
 
 #***********************************************************************
@@ -166,6 +168,29 @@ endif()
 #***********************************************************************
 
 include(CheckCCompilerFlag)
+include(CheckFunctionExists)
+include(CheckIncludeFile)
+include(CheckStructHasMember)
+include(CheckSymbolExists)
+
+if(NOT DEFINED HAVE_UNISTD_H)
+    check_include_file("unistd.h" HAVE_UNISTD_H)
+endif()
+if(NOT DEFINED HAVE_UTIMENSAT)
+    check_function_exists(utimensat HAVE_UTIMENSAT_FUNCTION__)
+    if(HAVE_UTIMENSAT_FUNCTION__)
+        check_symbol_exists(utimensat "sys/types.h;fcntl.h;sys/stat.h" HAVE_UTIMENSAT_SYMBOL__)
+        if(HAVE_UTIMENSAT_SYMBOL__)
+            CHECK_STRUCT_HAS_MEMBER("struct stat" "st_mtim.tv_nsec" "sys/types.h;fcntl.h;sys/stat.h" HAVE_STRUCT_STAT_ST_MTIM_TV_NSEC)
+            if(NOT HAVE_STRUCT_STAT_ST_MTIM_TV_NSEC)
+                CHECK_STRUCT_HAS_MEMBER("struct stat" "st_mtimespec.tv_nsec" "sys/types.h;fcntl.h;sys/stat.h" HAVE_STRUCT_STAT_ST_MTIMESPEC_TV_NSEC)
+            endif()
+            if(HAVE_STRUCT_STAT_ST_MTIM_TV_NSEC OR HAVE_STRUCT_STAT_ST_MTIMESPEC_TV_NSEC)
+                set(HAVE_UTIMENSAT 1)
+            endif()
+        endif()
+    endif()
+endif()
 
 if(UPX_CONFIG_DISABLE_WSTRICT)
     # enable all basic warnings
@@ -185,10 +210,14 @@ else()
     set(warn_Werror -Werror)
     set(warn_WX -WX)
 endif()
+if(MSVC_FRONTEND)
+    # disable warning C5105 which may get triggered by some older versions of <windows.h>
+    set(warn_WX -wd5105 ${warn_WX})
+endif()
 
 function(upx_add_definitions_with_prefix)
     set(flag_prefix "${ARGV0}")
-    if(flag_prefix MATCHES "^dummy$") # need dummy to work around bug in old CMake versions
+    if(flag_prefix MATCHES "^empty$") # need "empty" to work around bug in old CMake versions
         set(flag_prefix "")
     endif()
     list(REMOVE_AT ARGV 0)
@@ -212,9 +241,9 @@ function(upx_add_definitions)
     if(MSVC_FRONTEND AND CMAKE_C_COMPILER_ID MATCHES "Clang")
         # for clang-cl try "-clang:" flag prefix first
         upx_add_definitions_with_prefix("-clang:" ${ARGV})
-        upx_add_definitions_with_prefix("dummy" ${failed_flags})
+        upx_add_definitions_with_prefix("empty" ${failed_flags})
     else()
-        upx_add_definitions_with_prefix("dummy" ${ARGV})
+        upx_add_definitions_with_prefix("empty" ${ARGV})
     endif()
 endfunction()
 
@@ -225,12 +254,15 @@ if(NOT CMAKE_C_COMPILER_ID MATCHES "^MSVC")
     set(CMAKE_C_FLAGS_RELEASE "${a}" CACHE STRING "Flags used by the C compiler during RELEASE builds." FORCE)
     set(CMAKE_CXX_FLAGS_RELEASE "${b}" CACHE STRING "Flags used by the CXX compiler during RELEASE builds." FORCE)
 endif()
-if(MSVC_FRONTEND)
+if(MSVC_FRONTEND OR WIN32 OR MINGW OR CYGWIN)
     # disable silly warnings about using "deprecated" POSIX functions like fopen()
     add_definitions(-D_CRT_NONSTDC_NO_DEPRECATE)
     add_definitions(-D_CRT_NONSTDC_NO_WARNINGS)
     add_definitions(-D_CRT_SECURE_NO_DEPRECATE)
     add_definitions(-D_CRT_SECURE_NO_WARNINGS)
+    add_definitions(-DWIN32_LEAN_AND_MEAN)
+endif()
+if(MSVC_FRONTEND)
     # use -funsigned-char; set __cplusplus according to selected C++ standard
     add_definitions(-J -Zc:__cplusplus)
     if(CMAKE_C_COMPILER_ID MATCHES "^MSVC")
@@ -248,6 +280,34 @@ if(NOT CMAKE_C_COMPILER_ID MATCHES "^MSVC")
         upx_add_definitions(-Wno-shorten-64-to-32)
     endif()
 endif()
+
+# compile a source file with -O2 even in Debug build
+function(upx_compile_source_debug_with_O2)
+    set(flags "$<$<CONFIG:Debug>:-O2>")
+    if (CMAKE_VERSION VERSION_LESS 3.8)
+        # 3.8: The COMPILE_FLAGS source file property learned to support generator expressions
+        if (is_multi_config OR NOT CMAKE_BUILD_TYPE MATCHES "^Debug$")
+            return()
+        endif()
+        set(flags "-O2")
+    endif()
+    if(CMAKE_GENERATOR MATCHES "Xcode") # multi-config
+        # NOTE: Xcode does not support per-config per-source COMPILE_FLAGS (as of CMake 3.27.7)
+        return()
+    endif()
+    foreach(t ${ARGV})
+        if(MSVC_FRONTEND)
+            # MSVC uses some Debug compilation options like -RTC1 that are incompatible with -O2
+        else()
+            get_source_file_property(prop ${t} COMPILE_FLAGS)
+            if(prop MATCHES "^(NOTFOUND)?$")
+                set_source_files_properties(${t} PROPERTIES COMPILE_FLAGS "${flags}")
+            else()
+                set_source_files_properties(${t} PROPERTIES COMPILE_FLAGS "${prop} ${flags}")
+            endif()
+        endif()
+    endforeach()
+endfunction()
 
 # compile a target with -O2 even in Debug build
 function(upx_compile_target_debug_with_O2)
@@ -267,7 +327,7 @@ function(upx_sanitize_target)
             # no-op
         elseif(MSVC_FRONTEND)
             # MSVC uses -GS (similar to -fstack-protector) by default
-        elseif(CMAKE_C_PLATFORM_ID MATCHES "^MinGW" OR MINGW OR CYGWIN)
+        elseif(MINGW OR CYGWIN)
             # avoid link errors with current MinGW-w64 versions
             # see https://www.mingw-w64.org/contribute/#sanitizers-asan-tsan-usan
         else()
@@ -285,7 +345,7 @@ endfunction()
 # targets
 #***********************************************************************
 
-# internal settings
+# internal settings; these may change in a future versions
 set(UPX_CONFIG_DISABLE_THREADS ON) # multithreading is currently not used; maybe in UPX version 5
 set(UPX_CONFIG_DISABLE_BZIP2 ON)   # bzip2 is currently not used; we might need it to decompress linux kernels
 set(UPX_CONFIG_DISABLE_ZSTD ON)    # zstd is currently not used; maybe in UPX version 5
@@ -372,10 +432,12 @@ set(t upx_vendor_zlib)
 upx_compile_target_debug_with_O2(${t})
 upx_sanitize_target(${t})
 target_compile_definitions(${t} PRIVATE HAVE_VSNPRINTF=1)
+if(HAVE_UNISTD_H)
+    target_compile_definitions(${t} PRIVATE HAVE_UNISTD_H=1)
+endif()
 if(MSVC_FRONTEND)
     target_compile_options(${t} PRIVATE -W3 ${warn_WX})
 else()
-    target_compile_definitions(${t} PRIVATE HAVE_UNISTD_H=1)
     target_compile_options(${t} PRIVATE -Wall ${warn_Werror})
     ##target_compile_options(${t} PRIVATE ${warn_Wall} -Wno-cast-align -Wno-cast-qual ${warn_Werror})
 endif()
@@ -416,6 +478,15 @@ endif()
 if(NOT UPX_CONFIG_DISABLE_ZSTD)
     target_compile_definitions(${t} PRIVATE WITH_ZSTD=1)
 endif()
+if(HAVE_UTIMENSAT)
+    target_compile_definitions(${t} PRIVATE USE_UTIMENSAT=1)
+    if(HAVE_STRUCT_STAT_ST_MTIMESPEC_TV_NSEC)
+        target_compile_definitions(${t} PRIVATE HAVE_STRUCT_STAT_ST_MTIMESPEC_TV_NSEC=1)
+    endif()
+endif()
+# improve speed of the debug versions
+upx_compile_source_debug_with_O2(src/compress/compress_lzma.cpp)
+upx_compile_source_debug_with_O2(src/filter/filter_impl.cpp)
 #upx_compile_target_debug_with_O2(${t})
 upx_sanitize_target(${t})
 if(MSVC_FRONTEND)
@@ -433,6 +504,7 @@ endif()
 if(NOT UPX_CONFIG_CMAKE_DISABLE_TEST)
 
 include(CTest)
+# TODO later: check CMAKE_CROSSCOMPILING_EMULATOR
 if(NOT CMAKE_CROSSCOMPILING)
     add_test(NAME upx-version COMMAND upx --version)
     add_test(NAME upx-help    COMMAND upx --help)

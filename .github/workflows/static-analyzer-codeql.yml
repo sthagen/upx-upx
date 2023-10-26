@@ -2,14 +2,16 @@
 
 name: 'Static Analyzer - CodeQL'
 on:
-  schedule: [cron: '50 5 * * 3'] # run weekly Wednesday 05:50 UTC
+  schedule: [cron: '50 4 * * 3'] # run weekly Wednesday 04:50 UTC
   workflow_dispatch:
 env:
-  CMAKE_REQUIRED_QUIET: OFF
+  CMAKE_REQUIRED_QUIET: "OFF"
+  CTEST_OUTPUT_ON_FAILURE: "ON"
   DEBIAN_FRONTEND: noninteractive
 
 jobs:
   job-analyze-codeql:
+    if: github.repository_owner == 'upx'
     name: Analyze
     runs-on: ubuntu-latest
     permissions:
@@ -22,7 +24,7 @@ jobs:
         language: [ 'cpp' ]
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with: { submodules: true }
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v2

@@ -29,30 +29,21 @@
 
 #if (USE_SCREEN_WIN32)
 
+/*************************************************************************
+// direct screen access
+**************************************************************************/
+
+#include "../util/windows_lean.h"
+#if (HAVE_CONIO_H)
+#include <conio.h>
+#endif
+
 #include "screen.h"
 
 #define this self
 
 #define mask_fg 0x0f
 #define mask_bg 0xf0
-
-/*************************************************************************
-// direct screen access
-**************************************************************************/
-
-#if (ACC_CC_MSC && (_MSC_VER >= 1000 && _MSC_VER < 1200))
-/* avoid -W4 warnings in <conio.h> */
-#pragma warning(disable : 4032)
-/* avoid -W4 warnings in <windows.h> */
-#pragma warning(disable : 4201 4214 4514)
-#endif
-#if defined(__RSXNT__)
-#define timeval win32_timeval /* struct timeval already in <sys/time.h> */
-#endif
-#include <windows.h>
-#if (HAVE_CONIO_H)
-#include <conio.h>
-#endif
 
 struct screen_data_t {
     HANDLE hi;

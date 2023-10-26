@@ -8,7 +8,7 @@ set -e
 # Copyright (C) Markus Franz Xaver Johannes Oberhumer
 #
 
-# uses optional environment variables: AR, CC, CXX, OPTIMIZE, top_srcdir
+# uses optional environment variables: AR, CC, CXX, OPTIMIZE, VERBOSE, top_srcdir
 
 # shell init
 ### set -x # enable logging
@@ -26,6 +26,8 @@ if test "x$AR" = "x0" || test "x$AR" = "xfalse" || test "x$AR" = "x/bin/false"; 
 fi
 # protect against security threats caused by misguided compiler "optimizations"
 mandatory_flags="-fno-strict-aliasing -fno-strict-overflow -funsigned-char"
+# not mandatory but good practice when using <windows.h>:
+mandatory_flags="$mandatory_flags -DWIN32_LEAN_AND_MEAN"
 if test "x$OPTIMIZE" != "x" && test "x$OPTIMIZE" != "x0"; then
     # not mandatory and not minimal, but usually a good idea:
     mandatory_flags="-Wall -O2 $mandatory_flags"
@@ -62,7 +64,12 @@ run() {
     fi
     # print short info and run command
     test "x$1" != "x" && test "x$1" != "x+" && echo "$1"
-    shift; "$@"
+    shift
+    if test "x$VERBOSE" != "x" && test "x$VERBOSE" != "x0"; then
+        # print full command
+        echo "  $@"
+    fi
+    "$@"
 }
 
 # helper function

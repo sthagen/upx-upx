@@ -37,7 +37,6 @@ extern unsigned Pprotect(void *, size_t, unsigned);
 extern void *Pmap(void *, size_t, unsigned, unsigned, int, size_t);
 extern int Punmap(void *, size_t);
 extern size_t Pwrite(unsigned, void const *, size_t);
-extern int ftruncate(int fd, off_t length);
 
 extern void f_int3(int arg);
 
@@ -263,9 +262,8 @@ make_hatch_x86_64(
         }
         else { // Does not fit at hi end of .text, so must use a new page "permanently"
             int mfd = memfd_create(addr_string("upx"), 0);  // the directory entry
-            ftruncate(mfd, 6);
             Pwrite(mfd, addr_string("\x0f\x05\x5f\x5e\x5a\xc3"), 6);
-            hatch = Pmap(0, 6, PROT_READ|PROT_EXEC, MAP_SHARED, mfd, 0);
+            hatch = Pmap(0, 6, PROT_READ|PROT_EXEC, MAP_PRIVATE, mfd, 0);
             close(mfd);
         }
     }
@@ -306,9 +304,8 @@ make_hatch_ppc64(
         }
         else { // Does not fit at hi end of .text, so must use a new page "permanently"
             int mfd = memfd_create(addr_string("upx"), 0);  // the directory entry
-            ftruncate(mfd,sizeof(code));
             Pwrite(mfd, code, sizeof(code));
-            hatch = Pmap(0, sizeof(code), PROT_READ|PROT_EXEC, MAP_SHARED, mfd, 0);
+            hatch = Pmap(0, sizeof(code), PROT_READ|PROT_EXEC, MAP_PRIVATE, mfd, 0);
             close(mfd);
         }
     }
@@ -345,9 +342,8 @@ make_hatch_arm64(
         }
         else { // Does not fit at hi end of .text, so must use a new page "permanently"
             int mfd = memfd_create(addr_string("upx"), 0);  // the directory entry
-            ftruncate(mfd, sizeof(code));
             Pwrite(mfd, code, sizeof(code));
-            void *mfd_addr = Pmap(0, sizeof(code), PROT_READ|PROT_EXEC, MAP_SHARED, mfd, 0);
+            void *mfd_addr = Pmap(0, sizeof(code), PROT_READ|PROT_EXEC, MAP_PRIVATE, mfd, 0);
             close(mfd);
             hatch = (unsigned *)mfd_addr;
         }
@@ -498,13 +494,12 @@ upx_so_main(  // returns &escape_hatch
     if (phdr->p_flags & PF_X) {
         int mfd = memfd_create(addr_string("upx"), 0);
         unsigned mfd_len = 0ul - PAGE_MASK;
-        ftruncate(mfd, mfd_len);
         Pwrite(mfd, elf_tmp, binfo->sz_unc);  // de-compressed Elf_Ehdr and Elf_Phdrs
         Pwrite(mfd, binfo->sz_unc + va_load, mfd_len - binfo->sz_unc);  // rest of 1st page
 
         Punmap(va_load, mfd_len);  // make SELinux forget any previous protection
         Elf64_Addr va_mfd = (Elf64_Addr)Pmap(va_load, mfd_len, PF_to_PROT(phdr),
-            MAP_FIXED|MAP_SHARED, mfd, 0); (void)va_mfd;
+            MAP_FIXED|MAP_PRIVATE, mfd, 0); (void)va_mfd;
         close(mfd);
     }
 
@@ -580,7 +575,7 @@ upx_so_main(  // returns &escape_hatch
             DPRINTF("mfd mmap addr=%%p  len=%%p\\n", (phdr->p_vaddr + base + pfx), al_bi.sz_unc);
             Punmap(mfd_addr, frag + al_bi.sz_unc);  // Discard RW mapping; mfd has the bytes
             Pmap((char *)(phdr->p_vaddr + base + pfx), al_bi.sz_unc, PF_to_PROT(phdr),
-                MAP_FIXED|MAP_SHARED, mfd, 0);
+                MAP_FIXED|MAP_PRIVATE, mfd, 0);
             close(mfd);
         }
         else { // easy

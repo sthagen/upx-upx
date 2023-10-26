@@ -35,7 +35,7 @@
 static const CLANG_FORMAT_DUMMY_STATEMENT
 #include "stub/i086-dos16.exe.h"
 
-#define MAXMATCH 0x2000
+#define MAXMATCH     0x2000
 #define MAXRELOCSIZE (0x8000 - MAXMATCH)
 
 #define DI_LIMIT 0xff00 // see the assembly why
@@ -229,7 +229,7 @@ int PackExe::readFileHeader() {
     return UPX_F_DOS_EXE;
 }
 
-bool PackExe::canPack() {
+tribool PackExe::canPack() {
     if (fn_has_ext(fi->getName(), "sys")) // dos/sys
         return false;
     if (!readFileHeader())
@@ -398,7 +398,7 @@ void PackExe::pack(OutputFile *fo) {
             unsigned jc = get_le32(relocs + 4 * ic);
             set_le32(relocs + 4 * ic, ((jc >> 16) * 16 + (jc & 0xffff)) & 0xfffff);
         }
-        qsort(raw_bytes(relocs, 4 * relocnum), relocnum, 4, le32_compare);
+        upx_qsort(raw_bytes(relocs, 4 * relocnum), relocnum, 4, le32_compare);
 
         SPAN_S_VAR(byte, image, ibuf + 0, ih_imagesize);
         SPAN_S_VAR(byte, crel, ibuf + ih_imagesize, ibuf);
@@ -572,7 +572,7 @@ void PackExe::pack(OutputFile *fo) {
 //
 **************************************************************************/
 
-int PackExe::canUnpack() {
+tribool PackExe::canUnpack() {
     if (!readFileHeader())
         return false;
     const unsigned off = ih.headsize16 * 16;

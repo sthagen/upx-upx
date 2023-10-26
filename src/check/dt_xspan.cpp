@@ -43,6 +43,7 @@ TEST_CASE("raw_bytes ptr") {
     ptr = buf;
     CHECK(ptr_udiff_bytes(raw_index_bytes(ptr, 1, 1), ptr) == 2u);
     CHECK(ptr_udiff_bytes(raw_index_bytes(ptr, 4, 0), ptr) == 8u);
+    UNUSED(ptr);
 }
 
 TEST_CASE("raw_bytes bounded array") {
@@ -55,6 +56,7 @@ TEST_CASE("raw_bytes bounded array") {
     CHECK_THROWS(raw_index_bytes(buf, 3, 3));
     CHECK(ptr_udiff_bytes(raw_index_bytes(buf, 1, 1), buf) == 2u);
     CHECK(ptr_udiff_bytes(raw_index_bytes(buf, 4, 0), buf) == 8u);
+    UNUSED(buf);
 }
 
 /*************************************************************************
@@ -62,7 +64,7 @@ TEST_CASE("raw_bytes bounded array") {
 **************************************************************************/
 
 TEST_CASE("basic xspan usage") {
-    char buf[4] = {0, 1, 2, 3};
+    alignas(4) char buf[4] = {0, 1, 2, 3};
 
     SUBCASE("XSPAN_x") {
         XSPAN_0(char) a0 = nullptr;
@@ -112,6 +114,28 @@ TEST_CASE("basic xspan usage") {
         CHECK_THROWS(raw_bytes(cs, 5));
         CHECK_THROWS(raw_index_bytes(cs, 1, 4));
 #endif
+
+        XSPAN_0(upx_uint16_t) c0_2 = XSPAN_TYPE_CAST(upx_uint16_t, c0 + 2);
+        XSPAN_P(upx_uint16_t) cp_2 = XSPAN_TYPE_CAST(upx_uint16_t, cp + 2);
+        XSPAN_S(upx_uint16_t) cs_2 = XSPAN_TYPE_CAST(upx_uint16_t, cs + 2);
+        CHECK(ptr_udiff_bytes(c0_2, c0) == 2u);
+        CHECK(ptr_udiff_bytes(cp_2, c0) == 2u);
+        CHECK(ptr_udiff_bytes(cs_2, c0) == 2u);
+        CHECK(ptr_udiff_bytes(c0_2, cp) == 2u);
+        CHECK(ptr_udiff_bytes(cp_2, cp) == 2u);
+        CHECK(ptr_udiff_bytes(cs_2, cp) == 2u);
+        CHECK(ptr_udiff_bytes(c0_2, cs) == 2u);
+        CHECK(ptr_udiff_bytes(cp_2, cs) == 2u);
+        CHECK(ptr_udiff_bytes(cs_2, cs) == 2u);
+        XSPAN_0(upx_uint16_t) c0_2b = XSPAN_TYPE_CAST(upx_uint16_t, c0) + 1;
+        XSPAN_P(upx_uint16_t) cp_2b = XSPAN_TYPE_CAST(upx_uint16_t, cp) + 1;
+        XSPAN_S(upx_uint16_t) cs_2b = XSPAN_TYPE_CAST(upx_uint16_t, cs) + 1;
+        CHECK(c0_2 == c0_2b);
+        CHECK(cp_2 == cp_2b);
+        CHECK(cs_2 == cs_2b);
+
+        CHECK(sizeof(*c0) == 1u);
+        CHECK(sizeof(*c0_2) == 2u);
     }
 
     SUBCASE("XSPAN_x_VAR") {
@@ -169,6 +193,28 @@ TEST_CASE("basic xspan usage") {
         CHECK_THROWS(raw_bytes(cs, 5));
         CHECK_THROWS(raw_index_bytes(cs, 1, 4));
 #endif
+
+        XSPAN_0_VAR(upx_uint16_t, c0_2, XSPAN_TYPE_CAST(upx_uint16_t, c0 + 2));
+        XSPAN_P_VAR(upx_uint16_t, cp_2, XSPAN_TYPE_CAST(upx_uint16_t, cp + 2));
+        XSPAN_S_VAR(upx_uint16_t, cs_2, XSPAN_TYPE_CAST(upx_uint16_t, cs + 2));
+        CHECK(ptr_udiff_bytes(c0_2, c0) == 2u);
+        CHECK(ptr_udiff_bytes(cp_2, c0) == 2u);
+        CHECK(ptr_udiff_bytes(cs_2, c0) == 2u);
+        CHECK(ptr_udiff_bytes(c0_2, cp) == 2u);
+        CHECK(ptr_udiff_bytes(cp_2, cp) == 2u);
+        CHECK(ptr_udiff_bytes(cs_2, cp) == 2u);
+        CHECK(ptr_udiff_bytes(c0_2, cs) == 2u);
+        CHECK(ptr_udiff_bytes(cp_2, cs) == 2u);
+        CHECK(ptr_udiff_bytes(cs_2, cs) == 2u);
+        XSPAN_0_VAR(upx_uint16_t, c0_2b, XSPAN_TYPE_CAST(upx_uint16_t, c0) + 1);
+        XSPAN_P_VAR(upx_uint16_t, cp_2b, XSPAN_TYPE_CAST(upx_uint16_t, cp) + 1);
+        XSPAN_S_VAR(upx_uint16_t, cs_2b, XSPAN_TYPE_CAST(upx_uint16_t, cs) + 1);
+        CHECK(c0_2 == c0_2b);
+        CHECK(cp_2 == cp_2b);
+        CHECK(cs_2 == cs_2b);
+
+        CHECK(sizeof(*c0) == 1u);
+        CHECK(sizeof(*c0_2) == 2u);
     }
 
     SUBCASE("xspan in class") {
@@ -405,6 +451,7 @@ TEST_CASE("PtrOrSpan") {
     CHECK_THROWS(sp_with_base = s0_no_base);   // nullptr assignment
     CHECK_THROWS(sp_with_base = s0_with_base); // nullptr assignment
 #endif
+    UNUSED(my_null);
 }
 
 /*************************************************************************
@@ -556,6 +603,7 @@ TEST_CASE("Span") {
         CHECK((XSPAN_S_MAKE(char, b1_b1).raw_base() == base_buf + 1));
     }
 #endif
+    UNUSED(my_null);
 }
 
 /*************************************************************************
@@ -686,6 +734,7 @@ TEST_CASE("PtrOrSpan") {
     CHECK(my_memcmp_v1(buf, nullptr, 4) == -2);
     CHECK(my_memcmp_v2(buf + 4, buf + 4, 999) == 0);
     CHECK(my_memcmp_v2(buf, buf + 2, 3) == 0);
+    UNUSED(buf);
 }
 
 /*************************************************************************
@@ -801,7 +850,7 @@ TEST_CASE("PtrOrSpan int") {
 
 namespace {
 template <class T>
-__acc_static_noinline int foo(T p) {
+static noinline int foo(T p) {
     unsigned r = 0;
     r += *p++;
     r += *++p;
@@ -839,8 +888,91 @@ TEST_CASE("Span codegen") {
     CHECK(foo(XSPAN_0_MAKE(upx_uint8_t, buf, 8)) == 0 + 2 + 5 + 4 + 4 + 3);
     CHECK(foo(XSPAN_P_MAKE(upx_uint8_t, buf, 8)) == 0 + 2 + 5 + 4 + 4 + 3);
     CHECK(foo(XSPAN_S_MAKE(upx_uint8_t, buf, 8)) == 0 + 2 + 5 + 4 + 4 + 3);
+    UNUSED(buf);
 }
 
 #endif // WITH_XSPAN >= 2
+
+/*************************************************************************
+// misc
+**************************************************************************/
+
+namespace {
+template <class T>
+struct PointerTraits {
+    typedef typename std::add_lvalue_reference<T>::type reference;
+    typedef
+        typename std::add_lvalue_reference<typename std::add_const<T>::type>::type const_reference;
+    typedef typename std::add_pointer<T>::type pointer;
+    typedef typename std::add_pointer<typename std::add_const<T>::type>::type const_pointer;
+};
+} // namespace
+
+#if __cplusplus >= 201103L
+
+TEST_CASE("decltype integral constants") {
+    static_assert((std::is_same<decltype(0), int>::value), "");
+    static_assert((std::is_same<decltype(0u), unsigned>::value), "");
+    static_assert((std::is_same<decltype(0l), long>::value), "");
+    static_assert((std::is_same<decltype(0ul), unsigned long>::value), "");
+    static_assert((std::is_same<decltype(0ll), long long>::value), "");
+    static_assert((std::is_same<decltype(0ull), unsigned long long>::value), "");
+    static_assert((std::is_same<decltype((char) 0), char>::value), "");
+    static_assert((std::is_same<decltype((short) 0), short>::value), "");
+    static_assert((std::is_same<decltype((long) 0), long>::value), "");
+    static_assert((std::is_same<decltype((long long) 0), long long>::value), "");
+    static_assert((std::is_same<decltype(char(0)), char>::value), "");
+    static_assert((std::is_same<decltype(short(0)), short>::value), "");
+    static_assert((std::is_same<decltype(long(0)), long>::value), "");
+}
+
+TEST_CASE("decltype pointer") {
+    int dummy = 0;
+    int *p = &dummy;
+    const int *c = &dummy;
+    static_assert((std::is_same<decltype(p - p), std::ptrdiff_t>::value), "");
+    static_assert((std::is_same<decltype(c - c), std::ptrdiff_t>::value), "");
+    static_assert((std::is_same<decltype(p - c), std::ptrdiff_t>::value), "");
+    static_assert((std::is_same<decltype(c - p), std::ptrdiff_t>::value), "");
+    typedef PointerTraits<int> TInt;
+    typedef PointerTraits<const int> TConstInt;
+    static_assert((std::is_same<int *, TInt::pointer>::value), "");
+    static_assert((std::is_same<const int *, TInt::const_pointer>::value), "");
+    static_assert((std::is_same<const int *, TConstInt::pointer>::value), "");
+    static_assert((std::is_same<const int *, TConstInt::const_pointer>::value), "");
+    //
+    static_assert((std::is_same<decltype(p), TInt::pointer>::value), "");
+    static_assert((std::is_same<decltype(c), TInt::const_pointer>::value), "");
+    static_assert((std::is_same<decltype(c), TConstInt::pointer>::value), "");
+    static_assert((std::is_same<decltype(p + 1), TInt::pointer>::value), "");
+    static_assert((std::is_same<decltype(c + 1), TInt::const_pointer>::value), "");
+    static_assert((std::is_same<decltype(c + 1), TConstInt::pointer>::value), "");
+    static_assert((std::is_same<decltype(c + 1), TConstInt::const_pointer>::value), "");
+    static_assert((std::is_same<decltype(c + 1), const int *>::value), "");
+    // dereference
+    static_assert((std::is_same<decltype(*p), TInt::reference>::value), "");
+    static_assert((std::is_same<decltype(*c), TInt::const_reference>::value), "");
+#if 0
+    // this works, but avoid clang warnings:
+    //   "Expression with side effects has no effect in an unevaluated context"
+    static_assert((std::is_same<decltype(*p++), TInt::reference>::value), "");
+    static_assert((std::is_same<decltype(*++p), TInt::reference>::value), "");
+    static_assert((std::is_same<decltype(*c++), TInt::const_reference>::value), "");
+    static_assert((std::is_same<decltype(*c++), TConstInt::reference>::value), "");
+    static_assert((std::is_same<decltype(*c++), TConstInt::const_reference>::value), "");
+    static_assert((std::is_same<decltype(*++c), TInt::const_reference>::value), "");
+    static_assert((std::is_same<decltype(*++c), TConstInt::reference>::value), "");
+    static_assert((std::is_same<decltype(*++c), TConstInt::const_reference>::value), "");
+#endif
+    // array access
+    static_assert((std::is_same<decltype(p[0]), TInt::reference>::value), "");
+    static_assert((std::is_same<decltype(c[0]), TInt::const_reference>::value), "");
+    static_assert((std::is_same<decltype(c[0]), TConstInt::reference>::value), "");
+    static_assert((std::is_same<decltype(c[0]), TConstInt::const_reference>::value), "");
+    UNUSED(p);
+    UNUSED(c);
+}
+
+#endif // __cplusplus >= 201103L
 
 /* vim:set ts=4 sw=4 et: */

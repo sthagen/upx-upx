@@ -27,12 +27,12 @@
 
 #pragma once
 
-class Packer;
+class PackerBase;
 class InputFile;
 class OutputFile;
 
 /*************************************************************************
-// dispatch to a concrete subclass of class Packer; see work.cpp
+// dispatch to a concrete subclass of class PackerBase; see work.cpp
 **************************************************************************/
 
 class PackMaster final {
@@ -40,21 +40,22 @@ public:
     explicit PackMaster(InputFile *f, Options *o = nullptr) noexcept;
     ~PackMaster() noexcept;
 
-    void pack(OutputFile *fo);
-    void unpack(OutputFile *fo);
-    void test();
-    void list();
-    void fileInfo();
+    void pack(OutputFile *fo) may_throw;
+    void unpack(OutputFile *fo) may_throw;
+    void test() may_throw;
+    void list() may_throw;
+    void fileInfo() may_throw;
 
-    typedef Packer *(*visit_func_t)(Packer *p, void *user);
-    static Packer *visitAllPackers(visit_func_t, InputFile *f, const Options *, void *user);
+    typedef tribool (*visit_func_t)(PackerBase *pb, void *user);
+    static PackerBase *visitAllPackers(visit_func_t, InputFile *f, const Options *, void *user)
+        may_throw;
 
 private:
-    OwningPointer(Packer) packer = nullptr; // owner
-    InputFile *fi = nullptr;                // reference
+    OwningPointer(PackerBase) packer = nullptr; // owner
+    InputFile *const fi;                        // reference, required
 
-    static Packer *getPacker(InputFile *f);
-    static Packer *getUnpacker(InputFile *f);
+    static PackerBase *getPacker(InputFile *f) may_throw;
+    static PackerBase *getUnpacker(InputFile *f) may_throw;
 
     // setup local options for each file
     Options local_options;

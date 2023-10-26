@@ -103,17 +103,16 @@ struct PackerNames {
     size_t names_count;
     const Options *o;
     PackerNames() : names_count(0), o(nullptr) {}
-    void add(const Packer *packer) {
-        assert(names_count < 64);
-        names[names_count].fname = packer->getFullName(o);
-        names[names_count].sname = packer->getName();
+    void add(const PackerBase *pb) {
+        assert_noexcept(names_count < 64);
+        names[names_count].fname = pb->getFullName(o);
+        names[names_count].sname = pb->getName();
         names_count++;
     }
-    static Packer *visit(Packer *packer, void *user) {
+    static tribool visit(PackerBase *pb, void *user) {
         PackerNames *self = (PackerNames *) user;
-        self->add(packer);
-        delete packer;
-        return nullptr;
+        self->add(pb);
+        return false;
     }
     static int __acc_cdecl_qsort cmp_fname(const void *a, const void *b) {
         return strcmp(((const Entry *) a)->fname, ((const Entry *) b)->fname);
@@ -129,8 +128,8 @@ static void list_all_packers(FILE *f, int verbose) {
     o.reset();
     PackerNames pn;
     pn.o = &o;
-    PackMaster::visitAllPackers(PackerNames::visit, nullptr, &o, &pn);
-    qsort(pn.names, pn.names_count, sizeof(PackerNames::Entry), PackerNames::cmp_fname);
+    (void) PackMaster::visitAllPackers(PackerNames::visit, nullptr, &o, &pn);
+    upx_qsort(pn.names, pn.names_count, sizeof(PackerNames::Entry), PackerNames::cmp_fname);
     size_t pos = 0;
     for (size_t i = 0; i < pn.names_count; ++i) {
         const char *fn = pn.names[i].fname;
@@ -186,7 +185,6 @@ void show_help(int verbose) {
     con_fprintf(f,
                 "  -q     be quiet                          -v    be verbose\n"
                 "  -oFILE write output to 'FILE'\n"
-                //"  -f     force overwrite of output files and compression of suspicious files\n"
                 "  -f     force compression of suspicious files\n"
                 "%s%s"
                 , (verbose == 0) ? "  -k     keep backup files\n" : ""
@@ -221,6 +219,19 @@ void show_help(int verbose) {
                     "  --overlay=copy      copy any extra data attached to the file [default]\n"
                     "  --overlay=strip     strip any extra data attached to the file [DANGEROUS]\n"
                     "  --overlay=skip      don't compress a file with an overlay\n"
+                    "\n");
+        fg = con_fg(f, FG_YELLOW);
+        con_fprintf(f, "File system options:\n");
+        fg = con_fg(f, fg);
+        con_fprintf(f,
+                    "  --force-overwrite   force overwrite of output files\n"
+#if defined(__unix__)
+                    "  --link              preserve hard links (Unix only) [USE WITH CARE]\n"
+                    "  --no-link           do not preserve hard links but rename files [default]\n"
+#endif
+                    "  --no-mode           do not preserve file mode (aka permissions)\n"
+                    "  --no-owner          do not preserve file ownership\n"
+                    "  --no-time           do not preserve file timestamp\n"
                     "\n");
         fg = con_fg(f, FG_YELLOW);
         con_fprintf(f, "Options for djgpp2/coff:\n");
@@ -422,6 +433,93 @@ void show_version(bool one_line) {
 #endif
     fprintf(f, "UPX comes with ABSOLUTELY NO WARRANTY; for details type '%s -L'.\n", progname);
     // clang-format on
+}
+
+/*************************************************************************
+// sysinfo
+// undocumented and subject to change
+**************************************************************************/
+
+void show_sysinfo(const char *options_var) {
+    FILE *f = con_term;
+
+    show_header();
+
+    if (opt->verbose >= 1) {
+        con_fprintf(f, "UPX version: ");
+        fflush(f);
+        show_version(true);
+    }
+    fflush(stdout);
+
+    // Compilation Flags
+    if (opt->verbose >= 2) {
+        size_t cf_count = 0;
+        auto cf_print = [f, &cf_count](const char *name, const char *fmt, upx_int64_t v) noexcept {
+            if (cf_count++ == 0)
+                con_fprintf(f, "\nCompilation flags:\n");
+            con_fprintf(f, "  %s = ", name);
+            con_fprintf(f, fmt, v);
+            con_fprintf(f, "\n");
+        };
+        // OS and libc
+#if defined(WINVER)
+        cf_print("WINVER", "0x%04llx", WINVER + 0);
+#endif
+#if defined(_WIN32_WINNT)
+        cf_print("_WIN32_WINNT", "0x%04llx", _WIN32_WINNT + 0);
+#endif
+#if defined(__MSVCRT_VERSION__)
+        cf_print("__MSVCRT_VERSION__", "0x%04llx", __MSVCRT_VERSION__ + 0);
+#endif
+#if defined(_USE_MINGW_ANSI_STDIO)
+        cf_print("_USE_MINGW_ANSI_STDIO", "%lld", _USE_MINGW_ANSI_STDIO + 0);
+#endif
+#if defined(__USE_MINGW_ANSI_STDIO)
+        cf_print("__USE_MINGW_ANSI_STDIO", "%lld", __USE_MINGW_ANSI_STDIO + 0);
+#endif
+#if defined(__GLIBC__)
+        cf_print("__GLIBC__", "%lld", __GLIBC__ + 0);
+#endif
+#if defined(__GLIBC_MINOR__)
+        cf_print("__GLIBC_MINOR__", "%lld", __GLIBC_MINOR__ + 0);
+#endif
+        // compiler
+#if defined(_MSC_VER) && defined(_MSC_FULL_VER)
+        cf_print("_MSC_VER", "%lld", _MSC_VER + 0);
+        cf_print("_MSC_FULL_VER", "%lld", _MSC_FULL_VER + 0);
+#endif
+        UNUSED(cf_count);
+        UNUSED(cf_print);
+    }
+
+    // run-time
+#if defined(HAVE_LOCALTIME) && defined(HAVE_GMTIME)
+    {
+        auto tm2str = [](char *s, size_t size, const struct tm *tmp) noexcept {
+            snprintf(s, size, "%04d-%02d-%02d %02d:%02d:%02d", (int) tmp->tm_year + 1900,
+                     (int) tmp->tm_mon + 1, (int) tmp->tm_mday, (int) tmp->tm_hour,
+                     (int) tmp->tm_min, (int) tmp->tm_sec);
+        };
+
+        char s[40];
+        const time_t t = time(nullptr);
+        tm2str(s, sizeof(s), localtime(&t));
+        con_fprintf(f, "\n");
+        con_fprintf(f, "Local time is:  %s\n", s);
+        tm2str(s, sizeof(s), gmtime(&t));
+        con_fprintf(f, "UTC time is:    %s\n", s);
+    }
+#endif
+
+    if (options_var && options_var[0]) {
+        const char *e = getenv(options_var);
+        con_fprintf(f, "\n");
+        if (e && e[0])
+            con_fprintf(f, "Contents of environment variable %s: '%s'\n\n", options_var, e);
+        else
+            con_fprintf(f, "Environment variable '%s' is not set.\n\n", options_var);
+    }
 }
 
 /* vim:set ts=4 sw=4 et: */

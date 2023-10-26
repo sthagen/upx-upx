@@ -28,35 +28,36 @@
 
 #if WITH_XSPAN
 
+// namespace
 #if 1
-#define XSPAN_NAMESPACE_NAME XSpan
+#define XSPAN_NAMESPACE_NAME  XSpan
 #define XSPAN_NAMESPACE_BEGIN namespace XSPAN_NAMESPACE_NAME {
-#define XSPAN_NAMESPACE_END }
-#define XSPAN_NS(x) XSPAN_NAMESPACE_NAME ::x
+#define XSPAN_NAMESPACE_END   }
+#define XSPAN_NS(x)           XSPAN_NAMESPACE_NAME ::x
 #else
 #define XSPAN_NAMESPACE_BEGIN /*empty*/
 #define XSPAN_NAMESPACE_END   /*empty*/
-#define XSPAN_NS(x) ::x
+#define XSPAN_NS(x)           ::x
 #endif
 
 XSPAN_NAMESPACE_BEGIN
 
 // HINT: set env-var "UPX_DEBUG_DOCTEST_DISABLE=1" for improved debugging experience
-noinline void xspan_fail_nullptr(void);
-noinline void xspan_fail_nullbase(void);
-noinline void xspan_fail_not_same_base(void);
-noinline void xspan_fail_range_nullptr(void);
-noinline void xspan_fail_range_nullbase(void);
-noinline void xspan_fail_range_range(void);
-void xspan_check_range(const void *ptr, const void *base, ptrdiff_t size_in_bytes);
+noinline void xspan_fail_nullptr(void) may_throw;
+noinline void xspan_fail_nullbase(void) may_throw;
+noinline void xspan_fail_not_same_base(void) may_throw;
+noinline void xspan_fail_range_nullptr(void) may_throw;
+noinline void xspan_fail_range_nullbase(void) may_throw;
+noinline void xspan_fail_range_range(void) may_throw;
+void xspan_check_range(const void *ptr, const void *base, ptrdiff_t size_in_bytes) may_throw;
 
 // help constructor to distinguish between number of elements and bytes
-struct XSpanCount {
-    explicit forceinline XSpanCount(size_t n) noexcept : count(n) {}
+struct XSpanCount final {
+    explicit forceinline_constexpr XSpanCount(size_t n) noexcept : count(n) {}
     size_t count; // public
 };
-struct XSpanSizeInBytes {
-    explicit forceinline XSpanSizeInBytes(size_t bytes) noexcept : size_in_bytes(bytes) {}
+struct XSpanSizeInBytes final {
+    explicit forceinline_constexpr XSpanSizeInBytes(size_t bytes) noexcept : size_in_bytes(bytes) {}
     size_t size_in_bytes; // public
 };
 
@@ -117,8 +118,8 @@ struct XSpan_is_convertible : public std::is_convertible<From *, To *> {};
 #else
 // manual implementation
 
-namespace detail {
-// helper for "void"
+namespace XSpan_detail {
+// XSpan_void_to_T - helper for "void"
 template <class T, class U>
 struct XSpan_void_to_T {
     typedef U type;
@@ -131,19 +132,18 @@ template <class T>
 struct XSpan_void_to_T<T, const void> {
     typedef T type;
 };
-
+// XSpan_ptr_is_convertible
 template <class From, class To>
 struct XSpan_ptr_is_convertible : public std::false_type {};
 template <class T>
 struct XSpan_ptr_is_convertible<T, T> : public std::true_type {};
 template <class T>
 struct XSpan_ptr_is_convertible<T, const T> : public std::true_type {};
-} // namespace detail
+} // namespace XSpan_detail
 
 template <class From, class To>
-struct XSpan_is_convertible
-    : public detail::XSpan_ptr_is_convertible<From,
-                                              typename detail::XSpan_void_to_T<From, To>::type> {};
+struct XSpan_is_convertible : public XSpan_detail::XSpan_ptr_is_convertible<
+                                  From, typename XSpan_detail::XSpan_void_to_T<From, To>::type> {};
 #endif
 
 #if DEBUG
@@ -193,28 +193,34 @@ template <class T>
 struct Ptr;
 
 // XSpanInternalDummyArg: some type that is hard to match by accident
-class XSpanInternalDummyArgFake; // not implemented on purpose
+//   (this should result in efficient code and fully get optimized away)
 #if 0
+// too simple, can be matched by nullptr
+class XSpanInternalDummyArgFake; // not implemented on purpose
 typedef XSpanInternalDummyArgFake *XSpanInternalDummyArg;
 #define XSpanInternalDummyArgInit nullptr
-#else
-struct XSpanInternalDummyArg {
-    explicit forceinline XSpanInternalDummyArg(int, XSpanInternalDummyArgFake *) noexcept {}
+#elif __cplusplus >= 201103L && 1
+// use an enum and a move constructor
+struct XSpanInternalDummyArg final {
+    enum DummyEnum {};
+    explicit forceinline_constexpr XSpanInternalDummyArg(DummyEnum &&) noexcept {}
 };
-#define XSpanInternalDummyArgInit (XSPAN_NS(XSpanInternalDummyArg)(0, nullptr))
+#define XSpanInternalDummyArgInit                                                                  \
+    (XSPAN_NS(XSpanInternalDummyArg)(XSPAN_NS(XSpanInternalDummyArg)::DummyEnum{}))
+#else
+// use a class with a private constructor
+struct XSpanInternalDummyArg final {
+    static forceinline_constexpr XSpanInternalDummyArg make() noexcept {
+        return XSpanInternalDummyArg();
+    }
+private:
+    explicit forceinline_constexpr XSpanInternalDummyArg() noexcept {}
+};
+#define XSpanInternalDummyArgInit                                                                  \
+    (XSPAN_NS(XSpanInternalDummyArg)(XSPAN_NS(XSpanInternalDummyArg)::make()))
 #endif
 
 XSPAN_NAMESPACE_END
-
-// poison a pointer: point to a non-null invalid address
-// - resulting pointer should crash on dereference
-// - this should be efficient (so no mmap() guard page etc.)
-// - this should play nice with runtime checkers like ASAN, valgrind, etc.
-// - this should play nice with static analyzers like clang-tidy
-static forceinline void *XSPAN_GET_POISON_VOID_PTR() {
-    // return (void *) (upx_uintptr_t) 16; // NOLINT(performance-no-int-to-ptr)
-    return (void *) 16;
-}
 
 #ifndef XSPAN_DELETED_FUNCTION
 #define XSPAN_DELETED_FUNCTION = delete

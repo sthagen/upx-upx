@@ -43,6 +43,8 @@ int upx_doctest_check(int argc, char **argv) {
     return 0;
 #else
     const char *e = getenv("UPX_DEBUG_DOCTEST_DISABLE");
+    if (!e)
+        e = getenv("UPX_DEBUG_DISABLE_DOCTEST"); // allow alternate spelling
     if (e && e[0] && strcmp(e, "0") != 0)
         return 0;
     bool minimal = true;   // don't show summary
@@ -100,21 +102,6 @@ ACC_COMPILE_TIME_ASSERT_HEADER((std::is_same<unsigned, upx_uint32_t>::value))
 ACC_COMPILE_TIME_ASSERT_HEADER((std::is_same<long long, upx_int64_t>::value))
 ACC_COMPILE_TIME_ASSERT_HEADER((std::is_same<unsigned long long, upx_uint64_t>::value))
 
-ACC_COMPILE_TIME_ASSERT_HEADER((is_same_all_v<int>) )
-ACC_COMPILE_TIME_ASSERT_HEADER((is_same_all_v<int, int>) )
-ACC_COMPILE_TIME_ASSERT_HEADER((is_same_all_v<int, int, int>) )
-ACC_COMPILE_TIME_ASSERT_HEADER((!is_same_all_v<int, char>) )
-ACC_COMPILE_TIME_ASSERT_HEADER((!is_same_all_v<int, char, int>) )
-ACC_COMPILE_TIME_ASSERT_HEADER((!is_same_all_v<int, int, char>) )
-
-ACC_COMPILE_TIME_ASSERT_HEADER((!is_same_any_v<int>) )
-ACC_COMPILE_TIME_ASSERT_HEADER((is_same_any_v<int, int>) )
-ACC_COMPILE_TIME_ASSERT_HEADER((is_same_any_v<int, char, int>) )
-ACC_COMPILE_TIME_ASSERT_HEADER((is_same_any_v<int, int, char>) )
-ACC_COMPILE_TIME_ASSERT_HEADER((!is_same_any_v<int, char>) )
-ACC_COMPILE_TIME_ASSERT_HEADER((!is_same_any_v<int, char, char>) )
-ACC_COMPILE_TIME_ASSERT_HEADER((!is_same_any_v<int, char, long>) )
-
 ACC_COMPILE_TIME_ASSERT_HEADER(no_bswap16(0x04030201) == 0x0201)
 ACC_COMPILE_TIME_ASSERT_HEADER(no_bswap32(0x04030201) == 0x04030201)
 ACC_COMPILE_TIME_ASSERT_HEADER(no_bswap64(0x0807060504030201ull) == 0x0807060504030201ull)
@@ -128,42 +115,16 @@ ACC_COMPILE_TIME_ASSERT_HEADER(bswap64(bswap64(0xf8f7f6f5f4f3f2f1ull)) ==
                                no_bswap64(0xf8f7f6f5f4f3f2f1ull))
 #endif
 
-ACC_COMPILE_TIME_ASSERT_HEADER(usizeof(int) == sizeof(int))
-ACC_COMPILE_TIME_ASSERT_HEADER(usizeof('a') == sizeof(char))
-ACC_COMPILE_TIME_ASSERT_HEADER(usizeof("") == 1)
-ACC_COMPILE_TIME_ASSERT_HEADER(usizeof("a") == 2)
-ACC_COMPILE_TIME_ASSERT_HEADER(usizeof(0) == sizeof(int))
-ACC_COMPILE_TIME_ASSERT_HEADER(usizeof(0L) == sizeof(long))
-ACC_COMPILE_TIME_ASSERT_HEADER(usizeof(0LL) == sizeof(long long))
-ACC_COMPILE_TIME_ASSERT_HEADER(usizeof(nullptr) == sizeof(void *))
-ACC_COMPILE_TIME_ASSERT_HEADER(usizeof(sizeof(0)) == sizeof(size_t))
-ACC_COMPILE_TIME_ASSERT_HEADER(usizeof(usizeof(0)) == sizeof(unsigned))
-
-ACC_COMPILE_TIME_ASSERT_HEADER(compile_time::string_len("") == 0)
-ACC_COMPILE_TIME_ASSERT_HEADER(compile_time::string_len("a") == 1)
-ACC_COMPILE_TIME_ASSERT_HEADER(compile_time::string_len("ab") == 2)
-ACC_COMPILE_TIME_ASSERT_HEADER(compile_time::string_len("abc") == 3)
-
-ACC_COMPILE_TIME_ASSERT_HEADER(compile_time::string_eq("", ""))
-ACC_COMPILE_TIME_ASSERT_HEADER(!compile_time::string_eq("a", ""))
-ACC_COMPILE_TIME_ASSERT_HEADER(!compile_time::string_eq("", "a"))
-ACC_COMPILE_TIME_ASSERT_HEADER(compile_time::string_eq("abc", "abc"))
-ACC_COMPILE_TIME_ASSERT_HEADER(!compile_time::string_eq("ab", "abc"))
-ACC_COMPILE_TIME_ASSERT_HEADER(!compile_time::string_eq("abc", "ab"))
-
-ACC_COMPILE_TIME_ASSERT_HEADER(!compile_time::string_lt("", ""))
-ACC_COMPILE_TIME_ASSERT_HEADER(!compile_time::string_lt("a", ""))
-ACC_COMPILE_TIME_ASSERT_HEADER(compile_time::string_lt("", "a"))
-ACC_COMPILE_TIME_ASSERT_HEADER(!compile_time::string_lt("abc", "abc"))
-ACC_COMPILE_TIME_ASSERT_HEADER(compile_time::string_lt("ab", "abc"))
-ACC_COMPILE_TIME_ASSERT_HEADER(!compile_time::string_lt("abc", "ab"))
-ACC_COMPILE_TIME_ASSERT_HEADER(!compile_time::string_lt("abc", "aba"))
-ACC_COMPILE_TIME_ASSERT_HEADER(compile_time::string_lt("abc", "abz"))
-
-ACC_COMPILE_TIME_ASSERT_HEADER(compile_time::string_ne("abc", "abz"))
-ACC_COMPILE_TIME_ASSERT_HEADER(!compile_time::string_gt("abc", "abz"))
-ACC_COMPILE_TIME_ASSERT_HEADER(!compile_time::string_ge("abc", "abz"))
-ACC_COMPILE_TIME_ASSERT_HEADER(compile_time::string_le("abc", "abz"))
+ACC_COMPILE_TIME_ASSERT_HEADER(sign_extend(0u + 0, 8) == 0)
+ACC_COMPILE_TIME_ASSERT_HEADER(sign_extend(0u + 1, 8) == 1)
+ACC_COMPILE_TIME_ASSERT_HEADER(sign_extend(0u + 127, 8) == 127)
+ACC_COMPILE_TIME_ASSERT_HEADER(sign_extend(0u + 128, 8) == -128)
+ACC_COMPILE_TIME_ASSERT_HEADER(sign_extend(0u - 1, 8) == -1)
+ACC_COMPILE_TIME_ASSERT_HEADER(sign_extend(0u + 256, 8) == 0)
+ACC_COMPILE_TIME_ASSERT_HEADER(sign_extend(0u + 257, 8) == 1)
+ACC_COMPILE_TIME_ASSERT_HEADER(sign_extend(0u + 383, 8) == 127)
+ACC_COMPILE_TIME_ASSERT_HEADER(sign_extend(0u + 384, 8) == -128)
+ACC_COMPILE_TIME_ASSERT_HEADER(sign_extend(0u + 511, 8) == -1)
 
 ACC_COMPILE_TIME_ASSERT_HEADER(CHAR_BIT == 8)
 #if 0 // does not work with MSVC
@@ -227,7 +188,7 @@ struct CheckIntegral {
             assert_noexcept(t.y[0] == 0 && t.y[1] == 0);
             assert_noexcept(t.z[0] == 0 && t.z[1] == 0);
         }
-#if __cplusplus < 202002L
+#if __cplusplus <= 201703L
         COMPILE_TIME_ASSERT(std::is_pod<U>::value) // std::is_pod is deprecated in C++20
 #endif
         COMPILE_TIME_ASSERT(std::is_standard_layout<U>::value)
@@ -360,7 +321,7 @@ struct TestIntegerWrap {
     static inline bool neg_eq(const T x) noexcept { return T(0) - x == x; }
 };
 
-static noinline void throwSomeValue(int x) {
+static noinline void throwSomeValue(int x) may_throw {
     if (x < 0)
         throw int(x);
     else
@@ -387,6 +348,8 @@ static noinline void check_basic_cxx_exception_handling(void (*func)(int)) noexc
 
 void upx_compiler_sanity_check(void) noexcept {
     const char *e = getenv("UPX_DEBUG_DOCTEST_DISABLE");
+    if (!e)
+        e = getenv("UPX_DEBUG_DISABLE_DOCTEST"); // allow alternate spelling
     if (e && e[0] && strcmp(e, "0") != 0) {
         // If UPX_DEBUG_DOCTEST_DISABLE is set then we don't want to throw any
         // exceptions in order to improve debugging experience.
@@ -577,7 +540,7 @@ void upx_compiler_sanity_check(void) noexcept {
 **************************************************************************/
 
 TEST_CASE("assert_noexcept") {
-    // just to make sure that our own assert macros don't generate any warnings
+    // just to make sure that our own assert() macros don't generate any warnings
     byte dummy = 0;
     byte *ptr1 = &dummy;
     const byte *const ptr2 = &dummy;
@@ -592,20 +555,6 @@ TEST_CASE("assert_noexcept") {
     assert_noexcept(ptr1);
     assert_noexcept(ptr2);
     assert_noexcept(!ptr3);
-}
-
-TEST_CASE("noncopyable") {
-    struct Test : private noncopyable {
-        int v = 1;
-    };
-    Test t = {};
-    CHECK(t.v == 1);
-#if (ACC_CC_MSC) // MSVC thinks that Test is not std::is_trivially_copyable; true or compiler bug?
-    t.v = 0;
-#else
-    mem_clear(&t);
-#endif
-    CHECK(t.v == 0);
 }
 
 TEST_CASE("acc_vget") {
@@ -637,6 +586,7 @@ TEST_CASE("working -fno-strict-aliasing") {
     *pi = -1;
     ok = *pl != 0;
     CHECK(ok);
+    UNUSED(ok);
 }
 
 TEST_CASE("working -fno-strict-overflow") {
@@ -654,6 +604,7 @@ TEST_CASE("working -fno-strict-overflow") {
     i -= 1;
     ok = i == INT_MAX;
     CHECK(ok);
+    UNUSED(ok);
 }
 
 TEST_CASE("libc snprintf") {
@@ -674,5 +625,50 @@ TEST_CASE("libc snprintf") {
     snprintf(buf, sizeof(buf), "%d.%d.%d.%d.%d.%d.%d.%d.%d.%#jx", -7, 0, 0, 0, 0, 0, 0, 0, 7, um);
     CHECK_EQ(strcmp(buf, "-7.0.0.0.0.0.0.0.7.0xffffffffffffffff"), 0);
 }
+
+#if 0
+TEST_CASE("libc qsort") {
+    // runtime check that libc qsort() never compares identical objects
+    // UPDATE: while only poor implementations of qsort() would actually do
+    //   this, it is probably allowed by the standard; so skip this test case
+    struct Elem {
+        upx_uint16_t id;
+        upx_uint16_t value;
+        static int __acc_cdecl_qsort compare(const void *aa, const void *bb) noexcept {
+            const Elem *a = (const Elem *) aa;
+            const Elem *b = (const Elem *) bb;
+            assert_noexcept(a->id != b->id); // check not IDENTICAL
+            return a->value < b->value ? -1 : (a->value == b->value ? 0 : 1);
+        }
+        static bool check_sort(upx_sort_func_t sort, Elem *e, size_t n) {
+            upx_uint32_t x = 5381 + n + ((upx_uintptr_t) e & 0xff);
+            for (size_t i = 0; i < n; i++) {
+                e[i].id = (upx_uint16_t) i;
+                x = x * 33 + 1 + (i & 255);
+                e[i].value = (upx_uint16_t) x;
+            }
+            sort(e, n, sizeof(Elem), Elem::compare);
+            for (size_t i = 1; i < n; i++)
+                if very_unlikely (e[i - 1].value > e[i].value)
+                    return false;
+            return true;
+        }
+    };
+    constexpr size_t N = 4096;
+    Elem e[N];
+    for (size_t n = 0; n <= N; n = 2 * n + 1) {
+        // CHECK(Elem::check_sort(qsort, e, n)); // libc qsort()
+        CHECK(Elem::check_sort(upx_gnomesort, e, n));
+        CHECK(Elem::check_sort(upx_shellsort_memswap, e, n));
+        CHECK(Elem::check_sort(upx_shellsort_memcpy, e, n));
+#if UPX_CONFIG_USE_STABLE_SORT
+        upx_sort_func_t wrap_stable_sort = [](void *aa, size_t nn, size_t, upx_compare_func_t cc) {
+            upx_std_stable_sort<sizeof(Elem)>(aa, nn, cc);
+        };
+        CHECK(Elem::check_sort(wrap_stable_sort, e, n));
+#endif
+    }
+}
+#endif
 
 /* vim:set ts=4 sw=4 et: */
