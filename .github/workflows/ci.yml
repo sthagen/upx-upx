@@ -13,8 +13,8 @@ env:
   CTEST_OUTPUT_ON_FAILURE: "ON"
   DEBIAN_FRONTEND: noninteractive
   UPX_CMAKE_BUILD_FLAGS: --verbose
-  # 2023-10-24
-  ZIG_DIST_VERSION: 0.12.0-dev.1245+a07f288eb
+  # 2023-11-01
+  ZIG_DIST_VERSION: 0.12.0-dev.1369+a09ba455c
 
 jobs:
   job-rebuild-and-verify-stubs:
@@ -28,8 +28,8 @@ jobs:
           if ! test -e /usr/bin/python2; then
             ####sudo apt-get update && sudo apt-get install -y --no-install-recommends python2-minimal
             # install python2-minimal packages from Debian-11
-            wget -q 'https://ftp.debian.org/debian/pool/main/p/python2.7/libpython2.7-minimal_2.7.18-8_amd64.deb'
-            wget -q 'https://ftp.debian.org/debian/pool/main/p/python2.7/python2.7-minimal_2.7.18-8_amd64.deb'
+            wget -q 'https://ftp.debian.org/debian/pool/main/p/python2.7/libpython2.7-minimal_2.7.18-8+deb11u1_amd64.deb'
+            wget -q 'https://ftp.debian.org/debian/pool/main/p/python2.7/python2.7-minimal_2.7.18-8+deb11u1_amd64.deb'
             sudo dpkg -i ./*python2*.deb && rm ./*python2*.deb && sudo ldconfig
             sudo ln -s -v python2.7 /usr/bin/python2
           fi
@@ -317,7 +317,8 @@ jobs:
           where cl & where link
           set RUN_CL=cl ${{ matrix.cl_machine_flags }} -MT
           set RUN_LIB=link -lib ${{ matrix.link_machine_flags }}
-          set DEFS=-D_CRT_NONSTDC_NO_WARNINGS -D_CRT_SECURE_NO_WARNINGS -DWIN32_LEAN_AND_MEAN
+          @rem UPX only uses the very basic Windows API
+          set DEFS=-D_CRT_NONSTDC_NO_WARNINGS -D_CRT_SECURE_NO_WARNINGS -DWIN32_LEAN_AND_MEAN -D_WIN32_WINNT=0x0400
           set BDIR=%H%\build\%C%\%B%
           git rev-parse --short=12 HEAD > %BDIR%\upx\.GITREV.txt
           @REM ===== build bzip2 =====

@@ -130,15 +130,15 @@ using XSPAN_NAMESPACE_NAME::raw_index_bytes; // overloaded for all classes
 
 // helper for implicit pointer conversions and MemBuffer overloads
 template <class R, class T>
-inline R *xspan_make_helper__(R * /*dummy*/, T *first) may_throw {
+inline R *xspan_make_helper__(T *first) noexcept {
     return first; // IMPORTANT: no cast here to detect bad usage
 }
 template <class R>
-inline R *xspan_make_helper__(R * /*dummy*/, std::nullptr_t /*first*/) noexcept {
+inline R *xspan_make_helper__(std::nullptr_t /*first*/) noexcept {
     return nullptr;
 }
 template <class R>
-inline R *xspan_make_helper__(R * /*dummy*/, MemBuffer &mb) noexcept {
+inline R *xspan_make_helper__(MemBuffer &mb) noexcept {
     return (R *) membuffer_get_void_ptr(mb);
 }
 
@@ -148,9 +148,9 @@ inline R *xspan_make_helper__(R * /*dummy*/, MemBuffer &mb) noexcept {
 #define XSPAN_S(type)                      type *
 
 // create a value
-#define XSPAN_0_MAKE(type, first, ...)     (xspan_make_helper__((type *) nullptr, (first)))
-#define XSPAN_P_MAKE(type, first, ...)     (xspan_make_helper__((type *) nullptr, (first)))
-#define XSPAN_S_MAKE(type, first, ...)     (xspan_make_helper__((type *) nullptr, (first)))
+#define XSPAN_0_MAKE(type, first, ...)     (xspan_make_helper__<type>((first)))
+#define XSPAN_P_MAKE(type, first, ...)     (xspan_make_helper__<type>((first)))
+#define XSPAN_S_MAKE(type, first, ...)     (xspan_make_helper__<type>((first)))
 
 // define a variable
 #define XSPAN_0_VAR(type, var, first, ...) type *var = XSPAN_0_MAKE(type, (first))
@@ -158,7 +158,7 @@ inline R *xspan_make_helper__(R * /*dummy*/, MemBuffer &mb) noexcept {
 #define XSPAN_S_VAR(type, var, first, ...) type *var = XSPAN_S_MAKE(type, (first))
 
 // cast to a different type (creates a new value)
-#define XSPAN_TYPE_CAST(type, x)           (reinterpret_cast<type *>(x))
+#define XSPAN_TYPE_CAST(type, x)           (upx::ptr_reinterpret_cast<type *>(x))
 // poison a pointer: point to a non-null invalid address
 #define XSPAN_INVALIDATE(x)                ptr_invalidate_and_poison(x)
 

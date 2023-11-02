@@ -24,6 +24,9 @@
    <markus@oberhumer.com>
  */
 
+// lots of tests (and probably quite a number of redundant tests)
+// modern compilers will optimize away much of this code
+
 #include "../conf.h"
 
 /*************************************************************************
@@ -88,6 +91,46 @@ ACC_COMPILE_TIME_ASSERT_HEADER(compile_time::string_le("abc", "abz"))
 // util
 **************************************************************************/
 
+TEST_CASE("ptr_reinterpret_cast") {
+    // check that we don't trigger any -Wcast-align warnings
+    using upx::ptr_reinterpret_cast;
+    void *vp = nullptr;
+    byte *bp = nullptr;
+    int *ip = nullptr;
+    double *dp = nullptr;
+
+    assert((vp == ptr_reinterpret_cast<void *>(vp)));
+    assert((vp == ptr_reinterpret_cast<void *>(bp)));
+    assert((vp == ptr_reinterpret_cast<void *>(ip)));
+    assert((vp == ptr_reinterpret_cast<void *>(dp)));
+
+    assert((bp == ptr_reinterpret_cast<byte *>(vp)));
+    assert((bp == ptr_reinterpret_cast<byte *>(bp)));
+    assert((bp == ptr_reinterpret_cast<byte *>(ip)));
+    assert((bp == ptr_reinterpret_cast<byte *>(dp)));
+
+    assert((ip == ptr_reinterpret_cast<int *>(vp)));
+    assert((ip == ptr_reinterpret_cast<int *>(bp)));
+    assert((ip == ptr_reinterpret_cast<int *>(ip)));
+    assert((ip == ptr_reinterpret_cast<int *>(dp)));
+
+    assert((dp == ptr_reinterpret_cast<double *>(vp)));
+    assert((dp == ptr_reinterpret_cast<double *>(bp)));
+    assert((dp == ptr_reinterpret_cast<double *>(ip)));
+    assert((dp == ptr_reinterpret_cast<double *>(dp)));
+
+    const byte *bc = nullptr;
+    const int *ic = nullptr;
+    assert((bc == ptr_reinterpret_cast<byte *>(bp)));
+    assert((bc == ptr_reinterpret_cast<const byte *>(bc)));
+    assert((bc == ptr_reinterpret_cast<byte *>(ip)));
+    assert((bc == ptr_reinterpret_cast<const byte *>(ic)));
+    assert((ic == ptr_reinterpret_cast<int *>(bp)));
+    assert((ic == ptr_reinterpret_cast<const int *>(bc)));
+    assert((ic == ptr_reinterpret_cast<int *>(ip)));
+    assert((ic == ptr_reinterpret_cast<const int *>(ic)));
+}
+
 TEST_CASE("noncopyable") {
     struct Test : private upx::noncopyable {
         int v = 1;
@@ -106,13 +149,13 @@ TEST_CASE("noncopyable") {
 }
 
 /*************************************************************************
-// TriBool
+// TriBool checks
 **************************************************************************/
 
 namespace {
 template <class T>
 struct TestTriBool {
-    static void test(bool expect_true, int x) noexcept {
+    static void test(bool expect_true) {
         static_assert(std::is_class<T>::value);
         static_assert(std::is_nothrow_default_constructible<T>::value);
         static_assert(std::is_nothrow_destructible<T>::value);
@@ -126,6 +169,9 @@ struct TestTriBool {
         static_assert(sizeof(T) == sizeof(typename T::underlying_type));
         static_assert(alignof(T) == alignof(typename T::underlying_type));
 #endif
+        static_assert(!bool(T(false)));
+        static_assert(bool(T(true)));
+        static_assert(bool(T(T::Third)) == T::is_third_true);
         static_assert(T(false) == T::False);
         static_assert(T(true) == T::True);
         static_assert(T(T::False) == T::False);
@@ -145,63 +191,93 @@ struct TestTriBool {
         static_assert(array[2].isThird());
         static_assert(sizeof(array) == 3 * sizeof(T));
         T a;
-        CHECK(!a);
-        CHECK(a.isStrictFalse());
-        CHECK(!a.isStrictTrue());
-        CHECK(a.isStrictBool());
-        CHECK(!a.isThird());
+        assert(a.getValue() == T::False);
+        assert(!a);
+        assert(!bool(a));
+        assert((!a ? true : false));
+        assert(a.isStrictFalse());
+        assert(!a.isStrictTrue());
+        assert(a.isStrictBool());
+        assert(!a.isThird());
         a = false;
-        CHECK(!a);
-        CHECK(a.isStrictFalse());
-        CHECK(!a.isStrictTrue());
-        CHECK(a.isStrictBool());
-        CHECK(!a.isThird());
+        assert(a.getValue() == T::False);
+        assert(!a);
+        assert(!bool(a));
+        assert((!a ? true : false));
+        assert(a.isStrictFalse());
+        assert(!a.isStrictTrue());
+        assert(a.isStrictBool());
+        assert(!a.isThird());
         a = true;
-        CHECK(a);
-        CHECK(!a.isStrictFalse());
-        CHECK(a.isStrictTrue());
-        CHECK(a.isStrictBool());
-        CHECK(!a.isThird());
+        assert(a.getValue() == T::True);
+        assert(a);
+        assert(bool(a));
+        assert((a ? true : false));
+        assert(!a.isStrictFalse());
+        assert(a.isStrictTrue());
+        assert(a.isStrictBool());
+        assert(!a.isThird());
         a = T::Third;
-        if (expect_true)
-            CHECK(a);
-        else
-            CHECK(!a);
-        CHECK(!a.isStrictFalse());
-        CHECK(!a.isStrictTrue());
-        CHECK(!a.isStrictBool());
-        CHECK(a.isThird());
-        a = x;
-        if (expect_true)
-            CHECK(a);
-        else
-            CHECK(!a);
-        CHECK(!a.isStrictFalse());
-        CHECK(!a.isStrictTrue());
-        CHECK(!a.isStrictBool());
-        CHECK(a.isThird());
+        assert(a.getValue() == T::Third);
+        assert(T::is_third_true == expect_true);
+        if (expect_true) {
+            assert(a);
+            assert(bool(a));
+            assert((a ? true : false));
+        } else {
+            assert(!a);
+            assert(!bool(a));
+            assert((!a ? true : false));
+        }
+        assert(!a.isStrictFalse());
+        assert(!a.isStrictTrue());
+        assert(!a.isStrictBool());
+        assert(a.isThird());
+        a = 99;
+        assert(a.getValue() == T::Third);
+        if (expect_true) {
+            assert(a);
+            assert(bool(a));
+            assert((a ? true : false));
+        } else {
+            assert(!a);
+            assert(!bool(a));
+            assert((!a ? true : false));
+        }
+        assert(!a.isStrictFalse());
+        assert(!a.isStrictTrue());
+        assert(!a.isStrictBool());
+        assert(a.isThird());
         mem_clear(&a);
-        CHECK(a.isStrictFalse());
+        assert(a.isStrictFalse());
     }
 };
 } // namespace
 
 TEST_CASE("TriBool") {
     using upx::TriBool, upx::tribool;
-    //
     static_assert(!tribool(false));
     static_assert(tribool(true));
     static_assert(!tribool(tribool::Third));
-    TestTriBool<tribool>::test(false, -1);
-    //
-    TestTriBool<TriBool<upx_int8_t> >::test(false, -1);
-    TestTriBool<TriBool<upx_int64_t> >::test(false, -1);
-    //
-    TestTriBool<TriBool<unsigned, 2> >::test(true, 2);
-    TestTriBool<TriBool<upx_int8_t, 2> >::test(true, 2);
-    TestTriBool<TriBool<upx_uint8_t, 2> >::test(true, 2);
-    TestTriBool<TriBool<upx_int64_t, 2> >::test(true, 2);
-    TestTriBool<TriBool<upx_uint64_t, 2> >::test(true, 2);
+    TestTriBool<tribool>::test(false);
+#if DEBUG || 1
+    TestTriBool<TriBool<upx_int8_t> >::test(false);
+    TestTriBool<TriBool<upx_uint8_t> >::test(false);
+    TestTriBool<TriBool<upx_int16_t> >::test(false);
+    TestTriBool<TriBool<upx_uint16_t> >::test(false);
+    TestTriBool<TriBool<upx_int32_t> >::test(false);
+    TestTriBool<TriBool<upx_uint32_t> >::test(false);
+    TestTriBool<TriBool<upx_int64_t> >::test(false);
+    TestTriBool<TriBool<upx_uint64_t> >::test(false);
+    TestTriBool<TriBool<upx_int8_t, true> >::test(true);
+    TestTriBool<TriBool<upx_uint8_t, true> >::test(true);
+    TestTriBool<TriBool<upx_int16_t, true> >::test(true);
+    TestTriBool<TriBool<upx_uint16_t, true> >::test(true);
+    TestTriBool<TriBool<upx_int32_t, true> >::test(true);
+    TestTriBool<TriBool<upx_uint32_t, true> >::test(true);
+    TestTriBool<TriBool<upx_int64_t, true> >::test(true);
+    TestTriBool<TriBool<upx_uint64_t, true> >::test(true);
+#endif
 }
 
 /* vim:set ts=4 sw=4 et: */
