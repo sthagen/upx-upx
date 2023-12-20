@@ -109,7 +109,7 @@ jobs:
           # GitHub Actions magic: set "artifact_name" environment value for use in next step
           echo "artifact_name=$N" >> $GITHUB_ENV
       - name: ${{ format('Upload artifact {0}', env.artifact_name) }}
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ env.artifact_name }}
           path: tmp/artifact
@@ -194,7 +194,7 @@ jobs:
           # GitHub Actions magic: set "artifact_name" environment value for use in next step
           echo "artifact_name=$N" >> $GITHUB_ENV
       - name: ${{ format('Upload artifact {0}', env.artifact_name) }}
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ env.artifact_name }}
           path: tmp/artifact
@@ -258,7 +258,7 @@ jobs:
           # GitHub Actions magic: set "artifact_name" environment value for use in next step
           echo "artifact_name=$N" >> $GITHUB_ENV
       - name: ${{ format('Upload artifact {0}', env.artifact_name) }}
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ env.artifact_name }}
           path: tmp/artifact
@@ -358,7 +358,7 @@ jobs:
           # GitHub Actions magic: set "artifact_name" environment value for use in next step
           echo "artifact_name=$N" >> $GITHUB_ENV
       - name: ${{ format('Upload artifact {0}', env.artifact_name) }}
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ env.artifact_name }}
           path: tmp/artifact
@@ -488,7 +488,7 @@ jobs:
           # GitHub Actions magic: set "artifact_name" environment value for use in next step
           echo "artifact_name=$N" >> $GITHUB_ENV
       - name: ${{ format('Upload artifact {0}', env.artifact_name) }}
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ env.artifact_name }}
           path: tmp/artifact
