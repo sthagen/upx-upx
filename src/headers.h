@@ -2,7 +2,7 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2023 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2024 Markus Franz Xaver Johannes Oberhumer
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -57,11 +57,26 @@ static_assert(sizeof(void *) == 8);
 #if !defined(_FILE_OFFSET_BITS)
 #define _FILE_OFFSET_BITS 64
 #endif
-#if defined(_WIN32) && defined(__MINGW32__) && defined(__GNUC__)
-#if !defined(_USE_MINGW_ANSI_STDIO)
-#define _USE_MINGW_ANSI_STDIO 1
+#if defined(_WIN32) && defined(__MINGW32__) && (defined(__clang__) || defined(__GNUC__))
+#if !defined(__USE_MINGW_ANSI_STDIO)
+#define __USE_MINGW_ANSI_STDIO 1
 #endif
 #endif
+#if defined(_WIN32)
+// disable silly warnings about using "deprecated" POSIX functions like fopen()
+#if !defined(_CRT_NONSTDC_NO_DEPRECATE)
+#define _CRT_NONSTDC_NO_DEPRECATE 1
+#endif
+#if !defined(_CRT_NONSTDC_NO_WARNINGS)
+#define _CRT_NONSTDC_NO_WARNINGS 1
+#endif
+#if !defined(_CRT_SECURE_NO_DEPRECATE)
+#define _CRT_SECURE_NO_DEPRECATE 1
+#endif
+#if !defined(_CRT_SECURE_NO_WARNINGS)
+#define _CRT_SECURE_NO_WARNINGS 1
+#endif
+#endif // _WIN32
 
 // ACC and C system headers
 #ifndef ACC_CFG_USE_NEW_STYLE_CASTS
@@ -98,9 +113,6 @@ static_assert(sizeof(void *) == 8);
 #include <type_traits>
 
 // C++ multithreading (UPX currently does not use multithreading)
-#ifndef WITH_THREADS
-#define WITH_THREADS 0
-#endif
 #if __STDC_NO_ATOMICS__
 #undef WITH_THREADS
 #endif
@@ -149,6 +161,12 @@ static_assert(sizeof(void *) == 8);
      ACC_OS_WIN16 || ACC_OS_WIN32 || ACC_OS_WIN64)
 #if defined(INVALID_HANDLE_VALUE) || defined(MAKEWORD) || defined(RT_CURSOR)
 #error "something pulled in <windows.h>"
+#endif
+#endif
+
+#ifdef WANT_WINDOWS_LEAN_H
+#if defined(_WIN32) || defined(__CYGWIN__)
+#include "util/windows_lean.h"
 #endif
 #endif
 

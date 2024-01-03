@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2023 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2023 Laszlo Molnar
+   Copyright (C) 1996-2024 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2024 Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -37,7 +37,7 @@
 #include "linker.h"
 #include <zlib/zlib.h>
 
-static const
+static const CLANG_FORMAT_DUMMY_STATEMENT
 #include "stub/i386-linux.kernel.vmlinuz.h"
 
 static const unsigned stack_offset_during_uncompression = 0x9000;
@@ -921,9 +921,9 @@ Linker* PackVmlinuzARMEL::newLinker() const
     return new ElfLinkerArmLE;
 }
 
-static const
+static const CLANG_FORMAT_DUMMY_STATEMENT
 #include "stub/arm.v5a-linux.kernel.vmlinux.h"
-static const
+static const CLANG_FORMAT_DUMMY_STATEMENT
 #include "stub/arm.v5a-linux.kernel.vmlinuz-head.h"
 
 void PackVmlinuzARMEL::buildLoader(const Filter *ft)

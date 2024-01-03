@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2023 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2023 Laszlo Molnar
+   Copyright (C) 1996-2024 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2024 Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -67,9 +67,9 @@ struct Options final {
     int level;  // compression level 1..10
     int filter; // preferred filter from Packer::getFilters()
     bool ultra_brute;
-    bool all_methods; // try all available compression methods ?
+    bool all_methods; // try all available compression methods
     int all_methods_use_lzma;
-    bool all_filters; // try all available filters ?
+    bool all_filters; // try all available filters
     bool no_filter;   // force no filter
     bool prefer_ucl;  // prefer UCL
     bool exact;       // user requires byte-identical decompression
@@ -120,11 +120,13 @@ struct Options final {
 
     // CRP - Compression Runtime Parameters (undocumented and subject to change)
     struct {
+        bzip2_compress_config_t crp_bzip2;
         lzma_compress_config_t crp_lzma;
         ucl_compress_config_t crp_ucl;
         zlib_compress_config_t crp_zlib;
         zstd_compress_config_t crp_zstd;
         void reset() noexcept {
+            crp_bzip2.reset();
             crp_lzma.reset();
             crp_ucl.reset();
             crp_zlib.reset();

@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2023 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2023 Laszlo Molnar
+   Copyright (C) 1996-2024 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2024 Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -30,14 +30,12 @@
 // of class PackerBase which then does the actual work.
 // And see p_com.cpp for a simple executable format.
 
+#define WANT_WINDOWS_LEAN_H 1 // _get_osfhandle, GetFileTime, SetFileTime
 #include "headers.h"
 #if USE_UTIMENSAT
 #include <sys/types.h>
 #include <fcntl.h>
 #include <sys/stat.h>
-#endif
-#if defined(_WIN32) || defined(__CYGWIN__)
-#include "util/windows_lean.h" // _get_osfhandle, GetFileTime, SetFileTime
 #endif
 #include "conf.h"
 #include "file.h"
@@ -64,12 +62,12 @@
 #endif
 
 /*************************************************************************
-// util
+// file util
 **************************************************************************/
 
 namespace {
 
-struct XStat {
+struct XStat final {
     struct stat st;
 #if USE_SETFILETIME
     FILETIME ft_atime;
@@ -102,7 +100,7 @@ static void set_fd_timestamp(int fd, const XStat *xst) noexcept {
     BOOL r = SetFileTime((HANDLE) _get_osfhandle(fd), nullptr, &xst->ft_atime, &xst->ft_mtime);
     IGNORE_ERROR(r);
 #elif USE_FTIME
-    auto ft_ftime = xst->ft_ftime; // djgpp2 libc bug: not const, so use a copy
+    struct ftime ft_ftime = xst->ft_ftime; // djgpp2 libc bug/feature: not const, so use a copy
     int r = setftime(fd, &ft_ftime);
     IGNORE_ERROR(r);
 #elif USE__FUTIME
@@ -309,8 +307,9 @@ void do_one_file(const char *const iname, char *const oname) may_throw {
                     flags = get_open_flags(WO_MUST_EXIST_TRUNCATE);
                     copy_timestamp_only = true;
                 }
-            } else if (opt->force_overwrite || opt->force)
+            } else if (opt->force_overwrite || opt->force) {
                 flags = get_open_flags(WO_CREATE_OR_TRUNCATE);
+            }
             int shmode = SH_DENYWR;
 #if (ACC_ARCH_M68K && ACC_OS_TOS && ACC_CC_GNUC) && defined(__MINT__)
             // TODO later: check current mintlib if this hack is still needed

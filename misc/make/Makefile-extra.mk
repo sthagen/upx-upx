@@ -4,7 +4,12 @@
 #
 
 ifeq ($(UPX_MAKEFILE_EXTRA_MK_INCLUDED),)
-UPX_MAKEFILE_EXTRA_MK_INCLUDED := 1
+override UPX_MAKEFILE_EXTRA_MK_INCLUDED := 1
+
+override check_defined   = $(foreach 1,$1,$(if $(filter undefined,$(origin $1)),$(error ERROR: variable '$1' is not defined),))
+override check_undefined = $(foreach 1,$1,$(if $(filter undefined,$(origin $1)),,$(error ERROR: variable '$1' is already defined)))
+$(call check_defined,run_config run_build)
+$(call check_undefined,run_config_and_build)
 
 #***********************************************************************
 # extra builds: some pre-defined build configurations
@@ -115,7 +120,7 @@ build/extra/gcc-std-cxx20/%: export UPX_CONFIG_DISABLE_CXX_STANDARD=ON
 build/extra/gcc-std-cxx23/debug:   PHONY; $(call run_config_and_build,$@,Debug)
 build/extra/gcc-std-cxx23/release: PHONY; $(call run_config_and_build,$@,Release)
 build/extra/gcc-std-cxx23/%: export CC  = gcc -std=gnu2x
-build/extra/gcc-std-cxx23/%: export CXX = g++ -std=gnu++23
+build/extra/gcc-std-cxx23/%: export CXX = g++ -std=gnu++2b
 build/extra/gcc-std-cxx23/%: export UPX_CONFIG_DISABLE_C_STANDARD=ON
 build/extra/gcc-std-cxx23/%: export UPX_CONFIG_DISABLE_CXX_STANDARD=ON
 
@@ -124,36 +129,46 @@ build/extra/cross-linux-gnu-aarch64/debug:   PHONY; $(call run_config_and_build,
 build/extra/cross-linux-gnu-aarch64/release: PHONY; $(call run_config_and_build,$@,Release)
 build/extra/cross-linux-gnu-aarch64/%: export CC  = aarch64-linux-gnu-gcc
 build/extra/cross-linux-gnu-aarch64/%: export CXX = aarch64-linux-gnu-g++
+build/extra/cross-linux-gnu-aarch64/%: CMAKE_SYSTEM_NAME ?= Linux
+build/extra/cross-linux-gnu-aarch64/%: CMAKE_CROSSCOMPILING_EMULATOR ?= qemu-aarch64
 
 # cross compiler: Linux glibc arm-linux-gnueabihf
 build/extra/cross-linux-gnu-arm-eabihf/debug:   PHONY; $(call run_config_and_build,$@,Debug)
 build/extra/cross-linux-gnu-arm-eabihf/release: PHONY; $(call run_config_and_build,$@,Release)
 build/extra/cross-linux-gnu-arm-eabihf/%: export CC  = arm-linux-gnueabihf-gcc
 build/extra/cross-linux-gnu-arm-eabihf/%: export CXX = arm-linux-gnueabihf-g++ -Wno-psabi
+build/extra/cross-linux-gnu-arm-eabihf/%: CMAKE_SYSTEM_NAME ?= Linux
+build/extra/cross-linux-gnu-arm-eabihf/%: CMAKE_CROSSCOMPILING_EMULATOR ?= qemu-arm
 
 # cross compiler: Windows x86 win32 MinGW (i386)
 build/extra/cross-windows-mingw32/debug:   PHONY; $(call run_config_and_build,$@,Debug)
 build/extra/cross-windows-mingw32/release: PHONY; $(call run_config_and_build,$@,Release)
 build/extra/cross-windows-mingw32/%: export CC  = i686-w64-mingw32-gcc -static -D_WIN32_WINNT=0x0400
 build/extra/cross-windows-mingw32/%: export CXX = i686-w64-mingw32-g++ -static -D_WIN32_WINNT=0x0400
+build/extra/cross-windows-mingw32/%: CMAKE_SYSTEM_NAME ?= Windows
+build/extra/cross-windows-mingw32/%: CMAKE_CROSSCOMPILING_EMULATOR ?= wine
 
 # cross compiler: Windows x64 win64 MinGW (amd64)
 build/extra/cross-windows-mingw64/debug:   PHONY; $(call run_config_and_build,$@,Debug)
 build/extra/cross-windows-mingw64/release: PHONY; $(call run_config_and_build,$@,Release)
 build/extra/cross-windows-mingw64/%: export CC  = x86_64-w64-mingw32-gcc -static -D_WIN32_WINNT=0x0400
 build/extra/cross-windows-mingw64/%: export CXX = x86_64-w64-mingw32-g++ -static -D_WIN32_WINNT=0x0400
+build/extra/cross-windows-mingw64/%: CMAKE_SYSTEM_NAME ?= Windows
+build/extra/cross-windows-mingw64/%: CMAKE_CROSSCOMPILING_EMULATOR ?= wine64
 
 # cross compiler: macOS arm64 (aarch64)
 build/extra/cross-darwin-arm64/debug:   PHONY; $(call run_config_and_build,$@,Debug)
 build/extra/cross-darwin-arm64/release: PHONY; $(call run_config_and_build,$@,Release)
 build/extra/cross-darwin-arm64/%: export CC  = clang -target arm64-apple-darwin
 build/extra/cross-darwin-arm64/%: export CXX = clang++ -target arm64-apple-darwin
+build/extra/cross-darwin-arm64/%: CMAKE_SYSTEM_NAME ?= Darwin
 
 # cross compiler: macOS x86_64 (amd64)
 build/extra/cross-darwin-x86_64/debug:   PHONY; $(call run_config_and_build,$@,Debug)
 build/extra/cross-darwin-x86_64/release: PHONY; $(call run_config_and_build,$@,Release)
 build/extra/cross-darwin-x86_64/%: export CC  = clang -target x86_64-apple-darwin
 build/extra/cross-darwin-x86_64/%: export CXX = clang++ -target x86_64-apple-darwin
+build/extra/cross-darwin-x86_64/%: CMAKE_SYSTEM_NAME ?= Darwin
 
 #***********************************************************************
 # C/C++ static analyzers
@@ -192,7 +207,7 @@ build/extra/scan-build/debug:   build/analyze/clang-analyzer/debug
 build/extra/scan-build/release: build/analyze/clang-analyzer/release
 
 #***********************************************************************
-# advanced: generic extra target
+# advanced: generic eXtra target
 #***********************************************************************
 
 # usage:
@@ -206,14 +221,14 @@ ifneq ($(CXX),)
 UPX_XTARGET := $(UPX_XTARGET)
 build/xtarget/$(UPX_XTARGET)/debug:   PHONY; $(call run_config_and_build,$@,Debug)
 build/xtarget/$(UPX_XTARGET)/release: PHONY; $(call run_config_and_build,$@,Release)
-build/xtarget/$(UPX_XTARGET)/%: export CC
-build/xtarget/$(UPX_XTARGET)/%: export CXX
+build/xtarget/$(UPX_XTARGET)/%: export CC  := $(CC)
+build/xtarget/$(UPX_XTARGET)/%: export CXX := $(CXX)
 # shortcuts
 xtarget/all:     xtarget/debug xtarget/release
 xtarget/debug:   build/xtarget/$(UPX_XTARGET)/debug
 xtarget/release: build/xtarget/$(UPX_XTARGET)/release
 # set new default
-.DEFAULT_GOAL = xtarget/release
+.DEFAULT_GOAL  = build/xtarget/$(UPX_XTARGET)/release
 
 endif
 endif
@@ -229,12 +244,27 @@ ifneq ($(origin UPX_CMAKE_CONFIG_FLAGS),command line) # needed to work around a 
 # it easy to set other variables like CMAKE_AR or CMAKE_RANLIB
 __add_cmake_config = $(and $($1),-D$1="$($1)")
 # pass common CMake settings from environment/make to cmake
+build/%: UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,CMAKE_VERBOSE_MAKEFILE)
+# pass common CMake toolchain settings from environment/make to cmake
+build/%: UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,CMAKE_ADDR2LINE)
 build/%: UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,CMAKE_AR)
+build/%: UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,CMAKE_DLLTOOL)
+build/%: UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,CMAKE_LINKER)
 build/%: UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,CMAKE_NM)
-build/%: UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,CMAKE_RANLIB)
 build/%: UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,CMAKE_OBJCOPY)
 build/%: UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,CMAKE_OBJDUMP)
+build/%: UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,CMAKE_RANLIB)
+build/%: UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,CMAKE_READELF)
 build/%: UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,CMAKE_STRIP)
+build/%: UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,CMAKE_TAPI)
+# pass common CMake LTO toolchain settings from environment/make to cmake (for use with "-flto")
+build/%: UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,CMAKE_C_COMPILER_AR)
+build/%: UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,CMAKE_C_COMPILER_RANLIB)
+build/%: UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,CMAKE_CXX_COMPILER_AR)
+build/%: UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,CMAKE_CXX_COMPILER_RANLIB)
+# pass common CMake cross compilation settings from environment/make to cmake
+build/%: UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,CMAKE_SYSTEM_NAME)
+build/%: UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,CMAKE_CROSSCOMPILING_EMULATOR)
 # pass UPX config options from environment/make to cmake; see CMakeLists.txt
 build/%: UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,UPX_CONFIG_DISABLE_GITREV)
 build/%: UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,UPX_CONFIG_DISABLE_SANITIZE)
@@ -250,7 +280,7 @@ endif # bug work-around
 
 SUBMODULES = doctest lzma-sdk ucl valgrind zlib
 
-dummy := $(foreach m,$(SUBMODULES),$(if $(wildcard vendor/$m/[CL]*),$m,\
-    $(error ERROR: missing git submodule '$m'; run 'git submodule update --init')))
+$(foreach 1,$(SUBMODULES),$(if $(wildcard vendor/$1/[CL]*),,\
+    $(error ERROR: missing git submodule '$1'; run 'git submodule update --init')))
 
 endif # UPX_MAKEFILE_EXTRA_MK_INCLUDED

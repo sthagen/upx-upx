@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2023 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2023 Laszlo Molnar
+   Copyright (C) 1996-2024 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2024 Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -45,6 +45,11 @@ int upx_safe_asprintf(char **ptr, const char *format, ...) attribute_format(2, 3
 char *upx_safe_xprintf(const char *format, ...) attribute_format(1, 2);
 
 upx_rsize_t upx_safe_strlen(const char *);
+
+// noexcept variants (these use "assert_noexcept")
+int upx_safe_vsnprintf_noexcept(char *str, upx_rsize_t max_size, const char *format,
+                                va_list ap) noexcept;
+upx_rsize_t upx_safe_strlen_noexcept(const char *) noexcept;
 
 // globally redirect some functions
 #undef strlen

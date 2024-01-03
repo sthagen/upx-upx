@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2023 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2023 Laszlo Molnar
+   Copyright (C) 1996-2024 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2024 Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -136,20 +136,21 @@ static noinline tribool try_can_unpack(PackerBase *pb, void *user) may_throw {
 /*static*/
 PackerBase *PackMaster::visitAllPackers(visit_func_t func, InputFile *f, const Options *o,
                                         void *user) may_throw {
-#define D(Klass)                                                                                   \
-    ACC_BLOCK_BEGIN                                                                                \
-    COMPILE_TIME_ASSERT(std::is_nothrow_destructible_v<Klass>)                                     \
-    auto pb = std::unique_ptr<PackerBase>(new Klass(f));                                           \
-    if (o->debug.debug_level)                                                                      \
-        fprintf(stderr, "visitAllPackers: (ver=%d, fmt=%3d) %s\n", pb->getVersion(),               \
-                pb->getFormat(), #Klass);                                                          \
-    pb->assertPacker();                                                                            \
-    tribool r = func(pb.get(), user);                                                              \
-    if (r)                                                                                         \
-        return pb.release(); /* success */                                                         \
-    if (r.isThird())                                                                               \
-        return nullptr; /* stop and fail early */                                                  \
-    ACC_BLOCK_END
+#define VISIT(Klass)                                                                               \
+    do {                                                                                           \
+        static_assert(std::is_class_v<Klass>);                                                     \
+        static_assert(std::is_nothrow_destructible_v<Klass>);                                      \
+        auto pb = std::unique_ptr<PackerBase>(new Klass(f));                                       \
+        if (o->debug.debug_level)                                                                  \
+            fprintf(stderr, "visitAllPackers: (ver=%d, fmt=%3d) %s\n", pb->getVersion(),           \
+                    pb->getFormat(), #Klass);                                                      \
+        pb->assertPacker();                                                                        \
+        tribool r = func(pb.get(), user);                                                          \
+        if (r)                                                                                     \
+            return pb.release(); /* success */                                                     \
+        if (r.isThird())                                                                           \
+            return nullptr; /* stop and fail early */                                              \
+    } while (0)
 
     // NOTE: order of tries is important !!!
 
@@ -158,91 +159,91 @@ PackerBase *PackMaster::visitAllPackers(visit_func_t func, InputFile *f, const O
     //
     if (!o->dos_exe.force_stub) {
         // dos32
-        D(PackDjgpp2);
-        D(PackTmt);
-        D(PackWcle);
+        VISIT(PackDjgpp2);
+        VISIT(PackTmt);
+        VISIT(PackWcle);
         // Windows
-        // D(PackW64PeArm64EC); // NOT YET IMPLEMENTED
-        // D(PackW64PeArm64); // NOT YET IMPLEMENTED
-        D(PackW64PeAmd64);
-        D(PackW32PeI386);
-        D(PackWinCeArm);
+        // VISIT(PackW64PeArm64EC); // NOT YET IMPLEMENTED
+        // VISIT(PackW64PeArm64); // NOT YET IMPLEMENTED
+        VISIT(PackW64PeAmd64);
+        VISIT(PackW32PeI386);
+        VISIT(PackWinCeArm);
     }
-    D(PackExe); // dos/exe
+    VISIT(PackExe); // dos/exe
 
     //
     // linux kernel
     //
-    D(PackVmlinuxARMEL);
-    D(PackVmlinuxARMEB);
-    D(PackVmlinuxPPC32);
-    D(PackVmlinuxPPC64LE);
-    D(PackVmlinuxAMD64);
-    D(PackVmlinuxI386);
-    D(PackVmlinuzI386);
-    D(PackBvmlinuzI386);
-    D(PackVmlinuzARMEL);
+    VISIT(PackVmlinuxARMEL);
+    VISIT(PackVmlinuxARMEB);
+    VISIT(PackVmlinuxPPC32);
+    VISIT(PackVmlinuxPPC64LE);
+    VISIT(PackVmlinuxAMD64);
+    VISIT(PackVmlinuxI386);
+    VISIT(PackVmlinuzI386);
+    VISIT(PackBvmlinuzI386);
+    VISIT(PackVmlinuzARMEL);
 
     //
     // linux
     //
     if (!o->o_unix.force_execve) {
         if (o->o_unix.use_ptinterp) {
-            D(PackLinuxElf32x86interp);
+            VISIT(PackLinuxElf32x86interp);
         }
-        D(PackFreeBSDElf32x86);
-        D(PackNetBSDElf32x86);
-        D(PackOpenBSDElf32x86);
-        D(PackLinuxElf32x86);
-        D(PackLinuxElf64amd);
-        D(PackLinuxElf32armLe);
-        D(PackLinuxElf32armBe);
-        D(PackLinuxElf64arm);
-        D(PackLinuxElf32ppc);
-        D(PackLinuxElf64ppc);
-        D(PackLinuxElf64ppcle);
-        D(PackLinuxElf32mipsel);
-        D(PackLinuxElf32mipseb);
-        D(PackLinuxI386sh);
+        VISIT(PackFreeBSDElf32x86);
+        VISIT(PackNetBSDElf32x86);
+        VISIT(PackOpenBSDElf32x86);
+        VISIT(PackLinuxElf32x86);
+        VISIT(PackLinuxElf64amd);
+        VISIT(PackLinuxElf32armLe);
+        VISIT(PackLinuxElf32armBe);
+        VISIT(PackLinuxElf64arm);
+        VISIT(PackLinuxElf32ppc);
+        VISIT(PackLinuxElf64ppc);
+        VISIT(PackLinuxElf64ppcle);
+        VISIT(PackLinuxElf32mipsel);
+        VISIT(PackLinuxElf32mipseb);
+        VISIT(PackLinuxI386sh);
     }
-    D(PackBSDI386);
-    D(PackMachFat);   // cafebabe conflict
-    D(PackLinuxI386); // cafebabe conflict
+    VISIT(PackBSDI386);
+    VISIT(PackMachFat);   // cafebabe conflict
+    VISIT(PackLinuxI386); // cafebabe conflict
 
     // Mach (Darwin / macOS)
-    D(PackDylibAMD64);
-    D(PackMachPPC32); // TODO: this works with upx 3.91..3.94 but got broken in 3.95; FIXME
-    D(PackMachI386);
-    D(PackMachAMD64);
-    D(PackMachARMEL);
-    D(PackMachARM64EL);
+    VISIT(PackDylibAMD64);
+    VISIT(PackMachPPC32); // TODO: this works with upx 3.91..3.94 but got broken in 3.95; FIXME
+    VISIT(PackMachI386);
+    VISIT(PackMachAMD64);
+    VISIT(PackMachARMEL);
+    VISIT(PackMachARM64EL);
 
     // 2010-03-12  omit these because PackMachBase<T>::pack4dylib (p_mach.cpp)
     // does not understand what the Darwin (Apple Mac OS X) dynamic loader
     // assumes about .dylib file structure.
-    //   D(PackDylibI386);
-    //   D(PackDylibPPC32);
+    //   VISIT(PackDylibI386);
+    //   VISIT(PackDylibPPC32);
 
     //
     // misc
     //
-    D(PackTos); // atari/tos
-    D(PackPs1); // ps1/exe
-    D(PackSys); // dos/sys
-    D(PackCom); // dos/com
+    VISIT(PackTos); // atari/tos
+    VISIT(PackPs1); // ps1/exe
+    VISIT(PackSys); // dos/sys
+    VISIT(PackCom); // dos/com
 
     return nullptr;
-#undef D
+#undef VISIT
 }
 
-/*static*/ PackerBase *PackMaster::getPacker(InputFile *f) {
+/*static*/ PackerBase *PackMaster::getPacker(InputFile *f) may_throw {
     PackerBase *pb = visitAllPackers(try_can_pack, f, opt, f);
     if (!pb)
         throwUnknownExecutableFormat();
     return pb;
 }
 
-/*static*/ PackerBase *PackMaster::getUnpacker(InputFile *f) {
+/*static*/ PackerBase *PackMaster::getUnpacker(InputFile *f) may_throw {
     PackerBase *pb = visitAllPackers(try_can_unpack, f, opt, f);
     if (!pb)
         throwNotPacked();
@@ -253,31 +254,31 @@ PackerBase *PackMaster::visitAllPackers(visit_func_t func, InputFile *f, const O
 // delegation from work.cpp
 **************************************************************************/
 
-void PackMaster::pack(OutputFile *fo) {
+void PackMaster::pack(OutputFile *fo) may_throw {
     assert(packer == nullptr);
     packer = getPacker(fi);
     packer->doPack(fo);
 }
 
-void PackMaster::unpack(OutputFile *fo) {
+void PackMaster::unpack(OutputFile *fo) may_throw {
     assert(packer == nullptr);
     packer = getUnpacker(fi);
     packer->doUnpack(fo);
 }
 
-void PackMaster::test() {
+void PackMaster::test() may_throw {
     assert(packer == nullptr);
     packer = getUnpacker(fi);
     packer->doTest();
 }
 
-void PackMaster::list() {
+void PackMaster::list() may_throw {
     assert(packer == nullptr);
     packer = getUnpacker(fi);
     packer->doList();
 }
 
-void PackMaster::fileInfo() {
+void PackMaster::fileInfo() may_throw {
     assert(packer == nullptr);
     packer = visitAllPackers(try_can_unpack, fi, opt, fi);
     if (!packer)

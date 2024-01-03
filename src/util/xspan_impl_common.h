@@ -2,7 +2,7 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2023 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2024 Markus Franz Xaver Johannes Oberhumer
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -284,8 +284,8 @@ public:
     inline CSelf<U> type_cast() const {
         typedef CSelf<U> R;
         typedef typename R::pointer rpointer;
-        return R(R::Unchecked, upx::ptr_reinterpret_cast<rpointer>(ptr), size_in_bytes,
-                 upx::ptr_reinterpret_cast<rpointer>(base));
+        return R(R::Unchecked, upx::ptr_static_cast<rpointer>(ptr), size_in_bytes,
+                 upx::ptr_static_cast<rpointer>(base));
     }
 
     bool operator==(pointer other) const noexcept { return ptr == other; }

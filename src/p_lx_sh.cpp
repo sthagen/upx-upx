@@ -2,9 +2,9 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2023 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2023 Laszlo Molnar
-   Copyright (C) 2000-2023 John F. Reiser
+   Copyright (C) 1996-2024 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2024 Laszlo Molnar
+   Copyright (C) 2000-2024 John F. Reiser
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -47,9 +47,9 @@
 //
 **************************************************************************/
 
-static const
+static const CLANG_FORMAT_DUMMY_STATEMENT
 #include "stub/i386-linux.elf.shell-entry.h"
-static const
+static const CLANG_FORMAT_DUMMY_STATEMENT
 #include "stub/i386-linux.elf.shell-fold.h"
 
 

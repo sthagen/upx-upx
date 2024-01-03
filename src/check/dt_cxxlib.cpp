@@ -2,7 +2,7 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2023 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2024 Markus Franz Xaver Johannes Oberhumer
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -53,12 +53,22 @@ ACC_COMPILE_TIME_ASSERT_HEADER(usizeof(int) == sizeof(int))
 ACC_COMPILE_TIME_ASSERT_HEADER(usizeof('a') == sizeof(char))
 ACC_COMPILE_TIME_ASSERT_HEADER(usizeof("") == 1)
 ACC_COMPILE_TIME_ASSERT_HEADER(usizeof("a") == 2)
+ACC_COMPILE_TIME_ASSERT_HEADER(usizeof("ab") == 3)
+ACC_COMPILE_TIME_ASSERT_HEADER(usizeof(L'a') == sizeof(wchar_t))
+ACC_COMPILE_TIME_ASSERT_HEADER(usizeof(L"") == 1 * sizeof(wchar_t))
+ACC_COMPILE_TIME_ASSERT_HEADER(usizeof(L"a") == 2 * sizeof(wchar_t))
+ACC_COMPILE_TIME_ASSERT_HEADER(usizeof(L"ab") == 3 * sizeof(wchar_t))
 ACC_COMPILE_TIME_ASSERT_HEADER(usizeof(0) == sizeof(int))
 ACC_COMPILE_TIME_ASSERT_HEADER(usizeof(0L) == sizeof(long))
 ACC_COMPILE_TIME_ASSERT_HEADER(usizeof(0LL) == sizeof(long long))
 ACC_COMPILE_TIME_ASSERT_HEADER(usizeof(nullptr) == sizeof(void *))
 ACC_COMPILE_TIME_ASSERT_HEADER(usizeof(sizeof(0)) == sizeof(size_t))
 ACC_COMPILE_TIME_ASSERT_HEADER(usizeof(usizeof(0)) == sizeof(unsigned))
+#if 0
+// works, but may trigger clang/gcc warnings "-Wunused-value"
+ACC_COMPILE_TIME_ASSERT_HEADER(usizeof((1LL, 1)) == sizeof(int))
+ACC_COMPILE_TIME_ASSERT_HEADER(usizeof((1, 1LL)) == sizeof(long long))
+#endif
 
 namespace compile_time = upx::compile_time;
 ACC_COMPILE_TIME_ASSERT_HEADER(compile_time::string_len("") == 0)
@@ -88,47 +98,164 @@ ACC_COMPILE_TIME_ASSERT_HEADER(!compile_time::string_ge("abc", "abz"))
 ACC_COMPILE_TIME_ASSERT_HEADER(compile_time::string_le("abc", "abz"))
 
 /*************************************************************************
+// UPX_CXX_DISABLE_xxx
+**************************************************************************/
+
+namespace {
+template <class TA, class TB, int TC = 0>
+struct MyType1 {
+    MyType1() noexcept {}
+    UPX_CXX_DISABLE_ADDRESS(MyType1)
+    UPX_CXX_DISABLE_COPY_MOVE(MyType1)
+    UPX_CXX_DISABLE_NEW_DELETE_NO_VIRTUAL(MyType1)
+};
+template <class TA, class TB, int TC = 0>
+struct MyType2 {
+    MyType2() noexcept {}
+    UPX_CXX_DISABLE_COPY_MOVE(MyType2)
+    typedef MyType2<TA, TB, TC> Self;
+    UPX_CXX_DISABLE_ADDRESS(Self)
+    UPX_CXX_DISABLE_NEW_DELETE_NO_VIRTUAL(Self)
+};
+template <class TA, class TB, int TC = 0>
+struct MyVType1 {
+    MyVType1() noexcept {}
+    virtual ~MyVType1() noexcept {}
+    UPX_CXX_DISABLE_ADDRESS(MyVType1)
+    UPX_CXX_DISABLE_COPY_MOVE(MyVType1)
+    UPX_CXX_DISABLE_NEW_DELETE(MyVType1)
+};
+template <class TA, class TB, int TC = 0>
+struct MyVType2 {
+    MyVType2() noexcept {}
+    virtual ~MyVType2() noexcept {}
+    UPX_CXX_DISABLE_COPY_MOVE(MyVType2)
+    typedef MyVType2<TA, TB, TC> Self;
+    UPX_CXX_DISABLE_ADDRESS(Self)
+    UPX_CXX_DISABLE_NEW_DELETE(Self)
+};
+TEST_CASE("upx_cxx_disable") {
+    MyType1<char, int, 1> dummy1;
+    MyType2<char, int, 2> dummy2;
+    MyVType1<char, int, 1> vdummy1;
+    MyVType2<char, int, 2> vdummy2;
+    (void) dummy1;
+    (void) dummy2;
+    (void) vdummy1;
+    (void) vdummy2;
+}
+} // namespace
+
+namespace test_disable_new_delete {
+
+struct A1 {
+    int a;
+};
+struct A2 {
+    int a;
+    UPX_CXX_DISABLE_NEW_DELETE_NO_VIRTUAL(A2)
+};
+struct B1_A1 : public A1 {
+    int b;
+};
+struct B1_A2 : public A2 {
+    int b;
+};
+struct B2_A1 : public A1 {
+    int b;
+    UPX_CXX_DISABLE_NEW_DELETE_NO_VIRTUAL(B2_A1)
+};
+struct B2_A2 : public A2 {
+    int b;
+    UPX_CXX_DISABLE_NEW_DELETE_NO_VIRTUAL(B2_A2)
+};
+
+struct X1 {
+    virtual ~X1() noexcept {}
+    int x;
+};
+struct X2 {
+    virtual ~X2() noexcept {}
+    int x;
+    UPX_CXX_DISABLE_NEW_DELETE(X2)
+};
+struct Y1_X1 : public X1 {
+    int y;
+};
+struct Y1_X2 : public X2 {
+    int y;
+};
+struct Y2_X1 : public X1 {
+    int y;
+    UPX_CXX_DISABLE_NEW_DELETE(Y2_X1)
+};
+struct Y2_X2 : public X2 {
+    int y;
+    UPX_CXX_DISABLE_NEW_DELETE(Y2_X2)
+};
+struct Z1_X1 : public X1 {
+    virtual ~Z1_X1() noexcept {}
+    int z;
+};
+struct Z1_X2 : public X2 {
+    virtual ~Z1_X2() noexcept {}
+    int z;
+};
+struct Z2_X1 : public X1 {
+    virtual ~Z2_X1() noexcept {}
+    int z;
+    UPX_CXX_DISABLE_NEW_DELETE(Z2_X1)
+};
+struct Z2_X2 : public X2 {
+    virtual ~Z2_X2() noexcept {}
+    int z;
+    UPX_CXX_DISABLE_NEW_DELETE(Z2_X2)
+};
+
+} // namespace test_disable_new_delete
+
+/*************************************************************************
 // util
 **************************************************************************/
 
-TEST_CASE("ptr_reinterpret_cast") {
+TEST_CASE("ptr_static_cast") {
     // check that we don't trigger any -Wcast-align warnings
-    using upx::ptr_reinterpret_cast;
+    using upx::ptr_static_cast;
     void *vp = nullptr;
     byte *bp = nullptr;
     int *ip = nullptr;
     double *dp = nullptr;
 
-    assert((vp == ptr_reinterpret_cast<void *>(vp)));
-    assert((vp == ptr_reinterpret_cast<void *>(bp)));
-    assert((vp == ptr_reinterpret_cast<void *>(ip)));
-    assert((vp == ptr_reinterpret_cast<void *>(dp)));
+    assert((vp == ptr_static_cast<void *>(vp)));
+    assert((vp == ptr_static_cast<void *>(bp)));
+    assert((vp == ptr_static_cast<void *>(ip)));
+    assert((vp == ptr_static_cast<void *>(dp)));
 
-    assert((bp == ptr_reinterpret_cast<byte *>(vp)));
-    assert((bp == ptr_reinterpret_cast<byte *>(bp)));
-    assert((bp == ptr_reinterpret_cast<byte *>(ip)));
-    assert((bp == ptr_reinterpret_cast<byte *>(dp)));
+    assert((bp == ptr_static_cast<byte *>(vp)));
+    assert((bp == ptr_static_cast<byte *>(bp)));
+    assert((bp == ptr_static_cast<byte *>(ip)));
+    assert((bp == ptr_static_cast<byte *>(dp)));
 
-    assert((ip == ptr_reinterpret_cast<int *>(vp)));
-    assert((ip == ptr_reinterpret_cast<int *>(bp)));
-    assert((ip == ptr_reinterpret_cast<int *>(ip)));
-    assert((ip == ptr_reinterpret_cast<int *>(dp)));
+    assert((ip == ptr_static_cast<int *>(vp)));
+    assert((ip == ptr_static_cast<int *>(bp)));
+    assert((ip == ptr_static_cast<int *>(ip)));
+    assert((ip == ptr_static_cast<int *>(dp)));
 
-    assert((dp == ptr_reinterpret_cast<double *>(vp)));
-    assert((dp == ptr_reinterpret_cast<double *>(bp)));
-    assert((dp == ptr_reinterpret_cast<double *>(ip)));
-    assert((dp == ptr_reinterpret_cast<double *>(dp)));
+    assert((dp == ptr_static_cast<double *>(vp)));
+    assert((dp == ptr_static_cast<double *>(bp)));
+    assert((dp == ptr_static_cast<double *>(ip)));
+    assert((dp == ptr_static_cast<double *>(dp)));
 
     const byte *bc = nullptr;
     const int *ic = nullptr;
-    assert((bc == ptr_reinterpret_cast<byte *>(bp)));
-    assert((bc == ptr_reinterpret_cast<const byte *>(bc)));
-    assert((bc == ptr_reinterpret_cast<byte *>(ip)));
-    assert((bc == ptr_reinterpret_cast<const byte *>(ic)));
-    assert((ic == ptr_reinterpret_cast<int *>(bp)));
-    assert((ic == ptr_reinterpret_cast<const int *>(bc)));
-    assert((ic == ptr_reinterpret_cast<int *>(ip)));
-    assert((ic == ptr_reinterpret_cast<const int *>(ic)));
+    assert((bc == ptr_static_cast<byte *>(bp)));
+    assert((bc == ptr_static_cast<const byte *>(bc)));
+    assert((bc == ptr_static_cast<byte *>(ip)));
+    assert((bc == ptr_static_cast<const byte *>(ic)));
+    assert((ic == ptr_static_cast<int *>(bp)));
+    assert((ic == ptr_static_cast<const int *>(bc)));
+    assert((ic == ptr_static_cast<int *>(ip)));
+    assert((ic == ptr_static_cast<const int *>(ic)));
 }
 
 TEST_CASE("noncopyable") {

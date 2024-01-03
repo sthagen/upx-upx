@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2023 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2023 Laszlo Molnar
+   Copyright (C) 1996-2024 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2024 Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -84,7 +84,7 @@ public: // raw access
 private:
     // disable taking the address => force passing by reference
     // [I'm not too sure about this design decision, but we can always allow it if needed]
-    MemBufferBase<T> *operator&() const noexcept DELETED_FUNCTION;
+    UPX_CXX_DISABLE_ADDRESS(MemBufferBase)
 };
 
 /*************************************************************************
@@ -209,15 +209,8 @@ private:
     Debug debug;
 #endif
 
-    // disable copy and move
-    MemBuffer(const MemBuffer &) DELETED_FUNCTION;
-    MemBuffer &operator=(const MemBuffer &) DELETED_FUNCTION;
-#if __cplusplus >= 201103L
-    MemBuffer(MemBuffer &&) noexcept DELETED_FUNCTION;
-    MemBuffer &operator=(MemBuffer &&) noexcept DELETED_FUNCTION;
-#endif
-    // disable dynamic allocation
-    ACC_CXX_DISABLE_NEW_DELETE
+    UPX_CXX_DISABLE_COPY_MOVE(MemBuffer)             // disable copy and move
+    UPX_CXX_DISABLE_NEW_DELETE_NO_VIRTUAL(MemBuffer) // disable dynamic allocation
 };
 
 /* vim:set ts=4 sw=4 et: */

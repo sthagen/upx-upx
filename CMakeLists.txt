@@ -7,13 +7,6 @@
 #   A C++ compiler that fully implements C++17: clang-5, gcc-8 or msvc-2019-16.11
 #   (older or other compilers may work but are unsupported, use at your own risk)
 
-# CMake version check; using a somewhat current CMake version is highly recommended
-if(DEFINED UPX_CONFIG_CMAKE_MINIMUM_REQUIRED_VERSION)
-    cmake_minimum_required(VERSION "${UPX_CONFIG_CMAKE_MINIMUM_REQUIRED_VERSION}" FATAL_ERROR)
-else()
-    cmake_minimum_required(VERSION "3.8" FATAL_ERROR) # CMake >= 3.8 is needed for CXX_STANDARD 17
-endif()
-
 # Sections of this CMakeLists.txt:
 #   - options
 #   - init
@@ -24,12 +17,25 @@ endif()
 #   - install
 #   - print summary
 
+# CMake version check; using a somewhat current CMake version is highly recommended
+file(REMOVE "${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/.upx_cmake_config_done.txt")
+if(DEFINED UPX_CONFIG_CMAKE_MINIMUM_REQUIRED_VERSION)
+    cmake_minimum_required(VERSION "${UPX_CONFIG_CMAKE_MINIMUM_REQUIRED_VERSION}" FATAL_ERROR)
+else()
+    cmake_minimum_required(VERSION "3.8" FATAL_ERROR) # CMake >= 3.8 is needed for CXX_STANDARD 17
+endif()
+
+# support functions
+include("${CMAKE_CURRENT_SOURCE_DIR}/misc/cmake/functions.cmake")
+
 #***********************************************************************
 # options
 #***********************************************************************
 
+upx_cmake_include_hook(1_options)
+
 # compilation config options
-if(NOT IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/.git")
+if(NOT IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/.git" OR NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/misc/cmake/use_strict_defaults.cmake")
     # permissive config defaults when building from source code tarball
     option(UPX_CONFIG_DISABLE_GITREV   "Do not compile with default Git version info." ON)
     option(UPX_CONFIG_DISABLE_SANITIZE "Do not compile with default sanitize options." ON)
@@ -52,45 +58,18 @@ option(UPX_CONFIG_DISABLE_SELF_PACK_TEST "Do not test packing UPX with itself" O
 # init
 #***********************************************************************
 
-# Disallow in-source builds. Note that you will still have to manually
+set(UPX_VERSION_STRING "4.3.0")
+
+upx_cmake_include_hook(2_init)
+
+# Disallow in-source build. Note that you will still have to manually
 # clean up a few files if you accidentally try an in-source build.
 if(IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/.git")
-    set(CMAKE_DISABLE_IN_SOURCE_BUILD ON)
-    set(CMAKE_DISABLE_SOURCE_CHANGES  ON)
-    if(",${CMAKE_CURRENT_SOURCE_DIR}," STREQUAL ",${CMAKE_CURRENT_BINARY_DIR},")
-        message(FATAL_ERROR "ERROR: In-source builds are not allowed, please use an extra build dir.")
-    endif()
+    upx_disallow_in_source_build()
 endif()
 
-# useful for CI jobs: allow settings via environment and cache result
-function(upx_cache_bool_vars)
-    set(default_value "${ARGV0}")
-    list(REMOVE_AT ARGV 0)
-    foreach(var ${ARGV})
-        set(value ${default_value})
-        if(DEFINED UPX_CACHE_${var})            # cached
-            set(value "${UPX_CACHE_${var}}")
-        elseif(DEFINED ${var})                  # defined via "cmake -DXXX=YYY"
-            set(value "${${var}}")
-        elseif("$ENV{${var}}" MATCHES "^(0|1|OFF|ON|FALSE|TRUE)$") # environment
-            set(value "$ENV{${var}}")
-            set(UPX_CACHE_ORIGIN_FROM_ENV_${var} TRUE CACHE INTERNAL "" FORCE)
-        endif()
-        if(value)
-            set(value ON)
-        else()
-            set(value OFF)
-        endif()
-        if(UPX_CACHE_ORIGIN_FROM_ENV_${var})
-            message(STATUS "setting from environment: ${var} = ${value}")
-        endif()
-        set(${var} "${value}" PARENT_SCOPE)
-        set(UPX_CACHE_${var} "${value}" CACHE INTERNAL "" FORCE)
-    endforeach()
-endfunction()
-
 # global settings
-if(${CMAKE_VERSION} VERSION_GREATER "3.14.7" AND NOT DEFINED CMAKE_MSVC_RUNTIME_LIBRARY)
+if(${CMAKE_VERSION} VERSION_GREATER "3.14.99" AND NOT DEFINED CMAKE_MSVC_RUNTIME_LIBRARY)
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded")
     cmake_policy(SET CMP0091 NEW)
 endif()
@@ -104,6 +83,7 @@ upx_cache_bool_vars(OFF
     UPX_CONFIG_CMAKE_DISABLE_TEST UPX_CONFIG_CMAKE_DISABLE_INSTALL
     UPX_CONFIG_CMAKE_DISABLE_PRINT_INFO UPX_CONFIG_CMAKE_DISABLE_PLATFORM_CHECK
     UPX_CONFIG_DISABLE_C_STANDARD UPX_CONFIG_DISABLE_CXX_STANDARD
+    UPX_CONFIG_EXPECT_THREADS UPX_CONFIG_REQUIRE_THREADS
 )
 
 # determine Git revision
@@ -148,26 +128,10 @@ else()
     message(STATUS "UPX_VERSION_GITREV: not set")
 endif()
 
-# set the default build type to "Release"
-get_property(is_multi_config GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
-if(NOT is_multi_config AND NOT CMAKE_BUILD_TYPE)
-    set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Choose the type of build." FORCE)
-endif()
-
 # CMake init
-project(upx VERSION 4.2.1 LANGUAGES C CXX)
-
-# set the default multi-config build type to "Release"
-if(is_multi_config)
-    set(c "${CMAKE_CONFIGURATION_TYPES}")
-    list(INSERT c 0 "Release")
-    list(INSERT c 1 "Debug")
-    if(CMAKE_BUILD_TYPE)
-        list(INSERT c 0 "${CMAKE_BUILD_TYPE}")
-    endif()
-    list(REMOVE_DUPLICATES c)
-    set(CMAKE_CONFIGURATION_TYPES "${c}" CACHE STRING "List of supported configuration types." FORCE)
-endif()
+upx_default_build_type(Release)
+project(upx VERSION "${UPX_VERSION_STRING}" LANGUAGES C CXX)
+upx_apply_build_type()
 
 # set MSVC_FRONTEND and MINGW
 if(NOT DEFINED MSVC_FRONTEND AND (MSVC OR CMAKE_C_COMPILER_FRONTEND_VARIANT MATCHES "^MSVC"))
@@ -186,6 +150,8 @@ include(CheckFunctionExists)
 include(CheckIncludeFile)
 include(CheckStructHasMember)
 include(CheckSymbolExists)
+
+upx_cmake_include_hook(3_common_compilation_flags)
 
 if(NOT DEFINED HAVE_UNISTD_H)
     check_include_file("unistd.h" HAVE_UNISTD_H)
@@ -230,38 +196,6 @@ if(MSVC_FRONTEND)
     set(warn_WX -wd5105 ${warn_WX})
 endif()
 
-function(upx_add_definitions_with_prefix)
-    set(flag_prefix "${ARGV0}")
-    if(flag_prefix MATCHES "^empty$") # need "empty" to work around bug in old CMake versions
-        set(flag_prefix "")
-    endif()
-    list(REMOVE_AT ARGV 0)
-    set(failed "")
-    foreach(f ${ARGV})
-        set(flag "${flag_prefix}${f}")
-        string(REGEX REPLACE "[^0-9a-zA-Z_]" "_" cache_var "HAVE_CFLAG_${flag}")
-        check_c_compiler_flag("${flag}" ${cache_var})
-        if(${cache_var})
-            #message(STATUS "add_definitions: ${flag}")
-            add_definitions("${flag}")
-        else()
-            list(APPEND failed "${f}")
-        endif()
-    endforeach()
-    set(failed_flags "${failed}" PARENT_SCOPE) # return value
-endfunction()
-
-function(upx_add_definitions)
-    set(failed_flags "")
-    if(MSVC_FRONTEND AND CMAKE_C_COMPILER_ID MATCHES "Clang")
-        # for clang-cl try "-clang:" flag prefix first
-        upx_add_definitions_with_prefix("-clang:" ${ARGV})
-        upx_add_definitions_with_prefix("empty" ${failed_flags})
-    else()
-        upx_add_definitions_with_prefix("empty" ${ARGV})
-    endif()
-endfunction()
-
 if(NOT CMAKE_C_COMPILER_ID MATCHES "^MSVC")
     # use -O2 instead of -O3 to reduce code size
     string(REGEX REPLACE "(^| )-O3( |$$)" "\\1-O2\\2" a "${CMAKE_C_FLAGS_RELEASE}")
@@ -276,6 +210,7 @@ if(MSVC_FRONTEND OR WIN32 OR MINGW OR CYGWIN)
     add_definitions(-D_CRT_SECURE_NO_DEPRECATE)
     add_definitions(-D_CRT_SECURE_NO_WARNINGS)
     add_definitions(-DWIN32_LEAN_AND_MEAN)
+    add_definitions(-D__USE_MINGW_ANSI_STDIO)
 endif()
 if(MSVC_FRONTEND)
     # use -funsigned-char; set __cplusplus according to selected C++ standard
@@ -296,65 +231,10 @@ if(NOT CMAKE_C_COMPILER_ID MATCHES "^MSVC")
     endif()
 endif()
 
-# compile a target with -O2 optimization even in Debug build
-function(upx_compile_target_debug_with_O2)
-    foreach(t ${ARGV})
-        if(MSVC_FRONTEND)
-            # MSVC uses some Debug compilation options like -RTC1 that are incompatible with -O2
-        else()
-            target_compile_options(${t} PRIVATE $<$<CONFIG:Debug>:-O2>)
-        endif()
-    endforeach()
-endfunction()
-
-# compile a source file with -O2 optimization even in Debug build; messy because of CMake limitations
-function(upx_compile_source_debug_with_O2)
-    set(flags "$<$<CONFIG:Debug>:-O2>")
-    if(${CMAKE_VERSION} VERSION_LESS "3.8")
-        # 3.8: The COMPILE_FLAGS source file property learned to support generator expressions
-        if(is_multi_config OR NOT CMAKE_BUILD_TYPE MATCHES "^Debug$")
-            return()
-        endif()
-        set(flags "-O2")
-    endif()
-    if(CMAKE_GENERATOR MATCHES "Xcode") # multi-config
-        # NOTE: Xcode does not support per-config per-source COMPILE_FLAGS (as of CMake 3.27.7)
-        return()
-    endif()
-    foreach(t ${ARGV})
-        if(MSVC_FRONTEND)
-            # MSVC uses some Debug compilation options like -RTC1 that are incompatible with -O2
-        else()
-            get_source_file_property(prop ${t} COMPILE_FLAGS)
-            if(prop MATCHES "^(NOTFOUND)?$")
-                set_source_files_properties(${t} PROPERTIES COMPILE_FLAGS "${flags}")
-            else()
-                set_source_files_properties(${t} PROPERTIES COMPILE_FLAGS "${prop} ${flags}")
-            endif()
-        endif()
-    endforeach()
-endfunction()
-
-# sanitize a target
-function(upx_sanitize_target)
-    foreach(t ${ARGV})
-        if(UPX_CONFIG_DISABLE_SANITIZE)
-            # no-op
-        elseif(MSVC_FRONTEND)
-            # MSVC uses -GS (similar to -fstack-protector) by default
-        elseif(MINGW OR CYGWIN)
-            # avoid link errors with current MinGW-w64 versions
-            # see https://www.mingw-w64.org/contribute/#sanitizers-asan-tsan-usan
-        else()
-            # default sanitizer for Debug builds
-            target_compile_options(${t} PRIVATE $<$<CONFIG:Debug>:-fsanitize=undefined -fsanitize-undefined-trap-on-error -fstack-protector-all>)
-            # default sanitizer for Release builds
-            target_compile_options(${t} PRIVATE $<$<CONFIG:MinSizeRel>:-fstack-protector>)
-            target_compile_options(${t} PRIVATE $<$<CONFIG:Release>:-fstack-protector>)
-            target_compile_options(${t} PRIVATE $<$<CONFIG:RelWithDebInfo>:-fstack-protector>)
-        endif()
-    endforeach()
-endfunction()
+# examine MinGW/Cygwin compiler configuration
+if(IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/.git")
+    upx_print_mingw_symbols()
+endif()
 
 #***********************************************************************
 # targets
@@ -365,44 +245,56 @@ set(UPX_CONFIG_DISABLE_THREADS ON) # multithreading is currently not used; maybe
 set(UPX_CONFIG_DISABLE_BZIP2 ON)   # bzip2 is currently not used; we might need it to decompress linux kernels
 set(UPX_CONFIG_DISABLE_ZSTD ON)    # zstd is currently not used; maybe in UPX version 5
 
+upx_cmake_include_hook(4_targets)
+
 if(NOT UPX_CONFIG_DISABLE_THREADS)
     find_package(Threads)
 endif()
+# make sure that threads are indeed fully supported in C++
+if(Threads_FOUND)
+    foreach(f std_lock_guard.cpp)
+        set(CMAKE_TRY_COMPILE_TARGET_TYPE "EXECUTABLE")
+        try_compile(result "${CMAKE_CURRENT_BINARY_DIR}"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/misc/cmake/try_compile/${f}"
+                    OUTPUT_VARIABLE output)
+        if(NOT result)
+            # failed; under MinGW be sure to use the posix-threads and NOT the win32-threads version
+            #message(STATUS "Threads FAILED: ${output}") # debug output from try_compile
+            set(Threads_FOUND OFF)
+            break()
+        endif()
+    endforeach()
+endif()
 
 if(NOT UPX_CONFIG_DISABLE_BZIP2)
-file(GLOB bzip2_SOURCES "vendor/bzip2/*.c")
-list(SORT bzip2_SOURCES)
+upx_add_glob_files(bzip2_SOURCES "vendor/bzip2/*.c")
 add_library(upx_vendor_bzip2 STATIC ${bzip2_SOURCES})
 if(NOT UPX_CONFIG_DISABLE_C_STANDARD)
     set_property(TARGET upx_vendor_bzip2 PROPERTY C_STANDARD 11)
 endif()
 endif() # UPX_CONFIG_DISABLE_BZIP2
 
-file(GLOB ucl_SOURCES "vendor/ucl/src/*.c")
-list(SORT ucl_SOURCES)
+upx_add_glob_files(ucl_SOURCES "vendor/ucl/src/*.c")
 add_library(upx_vendor_ucl STATIC ${ucl_SOURCES})
 if(NOT UPX_CONFIG_DISABLE_C_STANDARD)
     set_property(TARGET upx_vendor_ucl PROPERTY C_STANDARD 11)
 endif()
 
-file(GLOB zlib_SOURCES "vendor/zlib/*.c")
-list(SORT zlib_SOURCES)
+upx_add_glob_files(zlib_SOURCES "vendor/zlib/*.c")
 add_library(upx_vendor_zlib STATIC ${zlib_SOURCES})
 if(NOT UPX_CONFIG_DISABLE_C_STANDARD)
     set_property(TARGET upx_vendor_zlib PROPERTY C_STANDARD 11)
 endif()
 
 if(NOT UPX_CONFIG_DISABLE_ZSTD)
-file(GLOB zstd_SOURCES "vendor/zstd/lib/*/*.c")
-list(SORT zstd_SOURCES)
+upx_add_glob_files(zstd_SOURCES "vendor/zstd/lib/*/*.c")
 add_library(upx_vendor_zstd STATIC ${zstd_SOURCES})
 if(NOT UPX_CONFIG_DISABLE_C_STANDARD)
     set_property(TARGET upx_vendor_zstd PROPERTY C_STANDARD 11)
 endif()
 endif() # UPX_CONFIG_DISABLE_ZSTD
 
-file(GLOB upx_SOURCES "src/*.cpp" "src/[cfu]*/*.cpp")
-list(SORT upx_SOURCES)
+upx_add_glob_files(upx_SOURCES "src/*.cpp" "src/[cfu]*/*.cpp")
 add_executable(upx ${upx_SOURCES})
 if(NOT UPX_CONFIG_DISABLE_CXX_STANDARD)
     set_property(TARGET upx PROPERTY CXX_STANDARD 17)
@@ -422,14 +314,17 @@ endif()
 # target compilation flags
 #***********************************************************************
 
+upx_cmake_include_hook(5_target_compilation_flags)
+
 if(NOT UPX_CONFIG_DISABLE_BZIP2)
 set(t upx_vendor_bzip2)
 upx_compile_target_debug_with_O2(${t})
 upx_sanitize_target(${t})
+target_compile_definitions(${t} PRIVATE BZ_NO_STDIO=1)
 if(MSVC_FRONTEND)
     target_compile_options(${t} PRIVATE ${warn_WN} -wd4127 -wd4244 -wd4267 ${warn_WX})
 else()
-    target_compile_options(${t} PRIVATE ${warn_Wall} -Wno-implicit-fallthrough ${warn_Werror})
+    target_compile_options(${t} PRIVATE ${warn_Wall} ${warn_Werror})
 endif()
 endif() # UPX_CONFIG_DISABLE_BZIP2
 
@@ -453,8 +348,8 @@ endif()
 if(MSVC_FRONTEND)
     target_compile_options(${t} PRIVATE -W3 ${warn_WX})
 else()
-    target_compile_options(${t} PRIVATE -Wall ${warn_Werror})
-    ##target_compile_options(${t} PRIVATE ${warn_Wall} -Wno-cast-align -Wno-cast-qual ${warn_Werror})
+    ##target_compile_options(${t} PRIVATE -Wall ${warn_Werror})
+    target_compile_options(${t} PRIVATE ${warn_Wall} -Wno-cast-align -Wno-cast-qual ${warn_Werror})
 endif()
 
 if(NOT UPX_CONFIG_DISABLE_ZSTD)
@@ -488,7 +383,7 @@ if(NOT UPX_CONFIG_DISABLE_WERROR)
     target_compile_definitions(${t} PRIVATE UPX_CONFIG_DISABLE_WERROR=0)
 endif()
 if(NOT UPX_CONFIG_DISABLE_BZIP2)
-    target_compile_definitions(${t} PRIVATE WITH_BZIP2=0) # FIXME TODO
+    target_compile_definitions(${t} PRIVATE WITH_BZIP2=1)
 endif()
 if(NOT UPX_CONFIG_DISABLE_ZSTD)
     target_compile_definitions(${t} PRIVATE WITH_ZSTD=1)
@@ -517,36 +412,36 @@ endif()
 #   ninja test
 #***********************************************************************
 
+upx_cmake_include_hook(6_test)
+
 if(NOT UPX_CONFIG_CMAKE_DISABLE_TEST)
 
 include(CTest)
-# TODO later: check CMAKE_CROSSCOMPILING_EMULATOR
-if(NOT CMAKE_CROSSCOMPILING)
+if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR)
     add_test(NAME upx-version COMMAND upx --version)
     add_test(NAME upx-help    COMMAND upx --help)
-endif()
-if(NOT CMAKE_CROSSCOMPILING AND NOT UPX_CONFIG_DISABLE_SELF_PACK_TEST)
+    add_test(NAME upx-sysinfo COMMAND upx --sysinfo -v)
+if(NOT UPX_CONFIG_DISABLE_SELF_PACK_TEST)
     # IMPORTANT NOTE: these tests can only work if the host executable format is supported by UPX!
-    function(upx_add_test)
-        set(name "${ARGV0}")
-        list(REMOVE_AT ARGV 0)
-        add_test(NAME "${name}" COMMAND ${ARGV})
-        set_tests_properties("${name}" PROPERTIES RUN_SERIAL TRUE) # run these tests sequentially
-    endfunction()
-    set(exe ${CMAKE_EXECUTABLE_SUFFIX})
+    set(emu "")
+    if(DEFINED CMAKE_CROSSCOMPILING_EMULATOR)
+        set(emu "${CMAKE_CROSSCOMPILING_EMULATOR}")
+    endif()
+    set(exe "${CMAKE_EXECUTABLE_SUFFIX}")
     set(upx_self_exe "$<TARGET_FILE:upx>")
     set(fo "--force-overwrite")
-    upx_add_test(upx-self-pack      upx -3         "${upx_self_exe}" ${fo} -o upx-packed${exe})
-    upx_add_test(upx-self-pack-n2b  upx -3 --nrv2b "${upx_self_exe}" ${fo} -o upx-packed-n2b${exe})
-    upx_add_test(upx-self-pack-n2d  upx -3 --nrv2d "${upx_self_exe}" ${fo} -o upx-packed-n2d${exe})
-    upx_add_test(upx-self-pack-n2e  upx -3 --nrv2e "${upx_self_exe}" ${fo} -o upx-packed-n2e${exe})
-    upx_add_test(upx-self-pack-lzma upx -1 --lzma  "${upx_self_exe}" ${fo} -o upx-packed-lzma${exe})
-    upx_add_test(upx-list           upx -l         upx-packed${exe} upx-packed-n2b${exe} upx-packed-n2d${exe} upx-packed-n2e${exe} upx-packed-lzma${exe})
-    upx_add_test(upx-fileinfo       upx --fileinfo upx-packed${exe} upx-packed-n2b${exe} upx-packed-n2d${exe} upx-packed-n2e${exe} upx-packed-lzma${exe})
-    upx_add_test(upx-test           upx -t         upx-packed${exe} upx-packed-n2b${exe} upx-packed-n2d${exe} upx-packed-n2e${exe} upx-packed-lzma${exe})
-    upx_add_test(upx-unpack         upx -d upx-packed${exe} ${fo} -o upx-unpacked${exe})
-    upx_add_test(upx-run-unpacked   ./upx-unpacked${exe} --version-short)
-    upx_add_test(upx-run-packed     ./upx-packed${exe} --version-short)
+    upx_add_serial_test(upx-self-pack      upx -3         "${upx_self_exe}" ${fo} -o upx-packed${exe})
+    upx_add_serial_test(upx-self-pack-n2b  upx -3 --nrv2b "${upx_self_exe}" ${fo} -o upx-packed-n2b${exe})
+    upx_add_serial_test(upx-self-pack-n2d  upx -3 --nrv2d "${upx_self_exe}" ${fo} -o upx-packed-n2d${exe})
+    upx_add_serial_test(upx-self-pack-n2e  upx -3 --nrv2e "${upx_self_exe}" ${fo} -o upx-packed-n2e${exe})
+    upx_add_serial_test(upx-self-pack-lzma upx -1 --lzma  "${upx_self_exe}" ${fo} -o upx-packed-lzma${exe})
+    upx_add_serial_test(upx-list           upx -l         upx-packed${exe} upx-packed-n2b${exe} upx-packed-n2d${exe} upx-packed-n2e${exe} upx-packed-lzma${exe})
+    upx_add_serial_test(upx-fileinfo       upx --fileinfo upx-packed${exe} upx-packed-n2b${exe} upx-packed-n2d${exe} upx-packed-n2e${exe} upx-packed-lzma${exe})
+    upx_add_serial_test(upx-test           upx -t         upx-packed${exe} upx-packed-n2b${exe} upx-packed-n2d${exe} upx-packed-n2e${exe} upx-packed-lzma${exe})
+    upx_add_serial_test(upx-unpack         upx -d upx-packed${exe} ${fo} -o upx-unpacked${exe})
+    upx_add_serial_test(upx-run-unpacked   ${emu} ./upx-unpacked${exe} --version-short)
+    upx_add_serial_test(upx-run-packed     ${emu} ./upx-packed${exe} --version-short)
+endif() # UPX_CONFIG_DISABLE_SELF_PACK_TEST
 endif()
 
 endif() # UPX_CONFIG_CMAKE_DISABLE_TEST
@@ -558,6 +453,8 @@ endif() # UPX_CONFIG_CMAKE_DISABLE_TEST
 #   ninja install
 #***********************************************************************
 
+upx_cmake_include_hook(7_install)
+
 if(NOT UPX_CONFIG_CMAKE_DISABLE_INSTALL)
 
 # installation prefix and directories
@@ -568,6 +465,7 @@ endif()
 if(CMAKE_INSTALL_PREFIX)
     include(GNUInstallDirs)
 endif()
+# install files
 if(CMAKE_INSTALL_PREFIX AND DEFINED CMAKE_INSTALL_FULL_BINDIR)
     install(TARGETS upx DESTINATION "${CMAKE_INSTALL_FULL_BINDIR}")
     install(FILES
@@ -580,34 +478,29 @@ endif()
 endif() # UPX_CONFIG_CMAKE_DISABLE_INSTALL
 
 #***********************************************************************
-# show summary
+# summary
 # print some info about the build configuration
 #***********************************************************************
 
-function(print_var)
-    foreach(var ${ARGV})
-        if(DEFINED ${var} AND NOT ",${${var}}," STREQUAL ",,")
-            if(${var})
-                message(STATUS "${var} = ${${var}}")
-            endif()
-        endif()
-    endforeach()
-endfunction()
+upx_cmake_include_hook(8_summary)
 
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/maint/make/CMakeLists.maint.txt")
-include("${CMAKE_CURRENT_SOURCE_DIR}/maint/make/CMakeLists.maint.txt")
-endif()
-
-print_var(CMAKE_VERSION UPX_CONFIG_CMAKE_MINIMUM_REQUIRED_VERSION CMAKE_GENERATOR)
+upx_print_var(CMAKE_VERSION UPX_CONFIG_CMAKE_MINIMUM_REQUIRED_VERSION CMAKE_GENERATOR)
 if(NOT UPX_CONFIG_CMAKE_DISABLE_PRINT_INFO)
-print_var(CMAKE_HOST_SYSTEM_NAME CMAKE_HOST_SYSTEM_VERSION)
-print_var(CMAKE_SYSTEM_NAME CMAKE_SYSTEM_VERSION CMAKE_CROSSCOMPILING)
-print_var(CMAKE_C_COMPILER_ID CMAKE_C_COMPILER_VERSION CMAKE_C_COMPILER_FRONTEND_VARIANT CMAKE_C_COMPILER_ARCHITECTURE_ID CMAKE_C_PLATFORM_ID CMAKE_C_COMPILER_ABI)
-print_var(CMAKE_CXX_COMPILER_ID CMAKE_CXX_COMPILER_VERSION CMAKE_CXX_COMPILER_FRONTEND_VARIANT CMAKE_CXX_COMPILER_ARCHITECTURE_ID CMAKE_CXX_PLATFORM_ID CMAKE_CXX_COMPILER_ABI)
-print_var(CMAKE_POSITION_INDEPENDENT_CODE)
-print_var(CYGWIN GNUC MINGW MSVC MSVC_FRONTEND MSVC_IDE WIN32 WIN64)
+upx_print_var(CMAKE_HOST_SYSTEM_NAME CMAKE_HOST_SYSTEM_VERSION)
+upx_print_var(CMAKE_SYSTEM_NAME CMAKE_SYSTEM_VERSION CMAKE_CROSSCOMPILING CMAKE_CROSSCOMPILING_EMULATOR)
+upx_print_var(CMAKE_C_COMPILER_ID CMAKE_C_COMPILER_VERSION CMAKE_C_COMPILER_FRONTEND_VARIANT CMAKE_C_COMPILER_ARCHITECTURE_ID CMAKE_C_PLATFORM_ID CMAKE_C_COMPILER_ABI)
+upx_print_var(CMAKE_CXX_COMPILER_ID CMAKE_CXX_COMPILER_VERSION CMAKE_CXX_COMPILER_FRONTEND_VARIANT CMAKE_CXX_COMPILER_ARCHITECTURE_ID CMAKE_CXX_PLATFORM_ID CMAKE_CXX_COMPILER_ABI)
+upx_print_var(CMAKE_INTERPROCEDURAL_OPTIMIZATION CMAKE_POSITION_INDEPENDENT_CODE CMAKE_TRY_COMPILE_CONFIGURATION)
+upx_print_var(CYGWIN GNUC MINGW MSVC MSVC_FRONTEND MSVC_IDE WIN32 WIN64)
 endif() # UPX_CONFIG_CMAKE_DISABLE_PRINT_INFO
-print_var(CMAKE_INSTALL_PREFIX CMAKE_CONFIGURATION_TYPES CMAKE_BUILD_TYPE)
+upx_print_var(CMAKE_INSTALL_PREFIX CMAKE_CONFIGURATION_TYPES CMAKE_BUILD_TYPE)
+if(Threads_FOUND)
+    message(STATUS "WITH_THREADS = 1")
+elseif(UPX_CONFIG_REQUIRE_THREADS)
+    message(FATAL_ERROR "ERROR: WITH_THREADS required")
+elseif(UPX_CONFIG_EXPECT_THREADS AND NOT UPX_CONFIG_DISABLE_THREADS)
+    message(FATAL_ERROR "ERROR: WITH_THREADS expected")
+endif()
 if(CMAKE_BUILD_TYPE AND NOT CMAKE_BUILD_TYPE MATCHES "^(Debug|None|Release)$")
     message(WARNING "WARNING: unsupported CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}; please use \"Debug\" or \"Release\"")
 endif()
@@ -624,5 +517,8 @@ if(NOT ",${CMAKE_C_COMPILER_FRONTEND_VARIANT}," STREQUAL ",${CMAKE_CXX_COMPILER_
     message(FATAL_ERROR "ERROR: CMAKE_C_COMPILER_FRONTEND_VARIANT CMAKE_CXX_COMPILER_FRONTEND_VARIANT mismatch")
 endif()
 endif() # UPX_CONFIG_CMAKE_DISABLE_PLATFORM_CHECK
+
+upx_cmake_include_hook(9_finish)
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/.upx_cmake_config_done.txt" "")
 
 # vim:set ft=cmake ts=4 sw=4 tw=0 et:

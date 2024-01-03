@@ -2,7 +2,7 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2023 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2024 Markus Franz Xaver Johannes Oberhumer
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -36,18 +36,19 @@
 
 #if WITH_XSPAN
 
-// automatic conversion to underlying pointer; do NOT enable this config as this
+// Automatic conversion to underlying pointer; do NOT enable this config as this
 // defeats the main purpose of a checked pointer => use raw_bytes() as needed;
-// and see xspan_fwd.h how to make this more convenient
+// and see xspan_fwd.h how to make this more convenient.
 #ifndef XSPAN_CONFIG_ENABLE_IMPLICIT_CONVERSION
 #define XSPAN_CONFIG_ENABLE_IMPLICIT_CONVERSION 0
 #endif
-// allow automatic conversion PtrOrSpanOrNull => PtrOrSpan => Span (with run-time checks)
-// choose between compile-time safety vs. possible run-time exceptions
+// Allow automatic conversion PtrOrSpanOrNull => PtrOrSpan => Span (with run-time checks).
+// Choose between compile-time safety vs. possible run-time exceptions.
 #ifndef XSPAN_CONFIG_ENABLE_SPAN_CONVERSION
 #define XSPAN_CONFIG_ENABLE_SPAN_CONVERSION 1
 #endif
 
+// actual implementation
 #include "xspan_impl.h"
 
 #ifdef XSPAN_NAMESPACE_NAME
@@ -158,7 +159,7 @@ inline R *xspan_make_helper__(MemBuffer &mb) noexcept {
 #define XSPAN_S_VAR(type, var, first, ...) type *var = XSPAN_S_MAKE(type, (first))
 
 // cast to a different type (creates a new value)
-#define XSPAN_TYPE_CAST(type, x)           (upx::ptr_reinterpret_cast<type *>(x))
+#define XSPAN_TYPE_CAST(type, x)           (upx::ptr_static_cast<type *>(x))
 // poison a pointer: point to a non-null invalid address
 #define XSPAN_INVALIDATE(x)                ptr_invalidate_and_poison(x)
 

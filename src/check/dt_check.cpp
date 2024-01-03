@@ -2,7 +2,7 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2023 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2024 Markus Franz Xaver Johannes Oberhumer
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -562,6 +562,17 @@ TEST_CASE("acc_vget") {
     CHECK_EQ(acc_vget_long(1, -1), 1);
     CHECK_EQ(acc_vget_acc_int64l_t(2, 1), 2);
     CHECK_EQ(acc_vget_acc_hvoid_p(nullptr, 0), nullptr);
+}
+
+TEST_CASE("ptr_invalidate_and_poison") {
+    int *ip = nullptr;
+    ptr_invalidate_and_poison(ip);
+    assert(ip != nullptr);
+    (void) ip;
+    double *dp;
+    ptr_invalidate_and_poison(dp);
+    assert(dp != nullptr);
+    (void) dp;
 }
 
 TEST_CASE("working -fno-strict-aliasing") {

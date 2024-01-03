@@ -3,17 +3,21 @@
 set -e; set -o pipefail
 argv0=$0; argv0abs=$(readlink -fn "$argv0"); argv0dir=$(dirname "$argv0abs")
 
+#
+# Copyright (C) Markus Franz Xaver Johannes Oberhumer
+#
 # very first version of the upx-testsuite; requires:
 #   $upx_exe                (required, but with convenience fallback "./upx")
 #   $upx_testsuite_SRCDIR   (required, but with convenience fallback)
 #   $upx_testsuite_BUILDDIR (optional)
 #
 # optional settings:
-#   $upx_exe_runner         (e.g. "qemu-x86_64 -cpu Westmere" or "valgrind")
+#   $upx_exe_runner         (e.g. "qemu-x86_64 -cpu Nehalem" or "valgrind")
 #   $UPX_TESTSUITE_VERBOSE
 #   $UPX_TESTSUITE_LEVEL
 #
 # see https://github.com/upx/upx-testsuite.git
+#
 
 #***********************************************************************
 # init & checks
@@ -28,15 +32,17 @@ upx_exe=$(readlink -fn "$upx_exe") # make absolute
 upx_run=()
 if [[ -n $upx_exe_runner ]]; then
     # usage examples:
-    #   export upx_exe_runner="qemu-x86_64 -cpu Westmere"
+    #   export upx_exe_runner="qemu-x86_64 -cpu Nehalem"
     #   export upx_exe_runner="valgrind --leak-check=no --error-exitcode=1 --quiet"
     #   export upx_exe_runner="wine"
     IFS=' ' read -r -a upx_run <<< "$upx_exe_runner" # split at spaces into array
+elif [[ -n $CMAKE_CROSSCOMPILING_EMULATOR ]]; then
+    IFS=';' read -r -a upx_run <<< "$CMAKE_CROSSCOMPILING_EMULATOR" # split at semicolons into array
 fi
 upx_run+=( "$upx_exe" )
 echo "upx_run='${upx_run[*]}'"
 
-# upx_run check, part1
+# upx_run sanity check, part1
 if ! "${upx_run[@]}" --version-short >/dev/null; then echo "UPX-ERROR: FATAL: upx --version-short FAILED"; exit 1; fi
 if ! "${upx_run[@]}" -L >/dev/null 2>&1; then echo "UPX-ERROR: FATAL: upx -L FAILED"; exit 1; fi
 if ! "${upx_run[@]}" --help >/dev/null;  then echo "UPX-ERROR: FATAL: upx --help FAILED"; exit 1; fi
@@ -72,7 +78,7 @@ upx_testsuite_BUILDDIR=$(readlink -fn "$upx_testsuite_BUILDDIR") # make absolute
 cd / && cd "$upx_testsuite_BUILDDIR" || exit 1
 : > ./.mfxnobackup
 
-# upx_run check, part2
+# upx_run sanity check, part2
 if ! "${upx_run[@]}" --version-short >/dev/null; then
     echo "UPX-ERROR: FATAL: upx --version-short FAILED"
     echo "please make sure that \$upx_exe contains ABSOLUTE file paths and can be run from any directory"

@@ -2,9 +2,9 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2023 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2023 Laszlo Molnar
-   Copyright (C) 2001-2023 John F. Reiser
+   Copyright (C) 1996-2024 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2024 Laszlo Molnar
+   Copyright (C) 2001-2024 John F. Reiser
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -74,14 +74,14 @@ PackBSDI386::PackBSDI386(InputFile *f) : super(f)
     }
 }
 
-static const
+static const CLANG_FORMAT_DUMMY_STATEMENT
 #include "stub/i386-linux.elf.execve-entry.h"
-static const
+static const CLANG_FORMAT_DUMMY_STATEMENT
 #include "stub/i386-linux.elf.execve-fold.h"
 
-static const
+static const CLANG_FORMAT_DUMMY_STATEMENT
 #include "stub/i386-bsd.elf.execve-entry.h"
-static const
+static const CLANG_FORMAT_DUMMY_STATEMENT
 #include "stub/i386-bsd.elf.execve-fold.h"
 
 

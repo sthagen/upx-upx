@@ -3,15 +3,24 @@
 set -e; set -o pipefail
 argv0=$0; argv0abs=$(readlink -fn "$argv0"); argv0dir=$(dirname "$argv0abs")
 
+#
+# Copyright (C) Markus Franz Xaver Johannes Oberhumer
+#
+# test file system behaviour with symlinks; requires:
+#   $upx_exe                (required, but with convenience fallback "./upx")
+# optional settings:
+#   $upx_exe_runner         (e.g. "qemu-x86_64 -cpu Nehalem" or "valgrind")
+#
+
+# IMPORTANT NOTE: do NOT run as user root!!
+# IMPORTANT NOTE: this script only works on Unix!!
+umask 0022
+
 # disable on macOS for now, see https://github.com/upx/upx/issues/612
 if [[ "$(uname)" == Darwin ]]; then
     echo "$0: SKIPPED"
     exit 0
 fi
-
-# IMPORTANT NOTE: do NOT run as user root!!
-# IMPORTANT NOTE: this script only works on Unix!!
-umask 0022
 
 id || true
 echo "PWD='$PWD'"
@@ -19,11 +28,6 @@ if [[ $UID == 0 || $EUID == 0 ]]; then
     echo "ERROR: do not run as root: UID=$UID EUID=$EUID"
     exit 91
 fi
-
-# test file system behaviour with symlinks; requires:
-#   $upx_exe                (required, but with convenience fallback "./upx")
-# optional settings:
-#   $upx_exe_runner         (e.g. "qemu-x86_64 -cpu Westmere" or "valgrind")
 
 #***********************************************************************
 # init & checks
@@ -38,15 +42,17 @@ upx_exe=$(readlink -fn "$upx_exe") # make absolute
 upx_run=()
 if [[ -n $upx_exe_runner ]]; then
     # usage examples:
-    #   export upx_exe_runner="qemu-x86_64 -cpu Westmere"
+    #   export upx_exe_runner="qemu-x86_64 -cpu Nehalem"
     #   export upx_exe_runner="valgrind --leak-check=no --error-exitcode=1 --quiet"
     #   export upx_exe_runner="wine"
     IFS=' ' read -r -a upx_run <<< "$upx_exe_runner" # split at spaces into array
+elif [[ -n $CMAKE_CROSSCOMPILING_EMULATOR ]]; then
+    IFS=';' read -r -a upx_run <<< "$CMAKE_CROSSCOMPILING_EMULATOR" # split at semicolons into array
 fi
 upx_run+=( "$upx_exe" )
 echo "upx_run='${upx_run[*]}'"
 
-# upx_run check
+# upx_run sanity check
 if ! "${upx_run[@]}" --version-short >/dev/null; then echo "UPX-ERROR: FATAL: upx --version-short FAILED"; exit 1; fi
 if ! "${upx_run[@]}" -L >/dev/null 2>&1; then echo "UPX-ERROR: FATAL: upx -L FAILED"; exit 1; fi
 if ! "${upx_run[@]}" --help >/dev/null;  then echo "UPX-ERROR: FATAL: upx --help FAILED"; exit 1; fi

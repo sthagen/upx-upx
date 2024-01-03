@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2023 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2023 Laszlo Molnar
+   Copyright (C) 1996-2024 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2024 Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -154,7 +154,7 @@ typedef unsigned char uchar;
 // convention: use "charptr" when dealing with abstract pointer arithmetics
 #define charptr upx_charptr_unit_type *
 // upx_charptr_unit_type is some opaque type with sizeof(type) == 1
-struct alignas(1) upx_charptr_unit_type { char hidden__; };
+struct alignas(1) upx_charptr_unit_type final { char hidden__; };
 ACC_COMPILE_TIME_ASSERT_HEADER(sizeof(upx_charptr_unit_type) == 1)
 
 // using the system off_t was a bad idea even back in 199x...
@@ -191,7 +191,7 @@ typedef upx_int64_t upx_off_t;
 // portab
 **************************************************************************/
 
-// some system headers may define these, so undef just in case
+// some platform system headers may pre-define these, so undef to avoid conflicts
 #undef _
 #undef __
 #undef ___
@@ -322,6 +322,7 @@ typedef upx_int64_t upx_off_t;
 #define VALGRIND_MAKE_MEM_UNDEFINED(addr, len) 0
 #endif
 
+// TODO later: check __MINGW_PRINTF_FORMAT
 #if defined(_WIN32) && defined(__MINGW32__) && defined(__GNUC__) && !defined(__clang__)
 #define attribute_format(a, b) __attribute__((__format__(__gnu_printf__, a, b)))
 #elif (ACC_CC_CLANG || ACC_CC_GNUC)
@@ -576,6 +577,7 @@ using upx::tribool;
 #define M_LZMA        14
 #define M_DEFLATE     15 // zlib
 #define M_ZSTD        16
+#define M_BZIP2       17
 // compression methods internal usage
 #define M_ALL         (-1)
 #define M_END         (-2)
@@ -590,6 +592,7 @@ using upx::tribool;
 #define M_IS_LZMA(x)    (((x) &255) == M_LZMA)
 #define M_IS_DEFLATE(x) ((x) == M_DEFLATE)
 #define M_IS_ZSTD(x)    ((x) == M_ZSTD)
+#define M_IS_BZIP2(x)   ((x) == M_BZIP2)
 
 // filters internal usage
 #define FT_END         (-1)
@@ -613,10 +616,9 @@ using upx::tribool;
 #endif
 
 struct upx_callback_t;
-typedef upx_callback_t *upx_callback_p;
-typedef void(__acc_cdecl *upx_progress_func_t)(upx_callback_p, unsigned, unsigned);
+typedef void(__acc_cdecl *upx_progress_func_t)(upx_callback_t *, unsigned, unsigned);
 
-struct upx_callback_t {
+struct upx_callback_t final {
     upx_progress_func_t nprogress;
     void *user;
 
@@ -627,7 +629,13 @@ struct upx_callback_t {
 // compression - config_t
 **************************************************************************/
 
-struct lzma_compress_config_t {
+struct bzip2_compress_config_t final {
+    unsigned dummy;
+
+    void reset() noexcept;
+};
+
+struct lzma_compress_config_t final {
     typedef OptVar<unsigned, 2u, 0u, 4u> pos_bits_t;         // pb
     typedef OptVar<unsigned, 0u, 0u, 4u> lit_pos_bits_t;     // lp
     typedef OptVar<unsigned, 3u, 0u, 8u> lit_context_bits_t; // lc
@@ -647,11 +655,11 @@ struct lzma_compress_config_t {
     void reset() noexcept;
 };
 
-struct ucl_compress_config_t : public REAL_ucl_compress_config_t {
+struct ucl_compress_config_t final : public REAL_ucl_compress_config_t {
     void reset() noexcept { memset(this, 0xff, sizeof(*this)); }
 };
 
-struct zlib_compress_config_t {
+struct zlib_compress_config_t final {
     typedef OptVar<unsigned, 8u, 1u, 9u> mem_level_t;     // ml
     typedef OptVar<unsigned, 15u, 9u, 15u> window_bits_t; // wb
     typedef OptVar<unsigned, 0u, 0u, 4u> strategy_t;      // st
@@ -663,19 +671,21 @@ struct zlib_compress_config_t {
     void reset() noexcept;
 };
 
-struct zstd_compress_config_t {
+struct zstd_compress_config_t final {
     unsigned dummy;
 
     void reset() noexcept;
 };
 
-struct upx_compress_config_t {
+struct upx_compress_config_t final {
+    bzip2_compress_config_t conf_bzip2;
     lzma_compress_config_t conf_lzma;
     ucl_compress_config_t conf_ucl;
     zlib_compress_config_t conf_zlib;
     zstd_compress_config_t conf_zstd;
 
     void reset() noexcept {
+        conf_bzip2.reset();
         conf_lzma.reset();
         conf_ucl.reset();
         conf_zlib.reset();
@@ -689,7 +699,13 @@ struct upx_compress_config_t {
 // compression - result_t
 **************************************************************************/
 
-struct lzma_compress_result_t {
+struct bzip2_compress_result_t final {
+    unsigned dummy;
+
+    void reset() noexcept { mem_clear(this); }
+};
+
+struct lzma_compress_result_t final {
     unsigned pos_bits;         // pb
     unsigned lit_pos_bits;     // lp
     unsigned lit_context_bits; // lc
@@ -702,25 +718,25 @@ struct lzma_compress_result_t {
     void reset() noexcept { mem_clear(this); }
 };
 
-struct ucl_compress_result_t {
+struct ucl_compress_result_t final {
     ucl_uint result[16];
 
     void reset() noexcept { mem_clear(this); }
 };
 
-struct zlib_compress_result_t {
+struct zlib_compress_result_t final {
     unsigned dummy;
 
     void reset() noexcept { mem_clear(this); }
 };
 
-struct zstd_compress_result_t {
+struct zstd_compress_result_t final {
     unsigned dummy;
 
     void reset() noexcept { mem_clear(this); }
 };
 
-struct upx_compress_result_t {
+struct upx_compress_result_t final {
     // debugging aid
     struct Debug {
         int method, level;
@@ -729,6 +745,7 @@ struct upx_compress_result_t {
     };
     Debug debug;
 
+    bzip2_compress_result_t result_bzip2;
     lzma_compress_result_t result_lzma;
     ucl_compress_result_t result_ucl;
     zlib_compress_result_t result_zlib;
@@ -736,6 +753,7 @@ struct upx_compress_result_t {
 
     void reset() noexcept {
         debug.reset();
+        result_bzip2.reset();
         result_lzma.reset();
         result_ucl.reset();
         result_zlib.reset();
@@ -802,19 +820,19 @@ unsigned upx_adler32(const void *buf, unsigned len, unsigned adler = 1);
 unsigned upx_crc32  (const void *buf, unsigned len, unsigned crc = 0);
 
 int upx_compress           ( const upx_bytep src, unsigned  src_len,
-                                   upx_bytep dst, unsigned* dst_len,
-                                   upx_callback_p cb,
+                                   upx_bytep dst, unsigned *dst_len,
+                                   upx_callback_t *cb,
                                    int method, int level,
                              const upx_compress_config_t *cconf,
                                    upx_compress_result_t *cresult );
 int upx_decompress         ( const upx_bytep src, unsigned  src_len,
-                                   upx_bytep dst, unsigned* dst_len,
+                                   upx_bytep dst, unsigned *dst_len,
                                    int method,
                              const upx_compress_result_t *cresult );
 int upx_test_overlap       ( const upx_bytep buf,
                              const upx_bytep tbuf,
                                    unsigned  src_off, unsigned src_len,
-                                   unsigned* dst_len,
+                                   unsigned *dst_len,
                                    int method,
                              const upx_compress_result_t *cresult );
 // clang-format on

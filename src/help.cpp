@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2023 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2023 Laszlo Molnar
+   Copyright (C) 1996-2024 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2024 Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -25,6 +25,7 @@
    <markus@oberhumer.com>               <ezerotven+github@gmail.com>
  */
 
+#define WANT_WINDOWS_LEAN_H 1 // _WIN32_WINNT
 #include "conf.h"
 #include "compress/compress.h" // upx_ucl_version_string()
 // for list_all_packers():
@@ -410,14 +411,19 @@ void show_version(bool one_line) {
     if (v != nullptr && v[0])
         fprintf(f, "zstd data compression library %s\n", v);
 #endif
+#if (WITH_BZIP2)
+    v = upx_bzip2_version_string();
+    if (v != nullptr && v[0])
+        fprintf(f, "bzip2 data compression library %s\n", v);
+#endif
 #if !defined(DOCTEST_CONFIG_DISABLE)
     fprintf(f, "doctest C++ testing framework version %s\n", DOCTEST_VERSION_STR);
 #endif
     // clang-format off
-    fprintf(f, "Copyright (C) 1996-2023 Markus Franz Xaver Johannes Oberhumer\n");
-    fprintf(f, "Copyright (C) 1996-2023 Laszlo Molnar\n");
-    fprintf(f, "Copyright (C) 2000-2023 John F. Reiser\n");
-    fprintf(f, "Copyright (C) 2002-2023 Jens Medoch\n");
+    fprintf(f, "Copyright (C) 1996-2024 Markus Franz Xaver Johannes Oberhumer\n");
+    fprintf(f, "Copyright (C) 1996-2024 Laszlo Molnar\n");
+    fprintf(f, "Copyright (C) 2000-2024 John F. Reiser\n");
+    fprintf(f, "Copyright (C) 2002-2024 Jens Medoch\n");
 #if (WITH_ZLIB)
     fprintf(f, "Copyright (C) 1995" "-2023 Jean-loup Gailly and Mark Adler\n");
 #endif
@@ -427,6 +433,9 @@ void show_version(bool one_line) {
 #if (WITH_ZSTD)
     // see vendor/zstd/LICENSE; main author is Yann Collet
     fprintf(f, "Copyright (C) 2015" "-2023 Meta Platforms, Inc. and affiliates\n");
+#endif
+#if (WITH_BZIP2)
+    fprintf(f, "Copyright (C) 1996" "-2010 Julian Seward\n"); // see <bzlib.h>
 #endif
 #if !defined(DOCTEST_CONFIG_DISABLE)
     fprintf(f, "Copyright (C) 2016" "-2023 Viktor Kirilov\n");
@@ -449,19 +458,56 @@ void show_sysinfo(const char *options_var) {
         con_fprintf(f, "UPX version: ");
         fflush(f);
         show_version(true);
+        con_fprintf(f, "UPX version internal: 0x%06x %s\n", UPX_VERSION_HEX, UPX_VERSION_STRING);
     }
     fflush(stdout);
 
     // Compilation Flags
-    if (opt->verbose >= 2) {
+    {
         size_t cf_count = 0;
-        auto cf_print = [f, &cf_count](const char *name, const char *fmt, upx_int64_t v) noexcept {
+        auto cf_print = [f, &cf_count](const char *name, const char *fmt, upx_int64_t v,
+                                       int need_verbose = 2) noexcept {
+            if (opt->verbose < need_verbose)
+                return;
             if (cf_count++ == 0)
                 con_fprintf(f, "\nCompilation flags:\n");
             con_fprintf(f, "  %s = ", name);
             con_fprintf(f, fmt, v);
             con_fprintf(f, "\n");
         };
+        // language
+        cf_print("__cplusplus", "%lld", __cplusplus + 0, 3);
+#if defined(_MSVC_LANG)
+        cf_print("_MSVC_LANG", "%lld", _MSVC_LANG + 0, 3);
+#endif
+        // compiler
+#if defined(ACC_CC_CLANG)
+        cf_print("ACC_CC_CLANG", "0x%06llx", ACC_CC_CLANG + 0, 3);
+#endif
+#if defined(ACC_CC_GNUC)
+        cf_print("ACC_CC_GNUC", "0x%06llx", ACC_CC_GNUC + 0, 3);
+#endif
+#if defined(ACC_CC_MSC)
+        cf_print("ACC_CC_MSC", "%lld", ACC_CC_MSC + 0, 3);
+#endif
+#if defined(__clang__)
+        cf_print("__clang__", "%lld", __clang__ + 0);
+#endif
+#if defined(__clang_major__)
+        cf_print("__clang_major__", "%lld", __clang_major__ + 0);
+#endif
+#if defined(__GNUC__)
+        cf_print("__GNUC__", "%lld", __GNUC__ + 0);
+#endif
+#if defined(__GNUC_MINOR__)
+        cf_print("__GNUC_MINOR__", "%lld", __GNUC_MINOR__ + 0);
+#endif
+#if defined(_MSC_VER)
+        cf_print("_MSC_VER", "%lld", _MSC_VER + 0);
+#endif
+#if defined(_MSC_FULL_VER)
+        cf_print("_MSC_FULL_VER", "%lld", _MSC_FULL_VER + 0);
+#endif
         // OS and libc
 #if defined(WINVER)
         cf_print("WINVER", "0x%04llx", WINVER + 0);
@@ -472,11 +518,11 @@ void show_sysinfo(const char *options_var) {
 #if defined(__MSVCRT_VERSION__)
         cf_print("__MSVCRT_VERSION__", "0x%04llx", __MSVCRT_VERSION__ + 0);
 #endif
-#if defined(_USE_MINGW_ANSI_STDIO)
-        cf_print("_USE_MINGW_ANSI_STDIO", "%lld", _USE_MINGW_ANSI_STDIO + 0);
+#if defined(__MINGW64_VERSION_MAJOR)
+        cf_print("__MINGW64_VERSION_MAJOR", "%lld", __MINGW64_VERSION_MAJOR + 0);
 #endif
 #if defined(__USE_MINGW_ANSI_STDIO)
-        cf_print("__USE_MINGW_ANSI_STDIO", "%lld", __USE_MINGW_ANSI_STDIO + 0);
+        cf_print("__USE_MINGW_ANSI_STDIO", "%lld", __USE_MINGW_ANSI_STDIO + 0, 3);
 #endif
 #if defined(__GLIBC__)
         cf_print("__GLIBC__", "%lld", __GLIBC__ + 0);
@@ -484,10 +530,15 @@ void show_sysinfo(const char *options_var) {
 #if defined(__GLIBC_MINOR__)
         cf_print("__GLIBC_MINOR__", "%lld", __GLIBC_MINOR__ + 0);
 #endif
-        // compiler
-#if defined(_MSC_VER) && defined(_MSC_FULL_VER)
-        cf_print("_MSC_VER", "%lld", _MSC_VER + 0);
-        cf_print("_MSC_FULL_VER", "%lld", _MSC_FULL_VER + 0);
+        // misc compilation options
+#if defined(UPX_CONFIG_DISABLE_WSTRICT)
+        cf_print("UPX_CONFIG_DISABLE_WSTRICT", "%lld", UPX_CONFIG_DISABLE_WSTRICT + 0, 3);
+#endif
+#if defined(UPX_CONFIG_DISABLE_WERROR)
+        cf_print("UPX_CONFIG_DISABLE_WERROR", "%lld", UPX_CONFIG_DISABLE_WERROR + 0, 3);
+#endif
+#if defined(WITH_THREADS)
+        cf_print("WITH_THREADS", "%lld", WITH_THREADS + 0);
 #endif
         UNUSED(cf_count);
         UNUSED(cf_print);
@@ -517,6 +568,8 @@ void show_sysinfo(const char *options_var) {
         con_fprintf(f, "\n");
         if (e && e[0])
             con_fprintf(f, "Contents of environment variable %s: '%s'\n\n", options_var, e);
+        else if (e)
+            con_fprintf(f, "Environment variable '%s' is set but empty.\n\n", options_var);
         else
             con_fprintf(f, "Environment variable '%s' is not set.\n\n", options_var);
     }

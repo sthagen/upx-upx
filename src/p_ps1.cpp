@@ -2,9 +2,9 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2023 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2023 Laszlo Molnar
-   Copyright (C) 2002-2023 Jens Medoch
+   Copyright (C) 1996-2024 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2024 Laszlo Molnar
+   Copyright (C) 2002-2024 Jens Medoch
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -136,12 +136,10 @@ bool PackPs1::readBkupHeader() {
 }
 
 #define INIT_BH_BKUP(p, l)                                                                         \
-    ACC_BLOCK_BEGIN                                                                                \
-    {                                                                                              \
+    do {                                                                                           \
         (p)->id = '1';                                                                             \
         (p)->len = l;                                                                              \
-    }                                                                                              \
-    ACC_BLOCK_END
+    } while (0)
 #define ADLER16(a) (((a) >> 16) ^ ((a) &0xffff))
 
 void PackPs1::putBkupHeader(const byte *src, byte *dst, unsigned *len) {

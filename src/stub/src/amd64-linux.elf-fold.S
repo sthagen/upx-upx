@@ -2,7 +2,7 @@
 *
 *  This file is part of the UPX executable compressor.
 *
-*  Copyright (C) 2000-2023 John F. Reiser
+*  Copyright (C) 2000-2024 John F. Reiser
 *  All Rights Reserved.
 *
 *  UPX and the UCL library are free software; you can redistribute them
@@ -215,5 +215,9 @@ write: .globl write
         mov $__NR_write,%al; 5: jmp 5f
 read: .globl read
         movb $ __NR_read,%al; 5: jmp sysgo
+
+my_bkpt: .globl my_bkpt
+        int3
+        ret
 
 /* vim:set ts=8 sw=8 et: */

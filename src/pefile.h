@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2023 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2023 Laszlo Molnar
+   Copyright (C) 1996-2024 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2024 Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -383,7 +383,7 @@ protected:
     };
 
     class Reloc final : private noncopyable {
-        // these are set in constructor
+        // these are set in the constructor:
         byte *start = nullptr;
         unsigned start_size_in_bytes = 0;
         bool start_did_alloc = false;

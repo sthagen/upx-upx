@@ -2,9 +2,9 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2023 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2023 Laszlo Molnar
-   Copyright (C) 2000-2023 John F. Reiser
+   Copyright (C) 1996-2024 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2024 Laszlo Molnar
+   Copyright (C) 2000-2024 John F. Reiser
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -1637,15 +1637,15 @@ PackLinuxElf64amd::defineSymbols(Filter const *ft)
     PackLinuxElf64::defineSymbols(ft);
 }
 
-static const
+static const CLANG_FORMAT_DUMMY_STATEMENT
 #include "stub/i386-linux.elf-entry.h"
-static const
+static const CLANG_FORMAT_DUMMY_STATEMENT
 #include "stub/i386-linux.elf-so_entry.h"
-static const
+static const CLANG_FORMAT_DUMMY_STATEMENT
 #include "stub/i386-linux.elf-fold.h"
-static const
+static const CLANG_FORMAT_DUMMY_STATEMENT
 #include "stub/i386-linux.elf-so_fold.h"
-static const
+static const CLANG_FORMAT_DUMMY_STATEMENT
 #include "stub/i386-linux.shlib-init.h"
 
 void
@@ -1677,9 +1677,9 @@ PackLinuxElf32x86::buildLoader(const Filter *ft)
         tmp,                       sizeof(stub_i386_linux_elf_fold),  ft );
 }
 
-static const
+static const CLANG_FORMAT_DUMMY_STATEMENT
 #include "stub/i386-bsd.elf-entry.h"
-static const
+static const CLANG_FORMAT_DUMMY_STATEMENT
 #include "stub/i386-bsd.elf-fold.h"
 
 void
@@ -1705,10 +1705,10 @@ PackBSDElf32x86::buildLoader(const Filter *ft)
         tmp,                     sizeof(stub_i386_bsd_elf_fold), ft);
 }
 
-static const
+static const CLANG_FORMAT_DUMMY_STATEMENT
 #include "stub/i386-netbsd.elf-entry.h"
 
-static const
+static const CLANG_FORMAT_DUMMY_STATEMENT
 #include "stub/i386-netbsd.elf-fold.h"
 
 #define WANT_NHDR_ENUM
@@ -1738,7 +1738,7 @@ PackNetBSDElf32x86::buildLoader(const Filter *ft)
         tmp,                        sizeof(stub_i386_netbsd_elf_fold), ft);
 }
 
-static const
+static const CLANG_FORMAT_DUMMY_STATEMENT
 #include "stub/i386-openbsd.elf-fold.h"
 
 void
@@ -1764,33 +1764,33 @@ PackOpenBSDElf32x86::buildLoader(const Filter *ft)
         tmp,                     sizeof(stub_i386_openbsd_elf_fold), ft);
 }
 
-static const
+static const CLANG_FORMAT_DUMMY_STATEMENT
 #include "stub/arm.v5a-linux.elf-entry.h"
-static const
+static const CLANG_FORMAT_DUMMY_STATEMENT
 #include "stub/arm.v5a-linux.elf-so_entry.h"
-static const
+static const CLANG_FORMAT_DUMMY_STATEMENT
 #include "stub/arm.v5a-linux.elf-fold.h"
-static const
+static const CLANG_FORMAT_DUMMY_STATEMENT
 #include "stub/arm.v5a-linux.elf-so_fold.h"
-static const
+static const CLANG_FORMAT_DUMMY_STATEMENT
 #include "stub/arm.v5t-linux.shlib-init.h"
 
-static const
+static const CLANG_FORMAT_DUMMY_STATEMENT
 #include "stub/arm.v4a-linux.elf-entry.h"
-static const
+static const CLANG_FORMAT_DUMMY_STATEMENT
 #include "stub/arm.v4a-linux.elf-so_entry.h"
-static const
+static const CLANG_FORMAT_DUMMY_STATEMENT
 #include "stub/arm.v4a-linux.elf-fold.h"
-static const
+static const CLANG_FORMAT_DUMMY_STATEMENT
 #include "stub/arm.v4a-linux.elf-so_fold.h"
 #if 0
-static const
+static const CLANG_FORMAT_DUMMY_STATEMENT
 #include "stub/arm.v4a-linux.shlib-init.h"
 #endif
 
-static const
+static const CLANG_FORMAT_DUMMY_STATEMENT
 #include "stub/armeb.v4a-linux.elf-entry.h"
-static const
+static const CLANG_FORMAT_DUMMY_STATEMENT
 #include "stub/armeb.v4a-linux.elf-fold.h"
 
 void
@@ -1822,11 +1822,11 @@ PackLinuxElf32armLe::buildLoader(Filter const *ft)
     }
 }
 
-static const
+static const CLANG_FORMAT_DUMMY_STATEMENT
 #include "stub/mipsel.r3000-linux.elf-entry.h"
-static const
+static const CLANG_FORMAT_DUMMY_STATEMENT
 #include "stub/mipsel.r3000-linux.elf-fold.h"
-static const
+static const CLANG_FORMAT_DUMMY_STATEMENT
 #include "stub/mipsel.r3000-linux.shlib-init.h"
 
 void
@@ -1843,11 +1843,11 @@ PackLinuxElf32mipsel::buildLoader(Filter const *ft)
         stub_mipsel_r3000_linux_elf_fold,  sizeof(stub_mipsel_r3000_linux_elf_fold), ft);
 }
 
-static const
+static const CLANG_FORMAT_DUMMY_STATEMENT
 #include "stub/mips.r3000-linux.elf-entry.h"
-static const
+static const CLANG_FORMAT_DUMMY_STATEMENT
 #include "stub/mips.r3000-linux.elf-fold.h"
-static const
+static const CLANG_FORMAT_DUMMY_STATEMENT
 #include "stub/mips.r3000-linux.shlib-init.h"
 
 void
@@ -1864,9 +1864,9 @@ PackLinuxElf32mipseb::buildLoader(Filter const *ft)
         stub_mips_r3000_linux_elf_fold,  sizeof(stub_mips_r3000_linux_elf_fold), ft);
 }
 
-static const
+static const CLANG_FORMAT_DUMMY_STATEMENT
 #include "stub/powerpc-linux.elf-entry.h"
-static const
+static const CLANG_FORMAT_DUMMY_STATEMENT
 #include "stub/powerpc-linux.elf-fold.h"
 
 void
@@ -1877,9 +1877,9 @@ PackLinuxElf32ppc::buildLoader(const Filter *ft)
         stub_powerpc_linux_elf_fold,  sizeof(stub_powerpc_linux_elf_fold), ft);
 }
 
-static const
+static const CLANG_FORMAT_DUMMY_STATEMENT
 #include "stub/powerpc64le-linux.elf-entry.h"
-static const
+static const CLANG_FORMAT_DUMMY_STATEMENT
 #include "stub/powerpc64le-linux.elf-fold.h"
 
 void
@@ -1890,9 +1890,9 @@ PackLinuxElf64ppcle::buildLoader(const Filter *ft)
         stub_powerpc64le_linux_elf_fold,  sizeof(stub_powerpc64le_linux_elf_fold), ft);
 }
 
-static const
+static const CLANG_FORMAT_DUMMY_STATEMENT
 #include "stub/powerpc64-linux.elf-entry.h"
-static const
+static const CLANG_FORMAT_DUMMY_STATEMENT
 #include "stub/powerpc64-linux.elf-fold.h"
 
 void
@@ -1903,15 +1903,15 @@ PackLinuxElf64ppc::buildLoader(const Filter *ft)
         stub_powerpc64_linux_elf_fold,  sizeof(stub_powerpc64_linux_elf_fold), ft);
 }
 
-static const
+static const CLANG_FORMAT_DUMMY_STATEMENT
 #include "stub/amd64-linux.elf-entry.h"
-static const
+static const CLANG_FORMAT_DUMMY_STATEMENT
 #include "stub/amd64-linux.elf-fold.h"
-static const
+static const CLANG_FORMAT_DUMMY_STATEMENT
 #include "stub/amd64-linux.elf-so_entry.h"
-static const
+static const CLANG_FORMAT_DUMMY_STATEMENT
 #include "stub/amd64-linux.elf-so_fold.h"
-static const
+static const CLANG_FORMAT_DUMMY_STATEMENT
 #include "stub/amd64-linux.shlib-init.h"
 
 void
@@ -1928,15 +1928,15 @@ PackLinuxElf64amd::buildLoader(const Filter *ft)
         stub_amd64_linux_elf_fold,  sizeof(stub_amd64_linux_elf_fold), ft);
 }
 
-static const
+static const CLANG_FORMAT_DUMMY_STATEMENT
 #include "stub/arm64-linux.elf-entry.h"
-static const
+static const CLANG_FORMAT_DUMMY_STATEMENT
 #include "stub/arm64-linux.elf-so_entry.h"
-static const
+static const CLANG_FORMAT_DUMMY_STATEMENT
 #include "stub/arm64-linux.elf-fold.h"
-static const
+static const CLANG_FORMAT_DUMMY_STATEMENT
 #include "stub/arm64-linux.elf-so_fold.h"
-static const
+static const CLANG_FORMAT_DUMMY_STATEMENT
 #include "stub/arm64-linux.shlib-init.h"
 
 void
@@ -3967,7 +3967,15 @@ void PackLinuxElf32::pack1(OutputFile * /*fo*/, Filter &ft)
                 ++lg2_page;
             }
         }
-        if (PT_GNU_RELRO32 == type) {
+        if (PT_GNU_RELRO32 == type
+        &&  16 < lg2_page) {
+            // x86* allows 4K, 2M, 1G
+            // arm32 and arm64 both allow 4K, 16K, 64K; Apple Silicon uses 16K
+            // Oracle 5.4.17-2136.314.6.2.el8uek.aarch64 demands 64K
+            // PowerPC and PowerPC64 has 4K, 64K, 1M (?), 16M (?)
+            // MIPS  allows any power of 2 from 4K through 64K
+
+            // If 64K < .p_align then we assume that 4K is also accepted.
             // .p_align can be like 2M, which is a huge over-estimate.
             // RELRO ends on a page boundary: usually close to actual page_size
             unsigned offset = get_te32(&phdr->p_offset);
@@ -3978,7 +3986,7 @@ void PackLinuxElf32::pack1(OutputFile * /*fo*/, Filter &ft)
                     ++b;
                 }
                 lg2_page = umin(lg2_page, -1+ b);
-                }
+            }
         }
         if (PT_GNU_STACK32 == type) {
             gnu_stack = phdr;
@@ -4849,7 +4857,15 @@ void PackLinuxElf64::pack1(OutputFile * /*fo*/, Filter &ft)
                 ++lg2_page;
             }
         }
-        if (PT_GNU_RELRO64 == type) {
+        if (PT_GNU_RELRO64 == type
+        &&  16 < lg2_page) {
+            // x86* allows 4K, 2M, 1G
+            // arm32 and arm64 both allow 4K, 16K, 64K; Apple Silicon uses 16K
+            // Oracle 5.4.17-2136.314.6.2.el8uek.aarch64 demands 64K
+            // PowerPC and PowerPC64 has 4K, 64K, 1M (?), 16M (?)
+            // MIPS  allows any power of 2 from 4K through 64K
+
+            // If 64K < .p_align then we assume that 4K is also accepted.
             // .p_align can be like 2M, which is a huge over-estimate.
             // RELRO ends on a page boundary: usually close to actual page_size
             unsigned offset = get_te64(&phdr->p_offset);
@@ -4860,7 +4876,7 @@ void PackLinuxElf64::pack1(OutputFile * /*fo*/, Filter &ft)
                     ++b;
                 }
                 lg2_page = umin(lg2_page, -1+ b);
-                }
+            }
         }
         if (PT_GNU_STACK64 == type) {
             gnu_stack = phdr;

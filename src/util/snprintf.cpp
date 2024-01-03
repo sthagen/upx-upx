@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2023 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2023 Laszlo Molnar
+   Copyright (C) 1996-2024 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2024 Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -40,6 +40,15 @@ upx_rsize_t upx_safe_strlen(const char *s) {
 #define strlen upx_safe_strlen
 }
 
+upx_rsize_t upx_safe_strlen_noexcept(const char *s) noexcept {
+#undef strlen
+    assert_noexcept(s != nullptr);
+    size_t len = strlen(s);
+    assert_noexcept(len < UPX_RSIZE_MAX_STR);
+    return len;
+#define strlen upx_safe_strlen
+}
+
 int upx_safe_vsnprintf(char *str, upx_rsize_t max_size, const char *format, va_list ap) {
 #undef vsnprintf
     size_t size;
@@ -62,6 +71,35 @@ int upx_safe_vsnprintf(char *str, upx_rsize_t max_size, const char *format, va_l
     if (str != nullptr) {
         assert(size <= max_size);
         assert(str[size - 1] == '\0');
+    }
+
+    return ACC_ICONV(int, size - 1); // snprintf() returns length, not size
+#define vsnprintf upx_safe_vsnprintf
+}
+
+int upx_safe_vsnprintf_noexcept(char *str, upx_rsize_t max_size, const char *format,
+                                va_list ap) noexcept {
+#undef vsnprintf
+    size_t size;
+
+    // preconditions
+    assert_noexcept(max_size <= UPX_RSIZE_MAX_STR);
+    if (str != nullptr)
+        assert_noexcept(max_size > 0);
+    else
+        assert_noexcept(max_size == 0);
+
+    long long len = vsnprintf(str, max_size, format, ap);
+    assert_noexcept(len >= 0);
+    assert_noexcept(len < UPX_RSIZE_MAX_STR);
+    size = (size_t) len + 1;
+
+    // postconditions
+    assert_noexcept(size > 0);
+    assert_noexcept(size <= UPX_RSIZE_MAX_STR);
+    if (str != nullptr) {
+        assert_noexcept(size <= max_size);
+        assert_noexcept(str[size - 1] == '\0');
     }
 
     return ACC_ICONV(int, size - 1); // snprintf() returns length, not size

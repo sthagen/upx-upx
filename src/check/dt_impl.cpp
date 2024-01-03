@@ -2,7 +2,7 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2023 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2024 Markus Franz Xaver Johannes Oberhumer
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -43,8 +43,10 @@
 #pragma GCC diagnostic ignored "-Wshadow"
 #endif
 
-#if !defined(UPX_DOCTEST_CONFIG_MULTITHREADING)
+#if !defined(UPX_DOCTEST_CONFIG_MULTITHREADING) && !(WITH_THREADS)
+#ifndef DOCTEST_CONFIG_NO_MULTITHREADING
 #define DOCTEST_CONFIG_NO_MULTITHREADING
+#endif
 #endif
 
 #if defined(__clang__) && defined(__FAST_MATH__) && defined(__INTEL_LLVM_COMPILER)

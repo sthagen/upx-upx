@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2023 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2023 Laszlo Molnar
+   Copyright (C) 1996-2024 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2024 Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -150,7 +150,7 @@ void throwCantPack(const char *format, ...) {
     char msg[1024];
     va_list ap;
     va_start(ap, format);
-    (void) upx_safe_vsnprintf(msg, sizeof(msg), format, ap);
+    (void) upx_safe_vsnprintf_noexcept(msg, sizeof(msg), format, ap);
     va_end(ap);
     throwCantPack(msg);
 }
@@ -160,7 +160,17 @@ void throwCantUnpack(const char *format, ...) {
     char msg[1024];
     va_list ap;
     va_start(ap, format);
-    (void) upx_safe_vsnprintf(msg, sizeof(msg), format, ap);
+    (void) upx_safe_vsnprintf_noexcept(msg, sizeof(msg), format, ap);
+    va_end(ap);
+    throwCantUnpack(msg);
+}
+
+template <>
+void throwInternalError(const char *format, ...) {
+    char msg[1024];
+    va_list ap;
+    va_start(ap, format);
+    (void) upx_safe_vsnprintf_noexcept(msg, sizeof(msg), format, ap);
     va_end(ap);
     throwCantUnpack(msg);
 }

@@ -2,7 +2,7 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2023 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2024 Markus Franz Xaver Johannes Oberhumer
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -55,7 +55,7 @@ static int convert_errno_from_zstd(size_t zr) {
 **************************************************************************/
 
 int upx_zstd_compress(const upx_bytep src, unsigned src_len, upx_bytep dst, unsigned *dst_len,
-                      upx_callback_p cb_parm, int method, int level,
+                      upx_callback_t *cb_parm, int method, int level,
                       const upx_compress_config_t *cconf_parm, upx_compress_result_t *cresult) {
     assert(method == M_ZSTD);
     assert(level > 0);
@@ -65,6 +65,7 @@ int upx_zstd_compress(const upx_bytep src, unsigned src_len, upx_bytep dst, unsi
     size_t zr;
     const zstd_compress_config_t *const lcconf = cconf_parm ? &cconf_parm->conf_zstd : nullptr;
     zstd_compress_result_t *const res = &cresult->result_zstd;
+    res->reset();
 
     // TODO later: map level 1..10 to zstd-level 1..22
     if (level == 10)
@@ -74,8 +75,6 @@ int upx_zstd_compress(const upx_bytep src, unsigned src_len, upx_bytep dst, unsi
     if (lcconf) {
         UNUSED(lcconf);
     }
-
-    res->dummy = 0;
 
     zr = ZSTD_compress(dst, *dst_len, src, src_len, level);
     if (ZSTD_isError(zr)) {
@@ -221,6 +220,7 @@ TEST_CASE("upx_zstd_decompress") {
     d_len = 31;
     r = upx_zstd_decompress(c_data, 16, d_buf, &d_len, M_ZSTD, nullptr);
     CHECK(r == UPX_E_OUTPUT_OVERRUN);
+    UNUSED(r);
 }
 
 #endif // WITH_ZSTD

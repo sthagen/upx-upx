@@ -24,13 +24,13 @@ endif
 # default
 #***********************************************************************
 
+.DEFAULT_GOAL = build/release
+
 run_cmake_config = $(CMAKE) -S . -B $1 $(UPX_CMAKE_CONFIG_FLAGS) -DCMAKE_BUILD_TYPE=$2
 run_cmake_build  = $(CMAKE) --build $1 $(UPX_CMAKE_BUILD_FLAGS) --config $2
-# avoid re-running run_cmake_config if CMakeCache.txt already exists
-run_config       = $(if $(wildcard $1/CMakeCache.txt),,$(call run_cmake_config,$1,$2))
+# avoid re-running run_cmake_config if .upx_cmake_config_done.txt already exists
+run_config       = $(if $(wildcard $1/CMakeFiles/.upx_cmake_config_done.txt),,$(call run_cmake_config,$1,$2))
 run_build        = $(call run_cmake_build,$1,$2)
-
-.DEFAULT_GOAL = build/release
 
 build/debug: PHONY
 	$(call run_config,$@,Debug)
@@ -63,7 +63,12 @@ include ./misc/make/Makefile-extra.mk
 endif
 
 # developer convenience
-ifneq ($(wildcard /usr/bin/env),) # needs bash, perl, xargs, etc.
-check-whitespace clang-format run-testsuite run-testsuite-debug run-testsuite-release: PHONY src/Makefile
+CTEST = ctest
+test:: $(.DEFAULT_GOAL) PHONY
+	cd $(.DEFAULT_GOAL) && $(CTEST)
+ifneq ($(wildcard /usr/bin/env),) # need Unix utils like bash, perl, sed, xargs, etc.
+ifneq ($(wildcard ./misc/scripts/.),)
+check-whitespace clang-format run-testsuite run-testsuite-debug run-testsuite-release: src/Makefile PHONY
 	$(MAKE) -C src $@
+endif
 endif
