@@ -1,4 +1,4 @@
-/* headers.h -- include system headers
+/* system_headers.h -- include system headers
 
    This file is part of the UPX executable compressor.
 
@@ -26,17 +26,48 @@
 
 #pragma once
 
+#include "system_defs.h"
+
 #if !(__cplusplus + 0 >= 201703L)
 #error "C++17 is required"
 #endif
 
-// sanity check
-#if defined(__ILP32) || defined(__ILP32__)
+// check expected defines
+#if defined(__CYGWIN32__) && !defined(__CYGWIN__)
+#error "missing __CYGWIN__"
+#endif
+#if defined(__CYGWIN64__) && !defined(__CYGWIN__)
+#error "missing __CYGWIN__"
+#endif
+#if defined(__clang__) || defined(__GNUC__)
+// these are pre-defined since gcc-4.6 (2011) and clang-3.2 (2012)
+#if !defined(__ORDER_BIG_ENDIAN__) || (__ORDER_BIG_ENDIAN__ + 0 == 0)
+#error "missing __ORDER_BIG_ENDIAN__"
+#endif
+#if !defined(__ORDER_LITTLE_ENDIAN__) || (__ORDER_LITTLE_ENDIAN__ + 0 == 0)
+#error "missing __ORDER_LITTLE_ENDIAN__"
+#endif
+#if !defined(__BYTE_ORDER__) || (__BYTE_ORDER__ + 0 == 0)
+#error "missing __BYTE_ORDER__"
+#endif
+#if !defined(__ORDER_BIG_ENDIAN__) || (__ORDER_BIG_ENDIAN__ + 0 != 4321)
+#error "unexpected __ORDER_BIG_ENDIAN__"
+#endif
+#if !defined(__ORDER_BIG_ENDIAN__) || (__ORDER_LITTLE_ENDIAN__ + 0 != 1234)
+#error "unexpected __ORDER_BIG_ENDIAN__"
+#endif
+#if (__BYTE_ORDER__ != __ORDER_BIG_ENDIAN__) && (__BYTE_ORDER__ != __ORDER_LITTLE_ENDIAN__)
+#error "unexpected __BYTE_ORDER__"
+#endif
+#endif
+
+// sanity checks
+#if defined(_ILP32) || defined(__ILP32) || defined(__ILP32__)
 static_assert(sizeof(int) == 4);
 static_assert(sizeof(long) == 4);
 static_assert(sizeof(void *) == 4);
 #endif
-#if defined(__LP64) || defined(__LP64__)
+#if defined(_LP64) || defined(__LP64) || defined(__LP64__)
 static_assert(sizeof(int) == 4);
 static_assert(sizeof(long) == 8);
 static_assert(sizeof(void *) == 8);
@@ -53,32 +84,13 @@ static_assert(sizeof(int) == 4);
 static_assert(sizeof(long) == 4);
 static_assert(sizeof(void *) == 8);
 #endif
-
-#if !defined(_FILE_OFFSET_BITS)
-#define _FILE_OFFSET_BITS 64
+#if defined(__CYGWIN__)
+static_assert(sizeof(int) == 4);
+static_assert(sizeof(void *) == sizeof(long));
 #endif
-#if defined(_WIN32) && defined(__MINGW32__) && (defined(__clang__) || defined(__GNUC__))
-#if !defined(__USE_MINGW_ANSI_STDIO)
-#define __USE_MINGW_ANSI_STDIO 1
-#endif
-#endif
-#if defined(_WIN32)
-// disable silly warnings about using "deprecated" POSIX functions like fopen()
-#if !defined(_CRT_NONSTDC_NO_DEPRECATE)
-#define _CRT_NONSTDC_NO_DEPRECATE 1
-#endif
-#if !defined(_CRT_NONSTDC_NO_WARNINGS)
-#define _CRT_NONSTDC_NO_WARNINGS 1
-#endif
-#if !defined(_CRT_SECURE_NO_DEPRECATE)
-#define _CRT_SECURE_NO_DEPRECATE 1
-#endif
-#if !defined(_CRT_SECURE_NO_WARNINGS)
-#define _CRT_SECURE_NO_WARNINGS 1
-#endif
-#endif // _WIN32
 
 // ACC and C system headers
+#include "system_features.h"
 #ifndef ACC_CFG_USE_NEW_STYLE_CASTS
 #define ACC_CFG_USE_NEW_STYLE_CASTS 1
 #endif
@@ -106,12 +118,14 @@ static_assert(sizeof(void *) == 8);
 #include <intrin.h>
 #endif
 
-// C++ system headers
+// C++ freestanding headers
 #include <cstddef>
 #include <exception>
 #include <new>
 #include <type_traits>
-
+#include <utility>
+// C++ system headers
+#include <memory> // std::unique_ptr
 // C++ multithreading (UPX currently does not use multithreading)
 #if __STDC_NO_ATOMICS__
 #undef WITH_THREADS
@@ -132,16 +146,14 @@ static_assert(sizeof(void *) == 8);
 #define __SANITIZE_MEMORY__ 1
 #endif
 #endif
+#if !defined(__SANITIZE_UNDEFINED_BEHAVIOR__) && defined(__has_feature)
+#if __has_feature(undefined_behavior_sanitizer)
+#define __SANITIZE_UNDEFINED_BEHAVIOR__ 1
+#endif
+#endif
 
 // UPX vendor git submodule headers
 #include <doctest/doctest/parts/doctest_fwd.h>
-#if WITH_BOOST_PFR
-#include <sstream>
-#include <boost/pfr/io.hpp>
-#endif
-#if WITH_RANGELESS_FN
-#include <rangeless/include/fn.hpp>
-#endif
 #ifndef WITH_VALGRIND
 #define WITH_VALGRIND 1
 #endif
@@ -166,7 +178,7 @@ static_assert(sizeof(void *) == 8);
 
 #ifdef WANT_WINDOWS_LEAN_H
 #if defined(_WIN32) || defined(__CYGWIN__)
-#include "util/windows_lean.h"
+#include "windows_lean.h"
 #endif
 #endif
 

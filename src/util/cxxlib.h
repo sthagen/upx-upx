@@ -133,6 +133,13 @@ private:                                                                        
     UPX_CXX_DISABLE_NEW_DELETE_IMPL_CSUDF_B__(Klass)                                               \
     UPX_CXX_DISABLE_NEW_DELETE_IMPL_CSUDDF_B__(Klass)
 
+#if defined(_LIBCPP_HAS_NO_LIBRARY_ALIGNED_ALLOCATION) // do not use std::align_val_t
+#undef UPX_CXX_DISABLE_NEW_DELETE
+#undef UPX_CXX_DISABLE_NEW_DELETE_NO_VIRTUAL
+#define UPX_CXX_DISABLE_NEW_DELETE(Klass)            private:
+#define UPX_CXX_DISABLE_NEW_DELETE_NO_VIRTUAL(Klass) private:
+#endif
+
 /*************************************************************************
 // type_traits
 **************************************************************************/
@@ -178,6 +185,38 @@ forceinline Result ptr_static_cast(const From *ptr) noexcept {
     static_assert(std::is_const_v<std::remove_pointer_t<Result> >); // required
     return static_cast<Result>(static_cast<const void *>(ptr));
 }
+
+// helper classes so we don't leak memory on exceptions; NOT thread-safe
+template <class T> // T is "Type **"
+struct ObjectDeleter final {
+    static_assert(std::is_pointer_v<T>);
+    static_assert(std::is_pointer_v<std::remove_pointer_t<T> >);
+    T items;      // public
+    size_t count; // public
+    ~ObjectDeleter() noexcept { delete_items(); }
+    void delete_items() noexcept {
+        for (size_t i = 0; i < count; i++) {
+            auto item = items[i];
+            items[i] = nullptr;
+            delete item; // single object delete
+        }
+    }
+};
+template <class T> // T is "Type **"
+struct ArrayDeleter final {
+    static_assert(std::is_pointer_v<T>);
+    static_assert(std::is_pointer_v<std::remove_pointer_t<T> >);
+    T items;      // public
+    size_t count; // public
+    ~ArrayDeleter() noexcept { delete_items(); }
+    void delete_items() noexcept {
+        for (size_t i = 0; i < count; i++) {
+            auto item = items[i];
+            items[i] = nullptr;
+            delete[] item; // array delete
+        }
+    }
+};
 
 class noncopyable {
 protected:
@@ -345,7 +384,6 @@ using OwningPointer = T *;
 // also works: a trivial class with just a number of no-ops
 template <class T>
 struct OwningPointer final {
-    static_assert(std::is_class_v<T>); // UPX convention
     typedef typename std::add_lvalue_reference<T>::type reference;
     typedef typename std::add_lvalue_reference<const T>::type const_reference;
     typedef typename std::add_pointer<T>::type pointer;
@@ -361,6 +399,7 @@ private:
     pointer ptr;
     reference operator[](std::ptrdiff_t) noexcept DELETED_FUNCTION;
     const_reference operator[](std::ptrdiff_t) const noexcept DELETED_FUNCTION;
+    UPX_CXX_DISABLE_ADDRESS(OwningPointer)               // UPX convention
     UPX_CXX_DISABLE_NEW_DELETE_NO_VIRTUAL(OwningPointer) // UPX convention
 };
 // must overload mem_clear()
@@ -378,6 +417,17 @@ inline void owner_delete(OwningPointer(T)(&object)) noexcept {
     static_assert(std::is_nothrow_destructible_v<T>);
     if (object != nullptr) {
         delete (T *) object;
+        object = nullptr;
+    }
+    assert_noexcept((T *) object == nullptr);
+    assert_noexcept(object == nullptr);
+}
+
+template <class T>
+inline void owner_free(OwningPointer(T)(&object)) noexcept {
+    static_assert(!std::is_class_v<T>); // UPX convention
+    if (object != nullptr) {
+        free((T *) object);
         object = nullptr;
     }
     assert_noexcept((T *) object == nullptr);

@@ -1306,8 +1306,7 @@ int upx_main(int argc, char *argv[]) may_throw {
     if (gitrev[0]) {
         // also see UPX_CONFIG_DISABLE_GITREV in CMakeLists.txt
         bool warn_gitrev = true;
-        const char *ee = getenv("UPX_DEBUG_DISABLE_GITREV_WARNING");
-        if (ee && ee[0] && strcmp(ee, "1") == 0)
+        if (is_envvar_true("UPX_DEBUG_DISABLE_GITREV_WARNING"))
             warn_gitrev = false;
         if (warn_gitrev) {
             FILE *f = stdout;
@@ -1355,8 +1354,11 @@ int __acc_cdecl_main main(int argc, char *argv[]) /*noexcept*/ {
     _set_abort_behavior(_WRITE_ABORT_MSG, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
 #endif
     acc_wildargv(&argc, &argv);
-    // srand((int) time(nullptr));
+#if defined(__wasi__)
+    srand((int) time(nullptr));
+#else
     srand((int) clock());
+#endif
 
     // info: main() is implicitly "noexcept", so we need a try block
 #if 0

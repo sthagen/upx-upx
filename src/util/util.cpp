@@ -25,22 +25,22 @@
    <markus@oberhumer.com>               <ezerotven+github@gmail.com>
  */
 
-#include "../headers.h"
+#include "system_headers.h"
 #include <algorithm>
 #define ACC_WANT_ACC_INCI_H 1
-#include "../miniacc.h"
+#include "miniacc.h"
 #define ACC_WANT_ACCLIB_GETOPT   1
 #define ACC_WANT_ACCLIB_HSREAD   1
 #define ACC_WANT_ACCLIB_MISC     1
 #define ACC_WANT_ACCLIB_VGET     1
 #define ACC_WANT_ACCLIB_WILDARGV 1
 #undef HAVE_MKDIR
-#include "../miniacc.h"
+#include "miniacc.h"
 #include "../conf.h"
 
 /*************************************************************************
-// assert sane memory buffer sizes to protect against integer overflows
-// and malicious header fields
+// upx_rsize_t and mem_size: assert sane memory buffer sizes to protect
+// against integer overflows and malicious header fields
 // see C 11 standard, Annex K
 **************************************************************************/
 
@@ -152,8 +152,9 @@ void uintptr_check_no_overlap(upx_uintptr_t a, size_t a_size, upx_uintptr_t b, s
     upx_uintptr_t b_end = b + mem_size(1, b_size);
     if very_unlikely (a_end < a || b_end < b) // wrap-around
         throwCantPack("ptr_check_no_overlap-overflow");
-    // same as (!(a >= b_end || b >= a_end))
-    // same as (!(a_end <= b || b_end <= a))
+    // simple, but a little bit mind bending:
+    //   same as (!(a >= b_end || b >= a_end))
+    //   same as (!(a_end <= b || b_end <= a))
     if very_unlikely (a < b_end && b < a_end)
         throwCantPack("ptr_check_no_overlap-ab");
 }
@@ -176,7 +177,7 @@ void uintptr_check_no_overlap(upx_uintptr_t a, size_t a_size, upx_uintptr_t b, s
         throwCantPack("ptr_check_no_overlap-bc");
 }
 
-#if !defined(DOCTEST_CONFIG_DISABLE) && DEBUG
+#if !defined(DOCTEST_CONFIG_DISABLE) && !defined(__wasi__) && DEBUG
 TEST_CASE("ptr_check_no_overlap 2") {
     byte p[4] = {};
 
@@ -253,7 +254,7 @@ TEST_CASE("ptr_check_no_overlap 3") {
 // stdlib
 **************************************************************************/
 
-void *upx_calloc(size_t n, size_t element_size) {
+void *upx_calloc(size_t n, size_t element_size) may_throw {
     size_t bytes = mem_size(element_size, n); // assert size
     void *p = malloc(bytes);
     if (p != nullptr)
@@ -262,7 +263,7 @@ void *upx_calloc(size_t n, size_t element_size) {
 }
 
 // simple unoptimized memswap()
-void upx_memswap(void *a, void *b, size_t n) {
+void upx_memswap(void *a, void *b, size_t n) noexcept {
     if (a != b && n != 0) {
         byte *x = (byte *) a;
         byte *y = (byte *) b;
@@ -277,7 +278,7 @@ void upx_memswap(void *a, void *b, size_t n) {
 }
 
 // much better memswap(), optimized for our use case in sort functions below
-static void memswap_no_overlap(byte *a, byte *b, size_t n) {
+static void memswap_no_overlap(byte *a, byte *b, size_t n) noexcept {
 #if defined(__clang__) && __clang_major__ < 15
     // work around a clang < 15 ICE (Internal Compiler Error)
     // @COMPILER_BUG @CLANG_BUG
@@ -396,6 +397,7 @@ void upx_std_stable_sort(void *array, size_t n, upx_compare_func_t compare) {
 template void upx_std_stable_sort<1>(void *, size_t, upx_compare_func_t);
 template void upx_std_stable_sort<2>(void *, size_t, upx_compare_func_t);
 template void upx_std_stable_sort<4>(void *, size_t, upx_compare_func_t);
+template void upx_std_stable_sort<5>(void *, size_t, upx_compare_func_t);
 template void upx_std_stable_sort<8>(void *, size_t, upx_compare_func_t);
 template void upx_std_stable_sort<16>(void *, size_t, upx_compare_func_t);
 template void upx_std_stable_sort<32>(void *, size_t, upx_compare_func_t);
@@ -767,6 +769,19 @@ int fn_strcmp(const char *n1, const char *n2) {
 // misc
 **************************************************************************/
 
+bool is_envvar_true(const char *envvar, const char *alternate_name) noexcept {
+    // UPX convention: any environment variable that is set and is not strictly equal to "0" is true
+    const char *e = getenv(envvar);
+    if (e != nullptr && e[0])
+        return strcmp(e, "0") != 0;
+    if (alternate_name != nullptr) {
+        e = getenv(alternate_name);
+        if (e != nullptr && e[0])
+            return strcmp(e, "0") != 0;
+    }
+    return false;
+}
+
 bool set_method_name(char *buf, size_t size, int method, int level) {
     bool r = true;
     const char *alg;
@@ -921,5 +936,16 @@ TEST_CASE("get_ratio") {
     CHECK(get_ratio(2 * UPX_RSIZE_MAX, 2 * UPX_RSIZE_MAX) == 1000050);
     CHECK(get_ratio(2 * UPX_RSIZE_MAX, 1024ull * UPX_RSIZE_MAX) == 9999999);
 }
+
+/*************************************************************************
+// compat
+**************************************************************************/
+
+#if defined(__wasi__) // TODO later - wait for wasm/wasi exception handling proposal
+extern "C" {
+void __cxa_allocate_exception() { std::terminate(); }
+void __cxa_throw() { std::terminate(); }
+} // extern "C"
+#endif
 
 /* vim:set ts=4 sw=4 et: */

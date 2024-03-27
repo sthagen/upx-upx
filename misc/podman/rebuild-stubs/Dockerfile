@@ -18,7 +18,7 @@ RUN dpkg --add-architecture i386 \
         mksh moreutils ninja-build p7zip parallel patch patchelf patchutils pax-utils paxctl \
         python3 python3-pyasn1 python3-pycryptodome python3-zstd \
         re2c ripgrep rsync screen universal-ctags unzip vim yash zip zlib1g-dev zsh zstd \
-        # extra packages for compiling with "gcc -m32" and and "gcc -mx32":
+        # extra packages for compiling with "gcc -m32" and "gcc -mx32":
         g++-multilib gcc-multilib \
     && true
 
@@ -45,7 +45,7 @@ RUN cd /root \
 # install official UPX release binaries into /usr/local/bin; not required but convenient for testing
 RUN cd /root \
     && wget -q https://github.com/upx/upx/releases/download/v3.91/upx-3.91-amd64_linux.tar.bz2 \
-    && xzlist="3.92 3.93 3.94 3.95 3.96 4.0.0 4.0.1 4.0.2 4.1.0 4.2.0 4.2.1" \
+    && xzlist="3.92 3.93 3.94 3.95 3.96 4.0.0 4.0.1 4.0.2 4.1.0 4.2.0 4.2.1 4.2.2" \
     && for v in $xzlist; do wget -q https://github.com/upx/upx/releases/download/v${v}/upx-${v}-amd64_linux.tar.xz; done \
     && for f in ./upx-*.tar.*; do tar -xoaf $f; done \
     && for v in 3.91 $xzlist; do d=upx-${v}-amd64_linux; ./$d/upx -qq -d $d/upx -o /usr/local/bin/upx-${v}; done \

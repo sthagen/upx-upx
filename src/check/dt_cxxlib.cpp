@@ -27,6 +27,24 @@
 // lots of tests (and probably quite a number of redundant tests)
 // modern compilers will optimize away much of this code
 
+#if 0 // TODO later
+// libc++ hardenining
+#if defined(__clang__) && defined(__clang_major__) && (__clang_major__ + 0 >= 18)
+#if DEBUG
+#define _LIBCPP_HARDENING_MODE _LIBCPP_HARDENING_MODE_DEBUG
+#else
+#define _LIBCPP_HARDENING_MODE _LIBCPP_HARDENING_MODE_EXTENSIVE
+#endif
+#endif
+#if defined(__clang__) && defined(__clang_major__) && (__clang_major__ + 0 < 18)
+#if DEBUG
+#define _LIBCPP_ENABLE_ASSERTIONS 1
+#endif
+#endif
+#endif // TODO later
+
+#include "../util/system_headers.h"
+#include <vector>
 #include "../conf.h"
 
 /*************************************************************************
@@ -48,6 +66,12 @@ ACC_COMPILE_TIME_ASSERT_HEADER((upx::is_same_any_v<int, int, char>) )
 ACC_COMPILE_TIME_ASSERT_HEADER((!upx::is_same_any_v<int, char>) )
 ACC_COMPILE_TIME_ASSERT_HEADER((!upx::is_same_any_v<int, char, char>) )
 ACC_COMPILE_TIME_ASSERT_HEADER((!upx::is_same_any_v<int, char, long>) )
+
+ACC_COMPILE_TIME_ASSERT_HEADER((upx::is_same_any_v<ptrdiff_t, int, long, long long>) )
+ACC_COMPILE_TIME_ASSERT_HEADER(
+    (upx::is_same_any_v<size_t, unsigned, unsigned long, unsigned long long>) )
+ACC_COMPILE_TIME_ASSERT_HEADER(
+    (upx::is_same_any_v<upx_uintptr_t, unsigned, unsigned long, unsigned long long>) )
 
 ACC_COMPILE_TIME_ASSERT_HEADER(usizeof(int) == sizeof(int))
 ACC_COMPILE_TIME_ASSERT_HEADER(usizeof('a') == sizeof(char))
@@ -98,6 +122,24 @@ ACC_COMPILE_TIME_ASSERT_HEADER(!compile_time::string_ge("abc", "abz"))
 ACC_COMPILE_TIME_ASSERT_HEADER(compile_time::string_le("abc", "abz"))
 
 /*************************************************************************
+//
+**************************************************************************/
+
+TEST_CASE("libc++") {
+    constexpr size_t N = 16;
+    std::vector<int> v(N);
+    CHECK(v.end() - v.begin() == N);
+    CHECK(&v[0] == &(*(v.begin())));
+    // CHECK(&v[0] + N == &(*(v.end()))); // TODO later: is this legal??
+    // TODO later: make sure that this throws
+#if defined(_LIBCPP_HARDENING_MODE_DEBUG) &&                                                       \
+    (_LIBCPP_HARDENING_MODE == _LIBCPP_HARDENING_MODE_DEBUG)
+    CHECK_THROWS((void) &v[N]);
+#endif
+    UNUSED(v);
+}
+
+/*************************************************************************
 // UPX_CXX_DISABLE_xxx
 **************************************************************************/
 
@@ -134,7 +176,7 @@ struct MyVType2 {
     UPX_CXX_DISABLE_ADDRESS(Self)
     UPX_CXX_DISABLE_NEW_DELETE(Self)
 };
-TEST_CASE("upx_cxx_disable") {
+TEST_CASE("UPX_CXX_DISABLE_xxx") {
     MyType1<char, int, 1> dummy1;
     MyType2<char, int, 2> dummy2;
     MyVType1<char, int, 1> vdummy1;
@@ -218,7 +260,44 @@ struct Z2_X2 : public X2 {
 // util
 **************************************************************************/
 
-TEST_CASE("ptr_static_cast") {
+TEST_CASE("upx::ObjectDeleter 1") {
+    LE16 *o = nullptr; // object
+    LE32 *a = nullptr; // array
+    {
+        const upx::ObjectDeleter<LE16 **> o_deleter{&o, 1};
+        o = new LE16;
+        assert(o != nullptr);
+        const upx::ArrayDeleter<LE32 **> a_deleter{&a, 1};
+        a = New(LE32, 1);
+        assert(a != nullptr);
+    }
+    assert(o == nullptr);
+    assert(a == nullptr);
+}
+
+TEST_CASE("upx::ObjectDeleter 2") {
+    constexpr size_t N = 2;
+    BE16 *o[N]; // multiple objects
+    BE32 *a[N]; // multiple arrays
+    {
+        upx::ObjectDeleter<BE16 **> o_deleter{o, 0};
+        upx::ArrayDeleter<BE32 **> a_deleter{a, 0};
+        for (size_t i = 0; i < N; i++) {
+            o[i] = new BE16;
+            assert(o[i] != nullptr);
+            o_deleter.count += 1;
+            a[i] = New(BE32, 1 + i);
+            assert(a[i] != nullptr);
+            a_deleter.count += 1;
+        }
+    }
+    for (size_t i = 0; i < N; i++) {
+        assert(o[i] == nullptr);
+        assert(a[i] == nullptr);
+    }
+}
+
+TEST_CASE("upx::ptr_static_cast") {
     // check that we don't trigger any -Wcast-align warnings
     using upx::ptr_static_cast;
     void *vp = nullptr;
@@ -258,7 +337,7 @@ TEST_CASE("ptr_static_cast") {
     assert((ic == ptr_static_cast<const int *>(ic)));
 }
 
-TEST_CASE("noncopyable") {
+TEST_CASE("upx::noncopyable") {
     struct Test : private upx::noncopyable {
         int v = 1;
     };
@@ -381,7 +460,7 @@ struct TestTriBool {
 };
 } // namespace
 
-TEST_CASE("TriBool") {
+TEST_CASE("upx::TriBool") {
     using upx::TriBool, upx::tribool;
     static_assert(!tribool(false));
     static_assert(tribool(true));

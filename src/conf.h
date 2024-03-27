@@ -31,7 +31,7 @@
 // init
 **************************************************************************/
 
-#include "headers.h"
+#include "util/system_headers.h"
 #include "version.h"
 
 #if !defined(__has_attribute)
@@ -70,7 +70,7 @@ ACC_COMPILE_TIME_ASSERT_HEADER((char) (-1) == 255)
 #pragma GCC diagnostic error "-Wsuggest-override"
 #endif
 #if (ACC_CC_CLANG >= 0x080000)
-// don't enable before clang-8 because of stddef.h issues
+// don't enable before clang-8 because of <stddef.h> issues
 #pragma clang diagnostic error "-Wzero-as-null-pointer-constant"
 #elif (ACC_CC_GNUC >= 0x040700) && defined(__GLIBC__)
 // Some non-GLIBC toolchains do not use 'nullptr' everywhere when C++:
@@ -145,15 +145,16 @@ typedef acc_int64_t upx_int64_t;
 typedef acc_uint64_t upx_uint64_t;
 typedef acc_uintptr_t upx_uintptr_t;
 
-// convention: use "byte" when dealing with data; use "char/uchar" when dealing
+// UPX convention: use "byte" when dealing with data; use "char/uchar" when dealing
 // with strings; use "upx_uint8_t" when dealing with small integers
 typedef unsigned char byte;
 #define upx_byte  byte
 #define upx_bytep byte *
 typedef unsigned char uchar;
-// convention: use "charptr" when dealing with abstract pointer arithmetics
+// UPX convention: use "charptr" when dealing with abstract pointer arithmetics
 #define charptr upx_charptr_unit_type *
 // upx_charptr_unit_type is some opaque type with sizeof(type) == 1
+//// typedef char upx_charptr_unit_type; // also works
 struct alignas(1) upx_charptr_unit_type final { char hidden__; };
 ACC_COMPILE_TIME_ASSERT_HEADER(sizeof(upx_charptr_unit_type) == 1)
 
@@ -169,19 +170,31 @@ typedef upx_int64_t upx_off_t;
 
 // shortcuts
 #define forceinline __acc_forceinline
-#if _MSC_VER
+#if (ACC_CC_MSC)
 #define noinline __declspec(noinline)
 #undef __acc_noinline
 #define __acc_noinline noinline
 #else
 #define noinline __acc_noinline
 #endif
+#if defined(__clang__) || defined(__GNUC__)
+#define noreturn noinline __attribute__((__noreturn__))
+#elif (ACC_CC_MSC)
+// do not use, generates annoying "warning C4702: unreachable code"
+////#define noreturn noinline __declspec(noreturn)
+#define noreturn noinline
+#else
+#define noreturn noinline
+#endif
 #define forceinline_constexpr forceinline constexpr
 #define likely                __acc_likely
 #define unlikely              __acc_unlikely
 #define very_likely           __acc_very_likely
 #define very_unlikely         __acc_very_unlikely
-#define may_throw             noexcept(false)
+
+// cosmetic: explicitly annotate some functions which may throw exceptions
+//   note: noexcept(false) is the default for all C++ functions anyway
+#define may_throw noexcept(false)
 
 #define COMPILE_TIME_ASSERT(e) ACC_COMPILE_TIME_ASSERT(e)
 #define DELETED_FUNCTION       = delete
@@ -198,6 +211,8 @@ typedef upx_int64_t upx_off_t;
 #undef dos
 #undef large
 #undef linux
+#undef PAGE_MASK
+#undef PAGE_SIZE
 #undef small
 #undef SP
 #undef SS
@@ -216,6 +231,7 @@ typedef upx_int64_t upx_off_t;
 #endif
 
 #if defined(HAVE_DUP) && (HAVE_DUP + 0 == 0)
+// TODO later: add upx_fd_dup() util
 #undef dup
 #define dup(x) (-1)
 #endif
@@ -286,9 +302,6 @@ typedef upx_int64_t upx_off_t;
 #define index    upx_renamed_index
 #define outp     upx_renamed_outp
 
-#undef PAGE_MASK
-#undef PAGE_SIZE
-
 #if !defined(O_BINARY) || (O_BINARY + 0 == 0)
 #if (ACC_OS_CYGWIN || ACC_OS_DOS16 || ACC_OS_DOS32 || ACC_OS_EMX || ACC_OS_OS2 || ACC_OS_OS216 ||  \
      ACC_OS_WIN16 || ACC_OS_WIN32 || ACC_OS_WIN64)
@@ -341,15 +354,17 @@ inline void NO_fprintf(FILE *, const char *, ...) noexcept {}
 #define upx_memcpy_inline __builtin_memcpy_inline
 #elif __has_builtin(__builtin_memcpy)
 #define upx_memcpy_inline __builtin_memcpy
-#elif defined(__GNUC__)
+#elif defined(__clang__) || defined(__GNUC__)
 #define upx_memcpy_inline __builtin_memcpy
 #else
 #define upx_memcpy_inline memcpy
 #endif
 
-#if __has_builtin(__builtin_return_address)
+#if defined(__wasi__)
+#define upx_return_address() nullptr
+#elif __has_builtin(__builtin_return_address)
 #define upx_return_address() __builtin_return_address(0)
-#elif defined(__GNUC__)
+#elif defined(__clang__) || defined(__GNUC__)
 #define upx_return_address() __builtin_return_address(0)
 #elif (ACC_CC_MSC)
 #define upx_return_address() _ReturnAddress()
@@ -357,9 +372,11 @@ inline void NO_fprintf(FILE *, const char *, ...) noexcept {}
 #define upx_return_address() nullptr
 #endif
 
-// TODO cleanup: we now require C++17, so remove all packed_struct usage
+// TODO later cleanup: we now require C++17, so remove all packed_struct usage
 #define packed_struct(s) struct alignas(1) s
 
+// TODO later cleanup: this was needed in the old days to catch compiler problems/bugs;
+//   we now require C++17, so remove this
 #define COMPILE_TIME_ASSERT_ALIGNOF_USING_SIZEOF__(a, b)                                           \
     {                                                                                              \
         typedef a acc_tmp_a_t;                                                                     \
@@ -383,6 +400,7 @@ inline void NO_fprintf(FILE *, const char *, ...) noexcept {}
 
 #define TABLESIZE(table) ((sizeof(table) / sizeof((table)[0])))
 
+// TODO later: move these to upx namespace in util/cxxlib.h; also see bele.h
 template <class T>
 inline T ALIGN_DOWN(const T &a, const T &b) {
     T r;
@@ -440,9 +458,9 @@ inline void mem_clear(T (&array)[N]) noexcept DELETED_FUNCTION;
 #define ByteArray(var, n) Array(byte, var, (n))
 
 // assert_noexcept()
-noinline void assertFailed(const char *expr, const char *file, int line, const char *func) noexcept;
-noinline void throwAssertFailed(const char *expr, const char *file, int line, const char *func);
-#if defined(__GNUC__)
+noreturn void assertFailed(const char *expr, const char *file, int line, const char *func) noexcept;
+noreturn void throwAssertFailed(const char *expr, const char *file, int line, const char *func);
+#if defined(__clang__) || defined(__GNUC__)
 #undef assert
 #if DEBUG || 0
 // generate a warning if assert() is used inside a "noexcept" context
@@ -459,6 +477,7 @@ noinline void throwAssertFailed(const char *expr, const char *file, int line, co
 #define assert_noexcept assert
 #endif
 
+// C++ support library
 #include "util/cxxlib.h"
 using upx::is_same_any_v;
 using upx::noncopyable;
@@ -576,8 +595,8 @@ using upx::tribool;
 // #define M_CL1B_LE16   13
 #define M_LZMA        14
 #define M_DEFLATE     15 // zlib
-#define M_ZSTD        16
-#define M_BZIP2       17
+#define M_ZSTD        16 // NOT YET USED
+#define M_BZIP2       17 // NOT YET USED
 // compression methods internal usage
 #define M_ALL         (-1)
 #define M_END         (-2)

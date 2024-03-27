@@ -58,7 +58,7 @@ option(UPX_CONFIG_DISABLE_SELF_PACK_TEST "Do not test packing UPX with itself" O
 # init
 #***********************************************************************
 
-set(UPX_VERSION_STRING "4.3.0")
+set(UPX_VERSION_STRING "4.2.3") # this should match src/version.h
 
 upx_cmake_include_hook(2_init)
 
@@ -85,6 +85,7 @@ upx_cache_bool_vars(OFF
     UPX_CONFIG_DISABLE_C_STANDARD UPX_CONFIG_DISABLE_CXX_STANDARD
     UPX_CONFIG_EXPECT_THREADS UPX_CONFIG_REQUIRE_THREADS
 )
+upx_print_env_var(CC CXX)
 
 # determine Git revision
 set(GITREV_SHORT "")
@@ -129,7 +130,7 @@ else()
 endif()
 
 # CMake init
-upx_default_build_type(Release)
+upx_set_default_build_type(Release) # default is CMAKE_BUILD_TYPE=Release
 project(upx VERSION "${UPX_VERSION_STRING}" LANGUAGES C CXX)
 upx_apply_build_type()
 
@@ -254,9 +255,15 @@ endif()
 if(Threads_FOUND)
     foreach(f std_lock_guard.cpp)
         set(CMAKE_TRY_COMPILE_TARGET_TYPE "EXECUTABLE")
-        try_compile(result "${CMAKE_CURRENT_BINARY_DIR}"
-                    "${CMAKE_CURRENT_SOURCE_DIR}/misc/cmake/try_compile/${f}"
-                    OUTPUT_VARIABLE output)
+        if(NOT UPX_CONFIG_DISABLE_CXX_STANDARD)
+            try_compile(result "${CMAKE_CURRENT_BINARY_DIR}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/misc/cmake/try_compile/${f}"
+                        OUTPUT_VARIABLE output CXX_STANDARD 17)
+        else()
+            try_compile(result "${CMAKE_CURRENT_BINARY_DIR}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/misc/cmake/try_compile/${f}"
+                        OUTPUT_VARIABLE output)
+        endif()
         if(NOT result)
             # failed; under MinGW be sure to use the posix-threads and NOT the win32-threads version
             #message(STATUS "Threads FAILED: ${output}") # debug output from try_compile
@@ -326,6 +333,7 @@ if(MSVC_FRONTEND)
 else()
     target_compile_options(${t} PRIVATE ${warn_Wall} ${warn_Werror})
 endif()
+upx_add_target_extra_compile_options(${t} UPX_CONFIG_EXTRA_COMPILE_OPTIONS_BZIP2)
 endif() # UPX_CONFIG_DISABLE_BZIP2
 
 set(t upx_vendor_ucl)
@@ -337,6 +345,7 @@ if(MSVC_FRONTEND)
 else()
     target_compile_options(${t} PRIVATE ${warn_Wall} ${warn_Werror})
 endif()
+upx_add_target_extra_compile_options(${t} UPX_CONFIG_EXTRA_COMPILE_OPTIONS_UCL)
 
 set(t upx_vendor_zlib)
 upx_compile_target_debug_with_O2(${t})
@@ -348,9 +357,9 @@ endif()
 if(MSVC_FRONTEND)
     target_compile_options(${t} PRIVATE -W3 ${warn_WX})
 else()
-    ##target_compile_options(${t} PRIVATE -Wall ${warn_Werror})
     target_compile_options(${t} PRIVATE ${warn_Wall} -Wno-cast-align -Wno-cast-qual ${warn_Werror})
 endif()
+upx_add_target_extra_compile_options(${t} UPX_CONFIG_EXTRA_COMPILE_OPTIONS_ZLIB)
 
 if(NOT UPX_CONFIG_DISABLE_ZSTD)
 set(t upx_vendor_zstd)
@@ -362,6 +371,7 @@ if(MSVC_FRONTEND)
 else()
     target_compile_options(${t} PRIVATE ${warn_Wall} ${warn_Werror})
 endif()
+upx_add_target_extra_compile_options(${t} UPX_CONFIG_EXTRA_COMPILE_OPTIONS_ZSTD)
 endif() # UPX_CONFIG_DISABLE_ZSTD
 
 set(t upx)
@@ -404,6 +414,7 @@ if(MSVC_FRONTEND)
 else()
     target_compile_options(${t} PRIVATE ${warn_Wall} ${warn_Werror})
 endif()
+upx_add_target_extra_compile_options(${t} UPX_CONFIG_EXTRA_COMPILE_OPTIONS_UPX)
 
 #***********************************************************************
 # test
@@ -486,12 +497,17 @@ upx_cmake_include_hook(8_summary)
 
 upx_print_var(CMAKE_VERSION UPX_CONFIG_CMAKE_MINIMUM_REQUIRED_VERSION CMAKE_GENERATOR)
 if(NOT UPX_CONFIG_CMAKE_DISABLE_PRINT_INFO)
-upx_print_var(CMAKE_HOST_SYSTEM_NAME CMAKE_HOST_SYSTEM_VERSION)
-upx_print_var(CMAKE_SYSTEM_NAME CMAKE_SYSTEM_VERSION CMAKE_CROSSCOMPILING CMAKE_CROSSCOMPILING_EMULATOR)
+if(NOT ",${CMAKE_BINARY_DIR}," STREQUAL ",${CMAKE_CURRENT_BINARY_DIR}," OR NOT ",${CMAKE_SOURCE_DIR}," STREQUAL ",${CMAKE_CURRENT_SOURCE_DIR},")
+    upx_print_var(CMAKE_BINARY_DIR CMAKE_SOURCE_DIR CMAKE_CURRENT_BINARY_DIR CMAKE_CURRENT_SOURCE_DIR)
+endif()
+upx_print_var(CMAKE_HOST_SYSTEM_NAME CMAKE_HOST_SYSTEM_VERSION CMAKE_HOST_SYSTEM_PROCESSOR CMAKE_APPLE_SILICON_PROCESSOR)
+upx_print_var(CMAKE_SYSTEM_NAME CMAKE_SYSTEM_VERSION CMAKE_SYSTEM_PROCESSOR CMAKE_CROSSCOMPILING CMAKE_CROSSCOMPILING_EMULATOR)
+upx_print_var(CMAKE_OSX_DEPLOYMENT_TARGET CMAKE_OSX_SYSROOT)
+upx_print_var(CMAKE_C_COMPILER CMAKE_CXX_COMPILER CMAKE_AR CMAKE_RANLIB)
 upx_print_var(CMAKE_C_COMPILER_ID CMAKE_C_COMPILER_VERSION CMAKE_C_COMPILER_FRONTEND_VARIANT CMAKE_C_COMPILER_ARCHITECTURE_ID CMAKE_C_PLATFORM_ID CMAKE_C_COMPILER_ABI)
 upx_print_var(CMAKE_CXX_COMPILER_ID CMAKE_CXX_COMPILER_VERSION CMAKE_CXX_COMPILER_FRONTEND_VARIANT CMAKE_CXX_COMPILER_ARCHITECTURE_ID CMAKE_CXX_PLATFORM_ID CMAKE_CXX_COMPILER_ABI)
 upx_print_var(CMAKE_INTERPROCEDURAL_OPTIMIZATION CMAKE_POSITION_INDEPENDENT_CODE CMAKE_TRY_COMPILE_CONFIGURATION)
-upx_print_var(CYGWIN GNUC MINGW MSVC MSVC_FRONTEND MSVC_IDE WIN32 WIN64)
+upx_print_var(APPLE CYGWIN GNUC MINGW MSVC MSVC_FRONTEND MSVC_IDE UNIX WIN32 WIN64)
 endif() # UPX_CONFIG_CMAKE_DISABLE_PRINT_INFO
 upx_print_var(CMAKE_INSTALL_PREFIX CMAKE_CONFIGURATION_TYPES CMAKE_BUILD_TYPE)
 if(Threads_FOUND)
@@ -507,15 +523,9 @@ endif()
 
 # extra sanity checks to detect incompatible C vs CXX settings
 if(NOT UPX_CONFIG_CMAKE_DISABLE_PLATFORM_CHECK)
-if(NOT ",${CMAKE_C_PLATFORM_ID}," STREQUAL ",${CMAKE_CXX_PLATFORM_ID},")
-    message(FATAL_ERROR "ERROR: CMAKE_C_PLATFORM_ID CMAKE_CXX_PLATFORM_ID mismatch")
-endif()
-if(NOT ",${CMAKE_C_COMPILER_ABI}," STREQUAL ",${CMAKE_CXX_COMPILER_ABI},")
-    message(FATAL_ERROR "ERROR: CMAKE_C_COMPILER_ABI CMAKE_CXX_COMPILER_ABI mismatch")
-endif()
-if(NOT ",${CMAKE_C_COMPILER_FRONTEND_VARIANT}," STREQUAL ",${CMAKE_CXX_COMPILER_FRONTEND_VARIANT},")
-    message(FATAL_ERROR "ERROR: CMAKE_C_COMPILER_FRONTEND_VARIANT CMAKE_CXX_COMPILER_FRONTEND_VARIANT mismatch")
-endif()
+    upx_platform_check_mismatch(CMAKE_C_PLATFORM_ID CMAKE_CXX_PLATFORM_ID)
+    upx_platform_check_mismatch(CMAKE_C_COMPILER_ABI CMAKE_CXX_COMPILER_ABI)
+    upx_platform_check_mismatch(CMAKE_C_COMPILER_FRONTEND_VARIANT CMAKE_CXX_COMPILER_FRONTEND_VARIANT)
 endif() # UPX_CONFIG_CMAKE_DISABLE_PLATFORM_CHECK
 
 upx_cmake_include_hook(9_finish)

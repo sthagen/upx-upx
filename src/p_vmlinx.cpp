@@ -30,6 +30,7 @@
  */
 
 
+#define ALLOW_INT_PLUS_MEMBUFFER 1
 #include "conf.h"
 
 #include "file.h"
@@ -1239,7 +1240,7 @@ Linker* PackVmlinuxAMD64::newLinker() const
 
 // instantiate instances
 template class PackVmlinuxBase<ElfClass_BE32>;
-// template class PackVmlinuxBase<ElfClass_BE64>; // not used
+// template class PackVmlinuxBase<ElfClass_BE64>; // currently not used
 template class PackVmlinuxBase<ElfClass_LE32>;
 template class PackVmlinuxBase<ElfClass_LE64>;
 

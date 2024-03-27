@@ -24,6 +24,9 @@
    <markus@oberhumer.com>
  */
 
+#include "../util/system_defs.h"
+#include "../util/system_features.h"
+
 /*************************************************************************
 // doctest support code implementation
 **************************************************************************/
@@ -33,7 +36,10 @@
 
 #if !defined(DOCTEST_CONFIG_DISABLE)
 
-#if defined(__i386__) && defined(__MSDOS__) && defined(__DJGPP__) && defined(__GNUC__)
+#if defined(__wasi__)
+#define DOCTEST_CONFIG_NO_MULTITHREADING
+#define DOCTEST_CONFIG_NO_POSIX_SIGNALS
+#elif defined(__i386__) && defined(__MSDOS__) && defined(__DJGPP__) && defined(__GNUC__)
 #define DOCTEST_CONFIG_NO_MULTITHREADING
 #define DOCTEST_CONFIG_NO_POSIX_SIGNALS
 #elif defined(__m68k__) && defined(__atarist__) && defined(__GNUC__)

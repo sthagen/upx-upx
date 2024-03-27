@@ -76,11 +76,10 @@ unsigned Pprotect(void *, size_t, unsigned);
 
 #endif  //}
 
-extern void my_bkpt(void *, ...);
-
 static int dprintf(char const *fmt, ...); // forward
 #endif  /*}*/
 
+extern void my_bkpt(void *, ...);
 
 /*************************************************************************
 // configuration section
@@ -125,7 +124,7 @@ xread(Extent *x, char *buf, size_t count)
 // util
 **************************************************************************/
 
-#if 1  //{  save space
+#if !DEBUG  //{  save space
 #define ERR_LAB error: exit(127);
 #define err_exit(a) goto error
 #else  //}{  save debugging time
@@ -308,6 +307,8 @@ make_hatch_ppc64(
     return hatch;
 }
 #elif defined(__aarch64__)  //{
+#define NBPI 4
+#define NINSTR 3
 static void *
 make_hatch_arm64(
     Elf64_Phdr const *const phdr,
@@ -331,19 +332,17 @@ make_hatch_arm64(
         // Try page fragmentation just beyond .text .
              ( (hatch = (void *)(~3ul & (3+ phdr->p_memsz + phdr->p_vaddr + reloc))),
                 ( phdr->p_memsz==phdr->p_filesz  // don't pollute potential .bss
-                &&  (2*4)<=(frag_mask & -(int)(uint64_t)hatch) ) ) // space left on page
-        // Try Elf64_Ehdr.e_ident[8..15] .  warning: 'const' cast away
-        ||   ( (hatch = (void *)(&((Elf64_Ehdr *)(phdr->p_vaddr + reloc))->e_ident[8])),
-                (phdr->p_offset==0) )
+                &&  (NINSTR*NBPI)<=(frag_mask & -(int)(uint64_t)hatch) ) ) // space left on page
         // Allocate and use a new page.
         ||   (  xprot = 1, hatch = mmap(0, 1<<12, PROT_WRITE|PROT_READ,
                 MAP_PRIVATE|MAP_ANONYMOUS, -1, 0) )
         )
         {
-            hatch[0] = 0xd4000001;  // svc #0
-            hatch[1] = 0xd65f03c0;  // ret (jmp *lr)
+            hatch[0] = 0xd4000001;  // svc #0;  # {addr,len,__NR_munmap} already in {x0,x1,w8}
+            hatch[1] = 0xa8c107e0;  // ldp x0,x1,[sp],#2*NBPI  # ABI owns x0?
+            hatch[2] = 0xd65f03c0;  // ret (jmp *lr)
             if (xprot) {
-                Pprotect(hatch, 2*sizeof(unsigned), PROT_EXEC|PROT_READ);
+                Pprotect(hatch, NINSTR * NBPI, PROT_EXEC|PROT_READ);
             }
         }
         else {
@@ -353,6 +352,8 @@ make_hatch_arm64(
     DPRINTF("hatch=%%p\n", hatch);
     return hatch;
 }
+#undef NBPI
+#undef NINSTR
 #endif  //}
 
 #if defined(__powerpc64__) || defined(__aarch64__)  //{ bzero
@@ -370,22 +371,36 @@ upx_bzero(char *p, size_t len)
 #endif  //}
 
 static void
-auxv_up(Elf64_auxv_t *av, unsigned const type, uint64_t const value)
+auxv_up(Elf64_auxv_t *av, unsigned const tag, uint64_t const value)
 {
     if (!av || (1& (size_t)av)) { // none, or inhibited for PT_INTERP
         return;
     }
-    DPRINTF("\\nauxv_up %%d  %%p\\n", type, value);
+    DPRINTF("\\nauxv_up %%d  %%p\\n", tag, value);
+    // Multiple slots can have 'tag' which wastes space but is legal.
+    // rtld (ld-linux) uses the last one, so we must scan the whole table.
+    Elf64_auxv_t *ignore_slot = 0;
+    int found = 0;
     for (;; ++av) {
         DPRINTF("  %%d  %%p\\n", av->a_type, av->a_un.a_val);
-        if (av->a_type==type || (av->a_type==AT_IGNORE && type!=AT_NULL)) {
-            av->a_type = type;
+        if (av->a_type == tag) {
             av->a_un.a_val = value;
-            return;
+            ++found;
         }
-        if (av->a_type==AT_NULL) {
-            // We can't do this as part of the for loop because we overwrite
-            // AT_NULL too.
+        else if (av->a_type == AT_IGNORE) {
+            ignore_slot = av;
+        }
+        if (av->a_type==AT_NULL) { // done scanning
+            if (found) {
+                return;
+            }
+            if (ignore_slot) {
+                ignore_slot->a_type = tag;
+                ignore_slot->a_un.a_val = value;
+                return;
+            }
+            err_exit(20);
+ERR_LAB
             return;
         }
     }

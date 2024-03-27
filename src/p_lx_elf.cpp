@@ -259,7 +259,7 @@ PackLinuxElf::PackLinuxElf(InputFile *f)
     o_elf_shnum(0)
 {
     memset(dt_table, 0, sizeof(dt_table));
-    symnum_end = 0;
+    symnum_max = 0;
     user_init_rp = nullptr;
 }
 
@@ -903,10 +903,10 @@ PackLinuxElf::addStubEntrySections(Filter const *, unsigned m_decompr)
         addLoader("ELFMAINXu", nullptr);
     }
     addLoader(
-        ( M_IS_NRV2E(ph.method) ? "NRV_HEAD,NRV2E,NRV_TAIL"
-        : M_IS_NRV2D(ph.method) ? "NRV_HEAD,NRV2D,NRV_TAIL"
-        : M_IS_NRV2B(ph.method) ? "NRV_HEAD,NRV2B,NRV_TAIL"
-        : M_IS_LZMA(ph.method)  ? "LZMA_ELF00,LZMA_DEC20,LZMA_DEC30"
+        ( M_IS_NRV2E(ph_forced_method(ph.method)) ? "NRV_HEAD,NRV2E,NRV_TAIL"
+        : M_IS_NRV2D(ph_forced_method(ph.method)) ? "NRV_HEAD,NRV2D,NRV_TAIL"
+        : M_IS_NRV2B(ph_forced_method(ph.method)) ? "NRV_HEAD,NRV2B,NRV_TAIL"
+        : M_IS_LZMA(ph_forced_method(ph.method))  ? "LZMA_ELF00,LZMA_DEC20,LZMA_DEC30"
         : nullptr), nullptr);
     if (hasLoaderSection("CFLUSH"))
         addLoader("CFLUSH");
@@ -2028,7 +2028,8 @@ PackLinuxElf32::sort_DT32_offsets(Elf32_Dyn const *const dynp0)
 unsigned PackLinuxElf32::find_dt_ndx(unsigned rva)
 {
     unsigned *const dto = (unsigned *)mb_dt_offsets.getVoidPtr();
-    for (unsigned j = 0; dto[j]; ++j) { // linear search of short table
+    unsigned const dto_size = mb_dt_offsets.getSize() / sizeof(*dto);
+    for (unsigned j = 0; j < dto_size && dto[j]; ++j) { // linear search of short table
         if (rva == dto[j]) {
             return j;
         }
@@ -2046,6 +2047,9 @@ unsigned PackLinuxElf32::elf_find_table_size(unsigned dt_type, unsigned sh_type)
     unsigned x_rva;
     if (dt_type < DT_NUM) {
         unsigned const x_ndx = dt_table[dt_type];
+        if (!x_ndx) { // no such entry
+            return 0;
+        }
         x_rva = get_te32(&dynseg[-1+ x_ndx].d_val);
     }
     else {
@@ -2099,15 +2103,21 @@ PackLinuxElf32::invert_pt_dynamic(Elf32_Dyn const *dynp, u32_t headway)
     else if (dt_table[Elf32_Dyn::DT_INIT_ARRAY])    upx_dt_init = Elf32_Dyn::DT_INIT_ARRAY;
 
     unsigned const z_str = dt_table[Elf32_Dyn::DT_STRSZ];
-    strtab_end = !z_str ? 0 : get_te32(&dynp0[-1+ z_str].d_val);
-    if (!z_str || (u32_t)file_size <= strtab_end) { // FIXME: weak
+    strtab_max = !z_str ? 0 : get_te32(&dynp0[-1+ z_str].d_val);
+    unsigned const z_tab = dt_table[Elf32_Dyn::DT_STRTAB];
+    unsigned const strtab_beg = !z_tab ? 0 : get_te32(&dynp0[-1+ z_tab].d_val);
+    if (!z_str || !z_tab
+    || (this->file_size - strtab_beg) < strtab_max  // strtab overlaps EOF
+        // last string in table must have terminating NUL
+    ||  '\0' != ((char *)file_image.getVoidPtr())[-1+ strtab_max + strtab_beg]
+    ) {
         char msg[50]; snprintf(msg, sizeof(msg),
-            "bad DT_STRSZ %#x", strtab_end);
+            "bad DT_STRSZ %#x", strtab_max);
         throwCantPack(msg);
     }
 
     // Find end of DT_SYMTAB
-    symnum_end = elf_find_table_size(
+    symnum_max = elf_find_table_size(
         Elf32_Dyn::DT_SYMTAB, Elf32_Shdr::SHT_DYNSYM) / sizeof(Elf32_Sym);
 
     unsigned const x_sym = dt_table[Elf32_Dyn::DT_SYMTAB];
@@ -2126,9 +2136,15 @@ PackLinuxElf32::invert_pt_dynamic(Elf32_Dyn const *dynp, u32_t headway)
         unsigned const nbucket = get_te32(&hashtab[0]);
         unsigned const *const buckets = &hashtab[2];
         unsigned const *const chains = &buckets[nbucket]; (void)chains;
+        if ((unsigned)(file_size - ((char const *)buckets - (char const *)(void const *)file_image))
+                <= sizeof(unsigned)*nbucket ) {
+            char msg[80]; snprintf(msg, sizeof(msg),
+                "bad nbucket %#x\n", nbucket);
+            throwCantPack(msg);
+        }
 
         unsigned const v_sym = !x_sym ? 0 : get_te32(&dynp0[-1+ x_sym].d_val);
-        if ((unsigned)file_size <= nbucket/sizeof(*buckets)  // FIXME: weak
+        if ((unsigned)(hashend - buckets) < nbucket
         || !v_sym || (unsigned)file_size <= v_sym
         || ((v_hsh < v_sym) && (v_sym - v_hsh) < sizeof(*buckets)*(2+ nbucket))
         ) {
@@ -2170,10 +2186,17 @@ PackLinuxElf32::invert_pt_dynamic(Elf32_Dyn const *dynp, u32_t headway)
         unsigned     const *const buckets = (unsigned const *)&bitmask[n_bitmask];
         unsigned     const *const hasharr = &buckets[n_bucket]; (void)hasharr;
         if (!n_bucket || (1u<<31) <= n_bucket  /* fie on fuzzers */
-        || (void const *)&file_image[file_size] <= (void const *)hasharr) {
+        || (unsigned)(gashend - buckets) < n_bucket
+        || (file_size + file_image) <= (void const *)hasharr) {
             char msg[80]; snprintf(msg, sizeof(msg),
                 "bad n_bucket %#x\n", n_bucket);
             throwCantPack(msg);
+        }
+        // It would be better to detect zeroes shifted into low 5 bits of:
+        //    (037 & (hash_32 >> gnu_shift))
+        // but compilers can be stupid.
+        if (31 < gnu_shift) {
+            throwCantPack("bad gnu_shift %d", gnu_shift);
         }
         // unsigned const *const gashend = &hasharr[n_bucket];
         // minimum, except:
@@ -2342,7 +2365,7 @@ Elf64_Shdr *PackLinuxElf64::elf_find_section_type(
 
 char const *PackLinuxElf64::get_str_name(unsigned st_name, unsigned symnum) const
 {
-    if (strtab_end <= st_name) {
+    if (strtab_max <= st_name) {
         char msg[70]; snprintf(msg, sizeof(msg),
             "bad .st_name %#x in DT_SYMTAB[%d]", st_name, symnum);
         throwCantPack(msg);
@@ -2352,7 +2375,7 @@ char const *PackLinuxElf64::get_str_name(unsigned st_name, unsigned symnum) cons
 
 char const *PackLinuxElf64::get_dynsym_name(unsigned symnum, unsigned relnum) const
 {
-    if (symnum_end <= symnum) {
+    if (symnum_max <= symnum) {
         char msg[70]; snprintf(msg, sizeof(msg),
             "bad symnum %#x in Elf64_Rel[%d]", symnum, relnum);
         throwCantPack(msg);
@@ -2379,7 +2402,7 @@ bool PackLinuxElf64::calls_crt1(Elf64_Rela const *rela, int sz)
 
 char const *PackLinuxElf32::get_str_name(unsigned st_name, unsigned symnum) const
 {
-    if (strtab_end <= st_name) {
+    if (strtab_max <= st_name) {
         char msg[70]; snprintf(msg, sizeof(msg),
             "bad .st_name %#x in DT_SYMTAB[%d]\n", st_name, symnum);
         throwCantPack(msg);
@@ -2389,7 +2412,7 @@ char const *PackLinuxElf32::get_str_name(unsigned st_name, unsigned symnum) cons
 
 char const *PackLinuxElf32::get_dynsym_name(unsigned symnum, unsigned relnum) const
 {
-    if (symnum_end <= symnum) {
+    if (symnum_max <= symnum) {
         char msg[70]; snprintf(msg, sizeof(msg),
             "bad symnum %#x in Elf32_Rel[%d]\n", symnum, relnum);
         throwCantPack(msg);
@@ -2418,6 +2441,9 @@ tribool PackLinuxElf32::canUnpack() // bool, except -1: format known, but not pa
 {
     if (checkEhdr(&ehdri)) {
         return false;
+    }
+    if (get_te16(&ehdri.e_phnum) < 2) {
+        throwCantUnpack("e_phnum must be >= 2");
     }
     if (Elf32_Ehdr::ET_DYN==get_te16(&ehdri.e_type)) {
         PackLinuxElf32help1(fi);
@@ -2964,6 +2990,9 @@ tribool PackLinuxElf64::canUnpack() // bool, except -1: format known, but not pa
 {
     if (checkEhdr(&ehdri)) {
         return false;
+    }
+    if (get_te16(&ehdri.e_phnum) < 2) {
+        throwCantUnpack("e_phnum must be >= 2");
     }
     if (Elf64_Ehdr::ET_DYN==get_te16(&ehdri.e_type)) {
         PackLinuxElf64help1(fi);
@@ -6306,7 +6335,7 @@ PackLinuxElf64::un_asl_dynsym( // ibuf has the input
     // un-Relocate dynsym (DT_SYMTAB) which is below xct_off
     dynstr = (char const *)elf_find_dynamic(Elf64_Dyn::DT_STRTAB);
     sec_dynsym = elf_find_section_type(Elf64_Shdr::SHT_DYNSYM);
-    if (sec_dynsym) {
+    if (dynstr && sec_dynsym) {
         upx_uint64_t const off_dynsym = get_te64(&sec_dynsym->sh_offset);
         upx_uint64_t const sz_dynsym  = get_te64(&sec_dynsym->sh_size);
         if (orig_file_size < sz_dynsym
@@ -6347,7 +6376,7 @@ PackLinuxElf32::un_asl_dynsym( // ibuf has the input
     // un-Relocate dynsym (DT_SYMTAB) which is below xct_off
     dynstr = (char const *)elf_find_dynamic(Elf32_Dyn::DT_STRTAB);
     sec_dynsym = elf_find_section_type(Elf32_Shdr::SHT_DYNSYM);
-    if (sec_dynsym) {
+    if (dynstr && sec_dynsym) {
         upx_uint32_t const off_dynsym = get_te32(&sec_dynsym->sh_offset);
         upx_uint32_t const sz_dynsym  = get_te32(&sec_dynsym->sh_size);
         if (orig_file_size < sz_dynsym
@@ -7160,7 +7189,10 @@ void PackLinuxElf64::unpack(OutputFile *fo)
     upx_uint64_t old_dtinit = 0;
 
     if (Elf64_Ehdr::ET_EXEC == get_te16(&ehdri.e_type)) {
-        if (get_te64(&ehdri.e_entry) < 0x401180
+// 40fddf17153ee3db73a04ff1bf288b91676138d6 2001-02-01 ph.version 11; b_info 12 bytes
+// df9db96bd1c013c07da1d7ec740021d588ab2815 2001-01-17 ph.version 11; no b_info (==> 8 bytes)
+        if (ph.version <= 11
+        &&  get_te64(&ehdri.e_entry) < 0x401180
         &&  get_te16(&ehdri.e_machine)==Elf64_Ehdr::EM_X86_64) {
             // old style, 8-byte b_info:
             // sizeof(b_info.sz_unc) + sizeof(b_info.sz_cpr);
@@ -7404,7 +7436,8 @@ void PackLinuxElf64::unpack(OutputFile *fo)
                         }
                     }
                     int boff = find_le32(peek_arr, sizeof(peek_arr), size);
-                    if (boff < 0) {
+                    if (boff < 0
+                    || sizeof(peek_arr) < (boff + sizeof(b_info))) {
                         throwCantUnpack("b_info corrupted");
                     }
                     bp = (b_info *)(void *)&peek_arr[boff];
@@ -7909,7 +7942,8 @@ PackLinuxElf64::sort_DT64_offsets(Elf64_Dyn const *const dynp0)
 unsigned PackLinuxElf64::find_dt_ndx(u64_t rva)
 {
     unsigned *const dto = (unsigned *)mb_dt_offsets.getVoidPtr();
-    for (unsigned j = 0; dto[j]; ++j) { // linear search of short table
+    unsigned const dto_size = mb_dt_offsets.getSize() / sizeof(*dto);
+    for (unsigned j = 0; j < dto_size && dto[j]; ++j) { // linear search of short table
         if (rva == dto[j]) {
             return j;
         }
@@ -7927,6 +7961,9 @@ unsigned PackLinuxElf64::elf_find_table_size(unsigned dt_type, unsigned sh_type)
     unsigned x_rva;
     if (dt_type < DT_NUM) {
         unsigned const x_ndx = dt_table[dt_type];
+        if (!x_ndx) { // no such entry
+            return 0;
+        }
         x_rva = get_te64(&dynseg[-1+ x_ndx].d_val);
     }
     else {
@@ -7985,15 +8022,21 @@ PackLinuxElf64::invert_pt_dynamic(Elf64_Dyn const *dynp, upx_uint64_t headway)
     else if (dt_table[Elf64_Dyn::DT_INIT_ARRAY])    upx_dt_init = Elf64_Dyn::DT_INIT_ARRAY;
 
     unsigned const z_str = dt_table[Elf64_Dyn::DT_STRSZ];
-    strtab_end = !z_str ? 0 : get_te64(&dynp0[-1+ z_str].d_val);
-    if (!z_str || (u64_t)file_size <= strtab_end) { // FIXME: weak
+    strtab_max = !z_str ? 0 : get_te64(&dynp0[-1+ z_str].d_val);
+    unsigned const z_tab = dt_table[Elf64_Dyn::DT_STRTAB];
+    unsigned const strtab_beg = !z_tab ? 0 : get_te64(&dynp0[-1+ z_tab].d_val);
+    if (!z_str || !z_tab
+    || (this->file_size - strtab_beg) < strtab_max  // strtab overlaps EOF
+        // last string in table must have terminating NUL
+    ||  '\0' != ((char *)file_image.getVoidPtr())[-1+ strtab_max + strtab_beg]
+    ) {
         char msg[50]; snprintf(msg, sizeof(msg),
-            "bad DT_STRSZ %#x", strtab_end);
+            "bad DT_STRSZ %#x", strtab_max);
         throwCantPack(msg);
     }
 
     // Find end of DT_SYMTAB
-    symnum_end = elf_find_table_size(
+    symnum_max = elf_find_table_size(
         Elf64_Dyn::DT_SYMTAB, Elf64_Shdr::SHT_DYNSYM) / sizeof(Elf64_Sym);
 
     unsigned const x_sym = dt_table[Elf64_Dyn::DT_SYMTAB];
@@ -8012,9 +8055,15 @@ PackLinuxElf64::invert_pt_dynamic(Elf64_Dyn const *dynp, upx_uint64_t headway)
         unsigned const nbucket = get_te32(&hashtab[0]);
         unsigned const *const buckets = &hashtab[2];
         unsigned const *const chains = &buckets[nbucket]; (void)chains;
+        if ((unsigned)(file_size - ((char const *)buckets - (char const *)(void const *)file_image))
+                <= sizeof(unsigned)*nbucket ) {
+            char msg[80]; snprintf(msg, sizeof(msg),
+                "bad nbucket %#x\n", nbucket);
+            throwCantPack(msg);
+        }
 
         unsigned const v_sym = !x_sym ? 0 : get_te64(&dynp0[-1+ x_sym].d_val);  // UPX_RSIZE_MAX_MEM
-        if ((unsigned)file_size <= nbucket/sizeof(*buckets)  // FIXME: weak
+        if ((unsigned)(hashend - buckets) < nbucket
         || !v_sym || (unsigned)file_size <= v_sym
         || ((v_hsh < v_sym) && (v_sym - v_hsh) < sizeof(*buckets)*(2+ nbucket))
         ) {
@@ -8056,10 +8105,17 @@ PackLinuxElf64::invert_pt_dynamic(Elf64_Dyn const *dynp, upx_uint64_t headway)
         unsigned     const *const buckets = (unsigned const *)&bitmask[n_bitmask];
         unsigned     const *const hasharr = &buckets[n_bucket]; (void)hasharr;
         if (!n_bucket || (1u<<31) <= n_bucket  /* fie on fuzzers */
-        || (void const *)&file_image[file_size] <= (void const *)hasharr) {
+        || (unsigned)(gashend - buckets) < n_bucket
+        || (file_size + file_image) <= (void const *)hasharr) {
             char msg[80]; snprintf(msg, sizeof(msg),
                 "bad n_bucket %#x\n", n_bucket);
             throwCantPack(msg);
+        }
+        // It would be better to detect zeroes shifted into low 6 bits of:
+        //    (077 & (hash_32 >> gnu_shift))
+        // but compilers can be stupid.
+        if (31 < gnu_shift) {
+            throwCantPack("bad gnu_shift %d", gnu_shift);
         }
         // unsigned const *const gashend = &hasharr[n_bucket];
         // minimum, except:
@@ -8153,19 +8209,17 @@ Elf32_Sym const *PackLinuxElf32::elf_lookup(char const *name) const
         unsigned const nbucket = get_te32(&hashtab[0]);
         unsigned const *const buckets = &hashtab[2];
         unsigned const *const chains = &buckets[nbucket];
-        if ((unsigned)(file_size - ((char const *)buckets - (char const *)(void const *)file_image))
-                <= sizeof(unsigned)*nbucket ) {
-            char msg[80]; snprintf(msg, sizeof(msg),
-                "bad nbucket %#x\n", nbucket);
-            throwCantPack(msg);
-        }
         if (nbucket) {
             unsigned const m = elf_hash(name) % nbucket;
+            unsigned nvisit = 0;
             unsigned si;
             for (si= get_te32(&buckets[m]); 0!=si; si= get_te32(&chains[si])) {
                 char const *const p= get_dynsym_name(si, (unsigned)-1);
                 if (0==strcmp(name, p)) {
                     return &dynsym[si];
+                }
+                if (nbucket <= ++nvisit) {
+                    throwCantPack("circular DT_HASH chain %d\n", si);
                 }
             }
         }
@@ -8178,7 +8232,7 @@ Elf32_Sym const *PackLinuxElf32::elf_lookup(char const *name) const
         unsigned const *const bitmask = &gashtab[4];
         unsigned const *const buckets = &bitmask[n_bitmask];
         unsigned const *const hasharr = &buckets[n_bucket];
-        if ((void const *)&file_image[file_size] <= (void const *)hasharr) {
+        if ((file_size + file_image) <= (void const *)hasharr) {
             char msg[80]; snprintf(msg, sizeof(msg),
                 "bad n_bucket %#x\n", n_bucket);
             throwCantPack(msg);
@@ -8214,7 +8268,7 @@ Elf32_Sym const *PackLinuxElf32::elf_lookup(char const *name) const
                             return dsp;
                         }
                     } while (++dsp,
-                            (char const *)hp < (char const *)&file_image[file_size]
+                        ((char const *)hp < (char const *)(file_size + file_image))
                         &&  0==(1u& get_te32(hp++)));
                 }
             }
@@ -8235,19 +8289,17 @@ Elf64_Sym const *PackLinuxElf64::elf_lookup(char const *name) const
         unsigned const nbucket = get_te32(&hashtab[0]);
         unsigned const *const buckets = &hashtab[2];
         unsigned const *const chains = &buckets[nbucket];
-        if ((unsigned)(file_size - ((char const *)buckets - (char const *)(void const *)file_image))
-                <= sizeof(unsigned)*nbucket ) {
-            char msg[80]; snprintf(msg, sizeof(msg),
-                "bad nbucket %#x\n", nbucket);
-            throwCantPack(msg);
-        }
         if (nbucket) { // -rust-musl can have "empty" hashtab
             unsigned const m = elf_hash(name) % nbucket;
+            unsigned nvisit = 0;
             unsigned si;
             for (si= get_te32(&buckets[m]); 0!=si; si= get_te32(&chains[si])) {
                 char const *const p= get_dynsym_name(si, (unsigned)-1);
                 if (0==strcmp(name, p)) {
                     return &dynsym[si];
+                }
+                if (nbucket <= ++nvisit) {
+                    throwCantPack("circular DT_HASH chain %d\n", si);
                 }
             }
         }
@@ -8261,7 +8313,7 @@ Elf64_Sym const *PackLinuxElf64::elf_lookup(char const *name) const
         unsigned     const *const buckets = (unsigned const *)&bitmask[n_bitmask];
         unsigned     const *const hasharr = &buckets[n_bucket];
 
-        if ((void const *)&file_image[file_size] <= (void const *)hasharr) {
+        if ((file_size + file_image) <= (void const *)hasharr) {
             char msg[80]; snprintf(msg, sizeof(msg),
                 "bad n_bucket %#x\n", n_bucket);
             throwCantPack(msg);
@@ -8323,7 +8375,10 @@ void PackLinuxElf32::unpack(OutputFile *fo)
     upx_uint32_t old_dtinit = 0;
 
     if (Elf32_Ehdr::ET_EXEC == get_te16(&ehdri.e_type)) {
-        if (get_te32(&ehdri.e_entry) < 0x401180
+// 40fddf17153ee3db73a04ff1bf288b91676138d6 2001-02-01 ph.version 11; b_info 12 bytes
+// df9db96bd1c013c07da1d7ec740021d588ab2815 2001-01-17 ph.version 11; no b_info (==> 8 bytes)
+        if (ph.version <= 11
+        &&  get_te32(&ehdri.e_entry) < 0x401180
         &&  get_te16(&ehdri.e_machine)==Elf32_Ehdr::EM_386) {
             // old style, 8-byte b_info:
             // sizeof(b_info.sz_unc) + sizeof(b_info.sz_cpr);

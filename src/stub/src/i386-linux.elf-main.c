@@ -408,6 +408,8 @@ make_hatch_x86(Elf32_Phdr const *const phdr, ptrdiff_t reloc)
 }
 #elif defined(__arm__)  /*}{*/
 extern unsigned get_sys_munmap(void);
+#define NINSTR 3
+#define NBPI 4
 
 static void *
 make_hatch_arm(
@@ -432,10 +434,7 @@ make_hatch_arm(
         // Try page fragmentation just beyond .text .
             ( (hatch = (void *)(~3u & (3+ phdr->p_memsz + phdr->p_vaddr + reloc))),
                 ( phdr->p_memsz==phdr->p_filesz  // don't pollute potential .bss
-                &&  (2*4)<=(~PAGE_MASK & -(int)hatch) ) ) // space left on page
-        // Try Elf32_Ehdr.e_ident[8..15] .  warning: 'const' cast away
-        ||   ( (hatch = (void *)(&((Elf32_Ehdr *)phdr->p_vaddr + reloc)->e_ident[8])),
-                (phdr->p_offset==0) )
+                &&  (NINSTR * NBPI)<=(~PAGE_MASK & -(int)hatch) ) ) // space left on page
         // Allocate and use a new page.
         // Linux on ARM wants PROT_EXEC or else __clear_cache does not work?
         ||   (  xprot = 1, hatch = mmap(0, PAGE_SIZE, PROT_EXEC|PROT_WRITE|PROT_READ,
@@ -443,10 +442,11 @@ make_hatch_arm(
         ) {
             hatch = (unsigned *)(~3ul & (3+ (unsigned long)hatch));
             hatch[0] = sys_munmap;  // syscall __NR_unmap
-            hatch[1] = 0xe1a0f00e;  // mov pc,lr
-            __clear_cache(&hatch[0], &hatch[2]);  // ? needed before Pprotect()
+            hatch[1] = 0xe8bd0003;  // pop {r0,r1}  ABI -static parameters
+            hatch[2] = 0xe1a0f00e;  // mov pc,lr
+            __clear_cache(&hatch[0], &hatch[NINSTR]);  // ? needed before Pprotect()
             if (xprot) {
-                Pprotect(hatch, 2*sizeof(unsigned), PROT_EXEC|PROT_READ);
+                Pprotect(hatch, NINSTR * NBPI, PROT_EXEC|PROT_READ);
             }
         }
         else {
@@ -542,44 +542,42 @@ upx_bzero(char *p, size_t len)
 #define bzero upx_bzero
 
 
-static Elf32_auxv_t *
-#if defined(__i386__)  /*{*/
-__attribute__((regparm(2), stdcall))
-#endif  /*}*/
-auxv_find(Elf32_auxv_t *av, unsigned const type)
-{
-    Elf32_auxv_t *avail = 0;
-    if (av
-#if defined(__i386__)  /*{*/
-    && 0==(1&(int)av)  /* PT_INTERP usually inhibits, except for hatch */
-#endif  /*}*/
-    ) {
-        for (;; ++av) {
-            if (av->a_type==type)
-                return av;
-            if (av->a_type==AT_IGNORE)
-                avail = av;
-        }
-        if (0!=avail && AT_NULL!=type) {
-                av = avail;
-                av->a_type = type;
-                return av;
-        }
-    }
-    return 0;
-}
-
-
 static void
 #if defined(__i386__)  /*{*/
 __attribute__((regparm(3), stdcall))
 #endif  /*}*/
-auxv_up(Elf32_auxv_t *av, unsigned const type, unsigned const value)
+auxv_up(Elf32_auxv_t *av, unsigned const tag, uint32_t const value)
 {
-    DPRINTF("auxv_up  %%p %%x %%x\\n",av,type,value);
-    av = auxv_find(av, type);
-    if (av) {
-        av->a_un.a_val = value;
+    if (!av || (1& (size_t)av)) { // none, or inhibited for PT_INTERP
+        return;
+    }
+    DPRINTF("\\nauxv_up %%d  %%p\\n", tag, value);
+    // Multiple slots can have 'tag' which wastes space but is legal.
+    // rtld (ld-linux) uses the last one, so we must scan the whole table.
+    Elf32_auxv_t *ignore_slot = 0;
+    int found = 0;
+    for (;; ++av) {
+        DPRINTF("  %%d  %%p\\n", av->a_type, av->a_un.a_val);
+        if (av->a_type == tag) {
+            av->a_un.a_val = value;
+            ++found;
+        }
+        else if (av->a_type == AT_IGNORE) {
+            ignore_slot = av;
+        }
+        if (av->a_type==AT_NULL) { // done scanning
+            if (found) {
+                return;
+            }
+            if (ignore_slot) {
+                ignore_slot->a_type = tag;
+                ignore_slot->a_un.a_val = value;
+                return;
+            }
+            err_exit(20);
+ERR_LAB
+            return;
+        }
     }
 }
 

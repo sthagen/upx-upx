@@ -36,7 +36,7 @@ class UiPacker;
 class Filter;
 
 /*************************************************************************
-// PackerBase: purely abstract minimal base class for all packers
+// PackerBase: abstract minimal base class for all packers
 //
 // clients: PackMaster, UiPacker
 **************************************************************************/
@@ -80,7 +80,7 @@ protected:
     InputFile *const fi;                // reference
     union {                             // unnamed union
         const upx_int64_t file_size;    // must get set by constructor
-        const upx_uint64_t file_size_u; // (explicitly unsigned to avoid casts)
+        const upx_uint64_t file_size_u; // (explicitly unsigned to avoid -Wsign-compare casts)
     };
     PackHeader ph; // must be filled by canUnpack(); also used by UiPacker
 };
@@ -245,7 +245,7 @@ protected:
                                     unsigned image_size, int bits, bool bswap);
 
     // TE - Target Endianness abstraction
-#if 0
+#if !(DEBUG)
     // permissive version using "void *"
     inline unsigned get_te16(const void *p) const noexcept { return bele->get16(p); }
     inline unsigned get_te32(const void *p) const noexcept { return bele->get32(p); }
