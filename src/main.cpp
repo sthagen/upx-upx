@@ -37,6 +37,9 @@
 **************************************************************************/
 
 #ifndef OPTIONS_VAR
+// historical note: "UPX_OPTIONS" would be a better name, but back in the old
+// days environment variables used to be short; and we cannot change that now
+// because of backward compatibility issues
 #define OPTIONS_VAR "UPX"
 #endif
 
@@ -215,7 +218,7 @@ static void check_and_update_options(int i, int argc) {
 **************************************************************************/
 
 static void e_help(void) {
-    show_help();
+    show_help(0);
     e_exit(EXIT_USAGE);
 }
 
@@ -383,6 +386,8 @@ static int do_option(int optc, const char *arg) {
         set_cmd(CMD_HELP);
         break;
     case 'h' + 256:
+    case 996:
+    case 997:
 #if 1
         if (!acc_isatty(STDOUT_FILENO)) {
             /* according to GNU standards */
@@ -390,7 +395,7 @@ static int do_option(int optc, const char *arg) {
             opt->console = CON_FILE;
         }
 #endif
-        show_help(1);
+        show_help(optc == 996 ? 1 : (optc == 997 ? 3 : 2));
         e_exit(EXIT_OK);
         break;
     case 'i':
@@ -789,7 +794,7 @@ static int do_option(int optc, const char *arg) {
         break;
 
 #if !defined(DOCTEST_CONFIG_DISABLE)
-    case 999: // doctest --dt-XXX option
+    case 999: // [doctest] --dt-XXX option; ignored here, see upx_doctest_check()
         break;
 #endif
 
@@ -813,7 +818,7 @@ int main_get_options(int argc, char **argv) {
         // commands
         {"best", 0x10, N, 900},        // compress best
         {"brute", 0x10, N, 901},       // compress best, brute force
-        {"ultra-brute", 0x10, N, 902}, // compress best, brute force
+        {"ultra-brute", 0x10, N, 902}, // compress best, ultra-brute force
         {"decompress", 0, N, 'd'},     // decompress
         {"fast", 0x10, N, '1'},        // compress faster
         {"fileinfo", 0x10, N, 909},    // display info about file
@@ -923,7 +928,7 @@ int main_get_options(int argc, char **argv) {
         // atari/tos
         {"split-segments", 0x90, N, 650},
         // darwin/macho
-        {"force-macos", 0x90, N, 690}, // undocumented temporary until we fix macOS 13+
+        {"force-macos", 0x90, N, 690}, // undocumented temporary option until we do fix macOS 13+
         // djgpp2/coff
         {"coff", 0x90, N, 610}, // produce COFF output
         // dos/exe
@@ -963,7 +968,7 @@ int main_get_options(int argc, char **argv) {
         {"strip-relocs", 0x12, N, 634},
         {"keep-resource", 0x31, N, 635},
 
-#if !defined(DOCTEST_CONFIG_DISABLE)
+#if !defined(DOCTEST_CONFIG_DISABLE) // accept and ignore some doctest --dt-XXX options
         // [doctest] Query flags - the program quits after them. Available:
         {"dt-c", 0x10, N, 999},
         {"dt-count", 0x10, N, 999},
@@ -1020,7 +1025,7 @@ void main_get_envoptions() {
         // commands
         {"best", 0x10, N, 900},        // compress best
         {"brute", 0x10, N, 901},       // compress best, brute force
-        {"ultra-brute", 0x10, N, 902}, // compress best, brute force
+        {"ultra-brute", 0x10, N, 902}, // compress best, ultra-brute force
         {"fast", 0x10, N, '1'},        // compress faster
 
         // options
@@ -1086,7 +1091,7 @@ void main_get_envoptions() {
     static const char sep[] = " \t";
     char shortopts[256];
 
-    var = getenv(OPTIONS_VAR);
+    var = upx_getenv(OPTIONS_VAR);
     if (var == nullptr || !var[0])
         return;
     env = strdup(var);
@@ -1111,7 +1116,7 @@ void main_get_envoptions() {
     if (targc > 1)
         targv = (const char **) upx_calloc(targc + 1, sizeof(char *));
     if (targv == nullptr) {
-        free(env);
+        ::free(env);
         return;
     }
 
@@ -1150,8 +1155,8 @@ void main_get_envoptions() {
         e_envopt(targv[mfx_optind]);
 
     /* clean up */
-    free(targv);
-    free(env);
+    ::free(targv); // NOLINT(bugprone-multi-level-implicit-pointer-conversion)
+    ::free(env);
 #endif /* defined(OPTIONS_VAR) */
 }
 
@@ -1169,9 +1174,14 @@ static void first_options(int argc, char **argv) {
         if (strcmp(argv[i], "--version-short") == 0)
             do_option(998, argv[i]);
     }
-    for (i = 1; i < n; i++)
+    for (i = 1; i < n; i++) {
         if (strcmp(argv[i], "--help") == 0)
             do_option('h' + 256, argv[i]);
+        if (strcmp(argv[i], "--help-short") == 0) // undocumented and subject to change
+            do_option(996, argv[i]);
+        if (strcmp(argv[i], "--help-verbose") == 0) // undocumented and subject to change
+            do_option(997, argv[i]);
+    }
     for (i = 1; i < n; i++)
         if (strcmp(argv[i], "--no-env") == 0)
             do_option(519, argv[i]);
@@ -1269,7 +1279,7 @@ int upx_main(int argc, char *argv[]) may_throw {
         e_exit(EXIT_OK);
         break;
     case CMD_HELP:
-        show_help(1);
+        show_help(2);
         e_exit(EXIT_OK);
         break;
     case CMD_LICENSE:
@@ -1354,11 +1364,7 @@ int __acc_cdecl_main main(int argc, char *argv[]) /*noexcept*/ {
     _set_abort_behavior(_WRITE_ABORT_MSG, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
 #endif
     acc_wildargv(&argc, &argv);
-#if defined(__wasi__)
-    srand((int) time(nullptr));
-#else
-    srand((int) clock());
-#endif
+    upx_rand_init();
 
     // info: main() is implicitly "noexcept", so we need a try block
 #if 0

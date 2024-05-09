@@ -71,7 +71,7 @@ protected:
         BE16 fh_reloc;
     };
 
-    tos_header_t ih, oh;
+    tos_header_t ih = {}, oh = {};
 
     // symbols for buildLoader()
     struct LinkerSymbols {

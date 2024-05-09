@@ -10,10 +10,11 @@ argv0=$0; argv0abs=$(readlink -fn "$argv0"); argv0dir=$(dirname "$argv0abs")
 #   $upx_exe                (required, but with convenience fallback "./upx")
 # optional settings:
 #   $upx_exe_runner         (e.g. "qemu-x86_64 -cpu Nehalem" or "valgrind")
+#   $upx_test_file
 #
 
-# IMPORTANT NOTE: do NOT run as user root!!
-# IMPORTANT NOTE: this script only works on Unix!!
+# IMPORTANT NOTE: this script only works on Unix
+# IMPORTANT NOTE: do NOT run as user root!
 umask 0022
 
 # disable on macOS for now, see https://github.com/upx/upx/issues/612
@@ -40,26 +41,28 @@ if [[ -z $upx_exe ]]; then echo "UPX-ERROR: please set \$upx_exe"; exit 1; fi
 if [[ ! -f $upx_exe ]]; then echo "UPX-ERROR: file '$upx_exe' does not exist"; exit 1; fi
 upx_exe=$(readlink -fn "$upx_exe") # make absolute
 [[ -f $upx_exe ]] || exit 1
-upx_run=()
+
+# set emu and run_upx
+emu=()
 if [[ -n $upx_exe_runner ]]; then
     # usage examples:
     #   export upx_exe_runner="qemu-x86_64 -cpu Nehalem"
     #   export upx_exe_runner="valgrind --leak-check=no --error-exitcode=1 --quiet"
     #   export upx_exe_runner="wine"
-    IFS=' ' read -r -a upx_run <<< "$upx_exe_runner" # split at spaces into array
+    IFS=' ' read -r -a emu <<< "$upx_exe_runner" # split at spaces into array
 elif [[ -n $CMAKE_CROSSCOMPILING_EMULATOR ]]; then
-    IFS=';' read -r -a upx_run <<< "$CMAKE_CROSSCOMPILING_EMULATOR" # split at semicolons into array
+    IFS=';' read -r -a emu <<< "$CMAKE_CROSSCOMPILING_EMULATOR" # split at semicolons into array
 fi
-upx_run+=( "$upx_exe" )
-echo "upx_run='${upx_run[*]}'"
+run_upx=( "${emu[@]}" "$upx_exe" )
+echo "run_upx='${run_upx[*]}'"
 
-# upx_run sanity check
-if ! "${upx_run[@]}" --version-short >/dev/null; then echo "UPX-ERROR: FATAL: upx --version-short FAILED"; exit 1; fi
-if ! "${upx_run[@]}" -L >/dev/null 2>&1; then echo "UPX-ERROR: FATAL: upx -L FAILED"; exit 1; fi
-if ! "${upx_run[@]}" --help >/dev/null;  then echo "UPX-ERROR: FATAL: upx --help FAILED"; exit 1; fi
+# run_upx sanity check
+if ! "${run_upx[@]}" --version-short >/dev/null; then echo "UPX-ERROR: FATAL: upx --version-short FAILED"; exit 1; fi
+if ! "${run_upx[@]}" -L >/dev/null 2>&1; then echo "UPX-ERROR: FATAL: upx -L FAILED"; exit 1; fi
+if ! "${run_upx[@]}" --help >/dev/null;  then echo "UPX-ERROR: FATAL: upx --help FAILED"; exit 1; fi
 
 #***********************************************************************
-# util
+# util functions
 #***********************************************************************
 
 exit_code=0
@@ -160,18 +163,7 @@ create_files() {
     chmod -R a-w z_dir_4
 }
 
-#***********************************************************************
-#
-#***********************************************************************
-
-#set -x # debug
-
-export UPX="--prefer-ucl --no-color --no-progress"
-export UPX_DEBUG_DISABLE_GITREV_WARNING=1
-export UPX_DEBUG_DOCTEST_VERBOSE=0
-export NO_COLOR=1
-
-testsuite_header() {
+print_header() {
     local x='==========='; x="$x$x$x$x$x$x$x"
     echo -e "\n${x}\n${1}\n${x}\n"
 }
@@ -186,206 +178,238 @@ leave_dir() {
     cd ..
 }
 
-# create a tmpdir in current directory
+#***********************************************************************
+# setup
+#***********************************************************************
+
+#set -x # debug
+
+export UPX="--prefer-ucl --no-color --no-progress"
+export UPX_DEBUG_DISABLE_GITREV_WARNING=1
+export UPX_DEBUG_DOCTEST_DISABLE=1 # already checked above
+
+# get $test_file
+if [[ -f $upx_test_file ]]; then
+    test_file="$(readlink -fn "$upx_test_file")"
+else
+    for test_file in /usr/bin/gmake /usr/bin/make /usr/bin/env /bin/ls; do
+        if [[ -f $test_file ]]; then
+            test_file="$(readlink -fn "$test_file")"
+            break
+        fi
+    done
+fi
+ls -l "$test_file"
+file "$test_file" || true
+
+# create and enter a tmpdir in the current directory
 tmpdir="$(mktemp -d tmp-upx-test-XXXXXX)"
 cd "./$tmpdir" || exit 1
 
-if [[ -f /bin/ls ]]; then
-    test_file="$(readlink -fn /bin/ls)"
-else
-    test_file="$(readlink -fn /usr/bin/env)"
-fi
+#***********************************************************************
+# default
+#***********************************************************************
 
-testsuite_header "default"
-flags="-qq -1 --no-filter"
+print_header "default"
+flags="-qq -2 --no-filter"
 mkdir default
 cd default
 create_files
 enter_dir z_dir_1
-"${upx_run[@]}" $flags                 z_symlink_file      && failed 10
-"${upx_run[@]}" $flags "$test_file" -o z_file_new          || failed 11
-"${upx_run[@]}" $flags "$test_file" -o z_dir               && failed 12
-"${upx_run[@]}" $flags "$test_file" -o z_file              && failed 13
-"${upx_run[@]}" $flags "$test_file" -o z_file_link_1       && failed 14
-"${upx_run[@]}" $flags "$test_file" -o z_symlink_file      && failed 15
-"${upx_run[@]}" $flags "$test_file" -o z_symlink_file_link && failed 16
-"${upx_run[@]}" $flags "$test_file" -o z_symlink_dir       && failed 17
-"${upx_run[@]}" $flags "$test_file" -o z_symlink_dangling  && failed 18
+"${run_upx[@]}" $flags                 z_symlink_file      && failed 10
+"${run_upx[@]}" $flags "$test_file" -o z_file_new          || failed 11
+"${run_upx[@]}" $flags "$test_file" -o z_dir               && failed 12
+"${run_upx[@]}" $flags "$test_file" -o z_file              && failed 13
+"${run_upx[@]}" $flags "$test_file" -o z_file_link_1       && failed 14
+"${run_upx[@]}" $flags "$test_file" -o z_symlink_file      && failed 15
+"${run_upx[@]}" $flags "$test_file" -o z_symlink_file_link && failed 16
+"${run_upx[@]}" $flags "$test_file" -o z_symlink_dir       && failed 17
+"${run_upx[@]}" $flags "$test_file" -o z_symlink_dangling  && failed 18
 assert_symlink_to_file  z_symlink_file z_symlink_file_link
 assert_symlink_to_dir   z_symlink_dir
 assert_symlink_dangling z_symlink_dangling
 leave_dir
 enter_dir z_dir_2
-"${upx_run[@]}" $flags                 z_symlink_file      && failed 10
-"${upx_run[@]}" $flags "$test_file" -o z_file_new          || failed 11
-"${upx_run[@]}" $flags "$test_file" -o z_dir               && failed 12
-"${upx_run[@]}" $flags "$test_file" -o z_file              && failed 13
-"${upx_run[@]}" $flags "$test_file" -o z_file_link_1       && failed 14
-"${upx_run[@]}" $flags "$test_file" -o z_symlink_file      && failed 15
-"${upx_run[@]}" $flags "$test_file" -o z_symlink_file_link && failed 16
-"${upx_run[@]}" $flags "$test_file" -o z_symlink_dir       && failed 17
-"${upx_run[@]}" $flags "$test_file" -o z_symlink_dangling  && failed 18
+"${run_upx[@]}" $flags                 z_symlink_file      && failed 10
+"${run_upx[@]}" $flags "$test_file" -o z_file_new          || failed 11
+"${run_upx[@]}" $flags "$test_file" -o z_dir               && failed 12
+"${run_upx[@]}" $flags "$test_file" -o z_file              && failed 13
+"${run_upx[@]}" $flags "$test_file" -o z_file_link_1       && failed 14
+"${run_upx[@]}" $flags "$test_file" -o z_symlink_file      && failed 15
+"${run_upx[@]}" $flags "$test_file" -o z_symlink_file_link && failed 16
+"${run_upx[@]}" $flags "$test_file" -o z_symlink_dir       && failed 17
+"${run_upx[@]}" $flags "$test_file" -o z_symlink_dangling  && failed 18
 assert_symlink_to_file  z_symlink_file z_symlink_file_link
 assert_symlink_to_dir   z_symlink_dir
 assert_symlink_dangling z_symlink_dangling
 leave_dir
 enter_dir z_dir_3
-"${upx_run[@]}" $flags                 z_symlink_file      && failed 10
-"${upx_run[@]}" $flags "$test_file" -o z_file_new          && failed 11
-"${upx_run[@]}" $flags "$test_file" -o z_dir               && failed 12
-"${upx_run[@]}" $flags "$test_file" -o z_file              && failed 13
-"${upx_run[@]}" $flags "$test_file" -o z_file_link_1       && failed 14
-"${upx_run[@]}" $flags "$test_file" -o z_symlink_file      && failed 15
-"${upx_run[@]}" $flags "$test_file" -o z_symlink_file_link && failed 16
-"${upx_run[@]}" $flags "$test_file" -o z_symlink_dir       && failed 17
-"${upx_run[@]}" $flags "$test_file" -o z_symlink_dangling  && failed 18
+"${run_upx[@]}" $flags                 z_symlink_file      && failed 10
+"${run_upx[@]}" $flags "$test_file" -o z_file_new          && failed 11
+"${run_upx[@]}" $flags "$test_file" -o z_dir               && failed 12
+"${run_upx[@]}" $flags "$test_file" -o z_file              && failed 13
+"${run_upx[@]}" $flags "$test_file" -o z_file_link_1       && failed 14
+"${run_upx[@]}" $flags "$test_file" -o z_symlink_file      && failed 15
+"${run_upx[@]}" $flags "$test_file" -o z_symlink_file_link && failed 16
+"${run_upx[@]}" $flags "$test_file" -o z_symlink_dir       && failed 17
+"${run_upx[@]}" $flags "$test_file" -o z_symlink_dangling  && failed 18
 assert_symlink_to_file  z_symlink_file z_symlink_file_link
 assert_symlink_to_dir   z_symlink_dir
 assert_symlink_dangling z_symlink_dangling
 leave_dir
 enter_dir z_dir_4
-"${upx_run[@]}" $flags                 z_symlink_file      && failed 10
-"${upx_run[@]}" $flags "$test_file" -o z_file_new          && failed 11
-"${upx_run[@]}" $flags "$test_file" -o z_dir               && failed 12
-"${upx_run[@]}" $flags "$test_file" -o z_file              && failed 13
-"${upx_run[@]}" $flags "$test_file" -o z_file_link_1       && failed 14
-"${upx_run[@]}" $flags "$test_file" -o z_symlink_file      && failed 15
-"${upx_run[@]}" $flags "$test_file" -o z_symlink_file_link && failed 16
-"${upx_run[@]}" $flags "$test_file" -o z_symlink_dir       && failed 17
-"${upx_run[@]}" $flags "$test_file" -o z_symlink_dangling  && failed 18
+"${run_upx[@]}" $flags                 z_symlink_file      && failed 10
+"${run_upx[@]}" $flags "$test_file" -o z_file_new          && failed 11
+"${run_upx[@]}" $flags "$test_file" -o z_dir               && failed 12
+"${run_upx[@]}" $flags "$test_file" -o z_file              && failed 13
+"${run_upx[@]}" $flags "$test_file" -o z_file_link_1       && failed 14
+"${run_upx[@]}" $flags "$test_file" -o z_symlink_file      && failed 15
+"${run_upx[@]}" $flags "$test_file" -o z_symlink_file_link && failed 16
+"${run_upx[@]}" $flags "$test_file" -o z_symlink_dir       && failed 17
+"${run_upx[@]}" $flags "$test_file" -o z_symlink_dangling  && failed 18
 assert_symlink_to_file  z_symlink_file z_symlink_file_link
 assert_symlink_to_dir   z_symlink_dir
 assert_symlink_dangling z_symlink_dangling
 leave_dir
 cd ..
 
-testsuite_header "force-overwrite"
-flags="-qq -1 --no-filter --force-overwrite"
+#***********************************************************************
+# force-overwrite
+#***********************************************************************
+
+print_header "force-overwrite"
+flags="-qq -2 --no-filter --force-overwrite"
 mkdir force-overwrite
 cd force-overwrite
 create_files
 enter_dir z_dir_1
-"${upx_run[@]}" $flags                 z_symlink_file      && failed 10
-"${upx_run[@]}" $flags "$test_file" -o z_file_new          || failed 11
-"${upx_run[@]}" $flags "$test_file" -o z_dir               && failed 12
-"${upx_run[@]}" $flags "$test_file" -o z_file              || failed 13
-"${upx_run[@]}" $flags "$test_file" -o z_file_link_1       || failed 14
-"${upx_run[@]}" $flags "$test_file" -o z_symlink_file      || failed 15
-"${upx_run[@]}" $flags "$test_file" -o z_symlink_file_link || failed 16
-"${upx_run[@]}" $flags "$test_file" -o z_symlink_dir       || failed 17
-"${upx_run[@]}" $flags "$test_file" -o z_symlink_dangling  || failed 18
+"${run_upx[@]}" $flags                 z_symlink_file      && failed 10
+"${run_upx[@]}" $flags "$test_file" -o z_file_new          || failed 11
+"${run_upx[@]}" $flags "$test_file" -o z_dir               && failed 12
+"${run_upx[@]}" $flags "$test_file" -o z_file              || failed 13
+"${run_upx[@]}" $flags "$test_file" -o z_file_link_1       || failed 14
+"${run_upx[@]}" $flags "$test_file" -o z_symlink_file      || failed 15
+"${run_upx[@]}" $flags "$test_file" -o z_symlink_file_link || failed 16
+"${run_upx[@]}" $flags "$test_file" -o z_symlink_dir       || failed 17
+"${run_upx[@]}" $flags "$test_file" -o z_symlink_dangling  || failed 18
 assert_file z_symlink_file z_symlink_file_link
 assert_file z_symlink_dir
 assert_file z_symlink_dangling
 leave_dir
 enter_dir z_dir_2
-"${upx_run[@]}" $flags                 z_symlink_file      && failed 10
-"${upx_run[@]}" $flags "$test_file" -o z_file_new          || failed 11
-"${upx_run[@]}" $flags "$test_file" -o z_dir               && failed 12
-"${upx_run[@]}" $flags "$test_file" -o z_file              || failed 13
-"${upx_run[@]}" $flags "$test_file" -o z_file_link_1       || failed 14
-"${upx_run[@]}" $flags "$test_file" -o z_symlink_file      || failed 15
-"${upx_run[@]}" $flags "$test_file" -o z_symlink_file_link || failed 16
-"${upx_run[@]}" $flags "$test_file" -o z_symlink_dir       || failed 17
-"${upx_run[@]}" $flags "$test_file" -o z_symlink_dangling  || failed 18
+"${run_upx[@]}" $flags                 z_symlink_file      && failed 10
+"${run_upx[@]}" $flags "$test_file" -o z_file_new          || failed 11
+"${run_upx[@]}" $flags "$test_file" -o z_dir               && failed 12
+"${run_upx[@]}" $flags "$test_file" -o z_file              || failed 13
+"${run_upx[@]}" $flags "$test_file" -o z_file_link_1       || failed 14
+"${run_upx[@]}" $flags "$test_file" -o z_symlink_file      || failed 15
+"${run_upx[@]}" $flags "$test_file" -o z_symlink_file_link || failed 16
+"${run_upx[@]}" $flags "$test_file" -o z_symlink_dir       || failed 17
+"${run_upx[@]}" $flags "$test_file" -o z_symlink_dangling  || failed 18
 assert_file z_symlink_file z_symlink_file_link
 assert_file z_symlink_dir
 assert_file z_symlink_dangling
 leave_dir
 enter_dir z_dir_3
-"${upx_run[@]}" $flags                 z_symlink_file      && failed 10
-"${upx_run[@]}" $flags "$test_file" -o z_file_new          && failed 11
-"${upx_run[@]}" $flags "$test_file" -o z_dir               && failed 12
-"${upx_run[@]}" $flags "$test_file" -o z_file              || failed 13
-"${upx_run[@]}" $flags "$test_file" -o z_file_link_1       || failed 14
-"${upx_run[@]}" $flags "$test_file" -o z_symlink_file      || failed 15
-"${upx_run[@]}" $flags "$test_file" -o z_symlink_file_link || failed 16
-"${upx_run[@]}" $flags "$test_file" -o z_symlink_dir       && failed 17
-"${upx_run[@]}" $flags "$test_file" -o z_symlink_dangling  && failed 18
+"${run_upx[@]}" $flags                 z_symlink_file      && failed 10
+"${run_upx[@]}" $flags "$test_file" -o z_file_new          && failed 11
+"${run_upx[@]}" $flags "$test_file" -o z_dir               && failed 12
+"${run_upx[@]}" $flags "$test_file" -o z_file              || failed 13
+"${run_upx[@]}" $flags "$test_file" -o z_file_link_1       || failed 14
+"${run_upx[@]}" $flags "$test_file" -o z_symlink_file      || failed 15
+"${run_upx[@]}" $flags "$test_file" -o z_symlink_file_link || failed 16
+"${run_upx[@]}" $flags "$test_file" -o z_symlink_dir       && failed 17
+"${run_upx[@]}" $flags "$test_file" -o z_symlink_dangling  && failed 18
 assert_symlink_to_file  z_symlink_file z_symlink_file_link
 assert_symlink_to_dir   z_symlink_dir
 assert_symlink_dangling z_symlink_dangling
 leave_dir
 enter_dir z_dir_4
-"${upx_run[@]}" $flags                 z_symlink_file      && failed 10
-"${upx_run[@]}" $flags "$test_file" -o z_file_new          && failed 11
-"${upx_run[@]}" $flags "$test_file" -o z_dir               && failed 12
-"${upx_run[@]}" $flags "$test_file" -o z_file              || failed 13
-"${upx_run[@]}" $flags "$test_file" -o z_file_link_1       || failed 14
-"${upx_run[@]}" $flags "$test_file" -o z_symlink_file      || failed 15
-"${upx_run[@]}" $flags "$test_file" -o z_symlink_file_link || failed 16
-"${upx_run[@]}" $flags "$test_file" -o z_symlink_dir       && failed 17
-"${upx_run[@]}" $flags "$test_file" -o z_symlink_dangling  && failed 18
+"${run_upx[@]}" $flags                 z_symlink_file      && failed 10
+"${run_upx[@]}" $flags "$test_file" -o z_file_new          && failed 11
+"${run_upx[@]}" $flags "$test_file" -o z_dir               && failed 12
+"${run_upx[@]}" $flags "$test_file" -o z_file              || failed 13
+"${run_upx[@]}" $flags "$test_file" -o z_file_link_1       || failed 14
+"${run_upx[@]}" $flags "$test_file" -o z_symlink_file      || failed 15
+"${run_upx[@]}" $flags "$test_file" -o z_symlink_file_link || failed 16
+"${run_upx[@]}" $flags "$test_file" -o z_symlink_dir       && failed 17
+"${run_upx[@]}" $flags "$test_file" -o z_symlink_dangling  && failed 18
 assert_symlink_to_file  z_symlink_file z_symlink_file_link
 assert_symlink_to_dir   z_symlink_dir
 assert_symlink_dangling z_symlink_dangling
 leave_dir
 cd ..
 
-if [[ 1 == 1 ]]; then
-testsuite_header "link"
-flags="-qq -1 --no-filter --link"
+#***********************************************************************
+# link
+#***********************************************************************
+
+print_header "link"
+flags="-qq -2 --no-filter --link"
 mkdir link
 cd link
 create_files
 enter_dir z_dir_1
-"${upx_run[@]}" $flags                 z_symlink_file      && failed 10
-"${upx_run[@]}" $flags "$test_file" -o z_file_new          || failed 11
-"${upx_run[@]}" $flags "$test_file" -o z_dir               && failed 12
-"${upx_run[@]}" $flags "$test_file" -o z_file              || failed 13
-"${upx_run[@]}" $flags "$test_file" -o z_file_link_1       || failed 14
-"${upx_run[@]}" $flags "$test_file" -o z_symlink_file      || failed 15
-"${upx_run[@]}" $flags "$test_file" -o z_symlink_file_link || failed 16
-"${upx_run[@]}" $flags "$test_file" -o z_symlink_dir       || failed 17
-"${upx_run[@]}" $flags "$test_file" -o z_symlink_dangling  || failed 18
+"${run_upx[@]}" $flags                 z_symlink_file      && failed 10
+"${run_upx[@]}" $flags "$test_file" -o z_file_new          || failed 11
+"${run_upx[@]}" $flags "$test_file" -o z_dir               && failed 12
+"${run_upx[@]}" $flags "$test_file" -o z_file              || failed 13
+"${run_upx[@]}" $flags "$test_file" -o z_file_link_1       || failed 14
+"${run_upx[@]}" $flags "$test_file" -o z_symlink_file      || failed 15
+"${run_upx[@]}" $flags "$test_file" -o z_symlink_file_link || failed 16
+"${run_upx[@]}" $flags "$test_file" -o z_symlink_dir       || failed 17
+"${run_upx[@]}" $flags "$test_file" -o z_symlink_dangling  || failed 18
 assert_file z_symlink_file z_symlink_file_link
 assert_file z_symlink_dir
 assert_file z_symlink_dangling
 leave_dir
 enter_dir z_dir_2
-"${upx_run[@]}" $flags                 z_symlink_file      && failed 10
-"${upx_run[@]}" $flags "$test_file" -o z_file_new          || failed 11
-"${upx_run[@]}" $flags "$test_file" -o z_dir               && failed 12
-"${upx_run[@]}" $flags "$test_file" -o z_file              && failed 13
-"${upx_run[@]}" $flags "$test_file" -o z_file_link_1       && failed 14
-"${upx_run[@]}" $flags "$test_file" -o z_symlink_file      || failed 15
-"${upx_run[@]}" $flags "$test_file" -o z_symlink_file_link || failed 16
-"${upx_run[@]}" $flags "$test_file" -o z_symlink_dir       || failed 17
-"${upx_run[@]}" $flags "$test_file" -o z_symlink_dangling  || failed 18
+"${run_upx[@]}" $flags                 z_symlink_file      && failed 10
+"${run_upx[@]}" $flags "$test_file" -o z_file_new          || failed 11
+"${run_upx[@]}" $flags "$test_file" -o z_dir               && failed 12
+"${run_upx[@]}" $flags "$test_file" -o z_file              && failed 13
+"${run_upx[@]}" $flags "$test_file" -o z_file_link_1       && failed 14
+"${run_upx[@]}" $flags "$test_file" -o z_symlink_file      || failed 15
+"${run_upx[@]}" $flags "$test_file" -o z_symlink_file_link || failed 16
+"${run_upx[@]}" $flags "$test_file" -o z_symlink_dir       || failed 17
+"${run_upx[@]}" $flags "$test_file" -o z_symlink_dangling  || failed 18
 assert_file z_symlink_file z_symlink_file_link
 assert_file z_symlink_dir
 assert_file z_symlink_dangling
 leave_dir
 enter_dir z_dir_3
-"${upx_run[@]}" $flags                 z_symlink_file      && failed 10
-"${upx_run[@]}" $flags "$test_file" -o z_file_new          && failed 11
-"${upx_run[@]}" $flags "$test_file" -o z_dir               && failed 12
-"${upx_run[@]}" $flags "$test_file" -o z_file              || failed 13
-"${upx_run[@]}" $flags "$test_file" -o z_file_link_1       || failed 14
-"${upx_run[@]}" $flags "$test_file" -o z_symlink_file      || failed 15
-"${upx_run[@]}" $flags "$test_file" -o z_symlink_file_link || failed 16
-"${upx_run[@]}" $flags "$test_file" -o z_symlink_dir       && failed 17
-"${upx_run[@]}" $flags "$test_file" -o z_symlink_dangling  && failed 18
+"${run_upx[@]}" $flags                 z_symlink_file      && failed 10
+"${run_upx[@]}" $flags "$test_file" -o z_file_new          && failed 11
+"${run_upx[@]}" $flags "$test_file" -o z_dir               && failed 12
+"${run_upx[@]}" $flags "$test_file" -o z_file              || failed 13
+"${run_upx[@]}" $flags "$test_file" -o z_file_link_1       || failed 14
+"${run_upx[@]}" $flags "$test_file" -o z_symlink_file      || failed 15
+"${run_upx[@]}" $flags "$test_file" -o z_symlink_file_link || failed 16
+"${run_upx[@]}" $flags "$test_file" -o z_symlink_dir       && failed 17
+"${run_upx[@]}" $flags "$test_file" -o z_symlink_dangling  && failed 18
 assert_symlink_to_file  z_symlink_file z_symlink_file_link
 assert_symlink_to_dir   z_symlink_dir
 assert_symlink_dangling z_symlink_dangling
 leave_dir
 enter_dir z_dir_4
-"${upx_run[@]}" $flags                 z_symlink_file      && failed 10
-"${upx_run[@]}" $flags "$test_file" -o z_file_new          && failed 11
-"${upx_run[@]}" $flags "$test_file" -o z_dir               && failed 12
-"${upx_run[@]}" $flags "$test_file" -o z_file              && failed 13
-"${upx_run[@]}" $flags "$test_file" -o z_file_link_1       && failed 14
-"${upx_run[@]}" $flags "$test_file" -o z_symlink_file      || failed 15
-"${upx_run[@]}" $flags "$test_file" -o z_symlink_file_link || failed 16
-"${upx_run[@]}" $flags "$test_file" -o z_symlink_dir       && failed 17
-"${upx_run[@]}" $flags "$test_file" -o z_symlink_dangling  && failed 18
+"${run_upx[@]}" $flags                 z_symlink_file      && failed 10
+"${run_upx[@]}" $flags "$test_file" -o z_file_new          && failed 11
+"${run_upx[@]}" $flags "$test_file" -o z_dir               && failed 12
+"${run_upx[@]}" $flags "$test_file" -o z_file              && failed 13
+"${run_upx[@]}" $flags "$test_file" -o z_file_link_1       && failed 14
+"${run_upx[@]}" $flags "$test_file" -o z_symlink_file      || failed 15
+"${run_upx[@]}" $flags "$test_file" -o z_symlink_file_link || failed 16
+"${run_upx[@]}" $flags "$test_file" -o z_symlink_dir       && failed 17
+"${run_upx[@]}" $flags "$test_file" -o z_symlink_dangling  && failed 18
 assert_symlink_to_file  z_symlink_file z_symlink_file_link
 assert_symlink_to_dir   z_symlink_dir
 assert_symlink_dangling z_symlink_dangling
 leave_dir
 cd ..
-fi
+
+#***********************************************************************
+# done
+#***********************************************************************
 
 # clean up
 cd ..

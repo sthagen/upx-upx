@@ -743,6 +743,7 @@ tribool PackWcle::canUnpack() {
     return readPackHeader(len) ? 1 : -1;
 }
 
+/*static*/
 void PackWcle::virt2rela(const le_object_table_entry_t *entr, unsigned *objn, unsigned *addr) {
     for (; *objn > 1; objn[0]--) {
         if (entr[*objn - 1].my_base_address > *addr)

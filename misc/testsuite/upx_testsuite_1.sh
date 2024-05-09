@@ -29,23 +29,25 @@ if [[ -z $upx_exe ]]; then echo "UPX-ERROR: please set \$upx_exe"; exit 1; fi
 if [[ ! -f $upx_exe ]]; then echo "UPX-ERROR: file '$upx_exe' does not exist"; exit 1; fi
 upx_exe=$(readlink -fn "$upx_exe") # make absolute
 [[ -f $upx_exe ]] || exit 1
-upx_run=()
+
+# set emu and run_upx
+emu=()
 if [[ -n $upx_exe_runner ]]; then
     # usage examples:
     #   export upx_exe_runner="qemu-x86_64 -cpu Nehalem"
     #   export upx_exe_runner="valgrind --leak-check=no --error-exitcode=1 --quiet"
     #   export upx_exe_runner="wine"
-    IFS=' ' read -r -a upx_run <<< "$upx_exe_runner" # split at spaces into array
+    IFS=' ' read -r -a emu <<< "$upx_exe_runner" # split at spaces into array
 elif [[ -n $CMAKE_CROSSCOMPILING_EMULATOR ]]; then
-    IFS=';' read -r -a upx_run <<< "$CMAKE_CROSSCOMPILING_EMULATOR" # split at semicolons into array
+    IFS=';' read -r -a emu <<< "$CMAKE_CROSSCOMPILING_EMULATOR" # split at semicolons into array
 fi
-upx_run+=( "$upx_exe" )
-echo "upx_run='${upx_run[*]}'"
+run_upx=( "${emu[@]}" "$upx_exe" )
+echo "run_upx='${run_upx[*]}'"
 
-# upx_run sanity check, part1
-if ! "${upx_run[@]}" --version-short >/dev/null; then echo "UPX-ERROR: FATAL: upx --version-short FAILED"; exit 1; fi
-if ! "${upx_run[@]}" -L >/dev/null 2>&1; then echo "UPX-ERROR: FATAL: upx -L FAILED"; exit 1; fi
-if ! "${upx_run[@]}" --help >/dev/null;  then echo "UPX-ERROR: FATAL: upx --help FAILED"; exit 1; fi
+# run_upx sanity check
+if ! "${run_upx[@]}" --version-short >/dev/null; then echo "UPX-ERROR: FATAL: upx --version-short FAILED"; exit 1; fi
+if ! "${run_upx[@]}" -L >/dev/null 2>&1; then echo "UPX-ERROR: FATAL: upx -L FAILED"; exit 1; fi
+if ! "${run_upx[@]}" --help >/dev/null;  then echo "UPX-ERROR: FATAL: upx --help FAILED"; exit 1; fi
 
 # upx_testsuite_SRCDIR
 if [[ -z $upx_testsuite_SRCDIR ]]; then
@@ -74,19 +76,30 @@ fi
 mkdir -p "$upx_testsuite_BUILDDIR" || exit 1
 upx_testsuite_BUILDDIR=$(readlink -fn "$upx_testsuite_BUILDDIR") # make absolute
 [[ -d $upx_testsuite_BUILDDIR ]] || exit 1
-
 cd / && cd "$upx_testsuite_BUILDDIR" || exit 1
 : > ./.mfxnobackup
 
-# upx_run sanity check, part2
-if ! "${upx_run[@]}" --version-short >/dev/null; then
+# run_upx sanity check after "cd"
+if ! "${run_upx[@]}" --version-short >/dev/null; then
     echo "UPX-ERROR: FATAL: upx --version-short FAILED"
     echo "please make sure that \$upx_exe contains ABSOLUTE file paths and can be run from any directory"
-    echo "INFO: upx_run='${upx_run[*]}'"
+    echo "INFO: run_upx='${run_upx[*]}'"
     exit 1
 fi
-if ! "${upx_run[@]}" -L >/dev/null 2>&1; then echo "UPX-ERROR: FATAL: upx -L FAILED"; exit 1; fi
-if ! "${upx_run[@]}" --help >/dev/null;  then echo "UPX-ERROR: FATAL: upx --help FAILED"; exit 1; fi
+
+#***********************************************************************
+# setup
+#***********************************************************************
+
+#set -x # debug
+
+exit_code=0
+num_errors=0
+all_errors=
+
+export UPX="--prefer-ucl --no-color --no-progress"
+export UPX_DEBUG_DISABLE_GITREV_WARNING=1
+export UPX_DEBUG_DOCTEST_DISABLE=1 # already checked above
 
 case $UPX_TESTSUITE_LEVEL in
     [0-8]) ;;
@@ -96,19 +109,6 @@ if [[ $UPX_TESTSUITE_LEVEL == 0 ]]; then
     echo "UPX testsuite SKIPPED."
     exit 0
 fi
-
-#***********************************************************************
-# setup
-#***********************************************************************
-
-#set -x # debug
-exit_code=0
-num_errors=0
-all_errors=
-
-export UPX="--prefer-ucl --no-color --no-progress"
-export UPX_DEBUG_DISABLE_GITREV_WARNING=1
-export UPX_DEBUG_DOCTEST_VERBOSE=0
 
 rm -rf ./testsuite_1
 mkdir testsuite_1 || exit 1
@@ -121,11 +121,11 @@ cd testsuite_1 || exit 1
 run_upx() {
     local ec=0
     if [[ $UPX_TESTSUITE_VERBOSE == 1 ]]; then
-        echo "LOG: '${upx_run[*]}' $*"
+        echo "LOG: '${run_upx[*]}' $*"
     fi
-    "${upx_run[@]}" "$@" || ec=$?
+    "${run_upx[@]}" "$@" || ec=$?
     if [[ $ec != 0 ]]; then
-        echo "FATAL: '${upx_run[*]}' $*"
+        echo "FATAL: '${run_upx[*]}' $*"
         echo "  (exit code was $ec)"
         exit 42
     fi
@@ -319,7 +319,7 @@ ls -l "$upx_exe"
 if command -v file >/dev/null; then
     file "$upx_exe" || true
 fi
-echo "upx_run='${upx_run[*]}'"
+echo "run_upx='${run_upx[*]}'"
 echo "upx_testsuite_SRCDIR='$upx_testsuite_SRCDIR'"
 echo "upx_testsuite_BUILDDIR='$upx_testsuite_BUILDDIR'"
 echo ".sha256sums.{expected,current} counts:"

@@ -65,7 +65,7 @@ ssize_t write(int, void const *, size_t);
 // and then followed by a comma to ignore the return value.
 // The only complication is that percent and backslash
 // must be doubled in the format string, because the format
-// string is processd twice: once at compile-time by 'asm'
+// string is processed twice: once at compile-time by 'asm'
 // to produce the assembled value, and once at runtime to use it.
 #if defined(__powerpc__)  //{
 #define DPRINTF(fmt, args...) ({ \
@@ -684,8 +684,6 @@ do_xmap(int const fdi, Elf32_Ehdr const *const ehdr, Extent *const xi,
             reloc = ehdr0;
         }
         v_brk = phdr0->p_memsz + ehdr0;
-        DPRINTF("do_xmap munmap [%%p, +%%x)\n", ehdr0, phdr0->p_memsz);
-        munmap((void *)ehdr0, phdr0->p_memsz);
     }
     else { // PT_INTERP
         reloc = xfind_pages(
@@ -696,13 +694,10 @@ do_xmap(int const fdi, Elf32_Ehdr const *const ehdr, Extent *const xi,
         );
     }
 
-#if DEBUG &&!defined(__mips__)  //{
-    size_t const page_mask = 0;
-#endif  //}
     DPRINTF("do_xmap  fdi=%%x  ehdr=%%p  xi=%%p(%%x %%p)\\n"
-          "  av=%%p  page_mask=%%p  reloc=%%p  p_reloc=%%p/%%p  f_unf=%%p\\n",
+          "  av=%%p  frag_mask=%%p  reloc=%%p  p_reloc=%%p/%%p  f_unf=%%p\\n",
         fdi, ehdr, xi, (xi? xi->size: 0), (xi? xi->buf: 0),
-        av, page_mask, reloc, p_reloc, *p_reloc, f_unf);
+        av, frag_mask, reloc, p_reloc, *p_reloc, f_unf);
     int j;
     for (j=0; j < ehdr->e_phnum; ++phdr, ++j)
     if (xi && PT_PHDR==phdr->p_type) {

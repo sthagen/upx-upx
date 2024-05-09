@@ -17,7 +17,8 @@ If:
 CompileFlags:
   Add:
     - -std=gnu++17
-    # -std=gnu++20 # requires clang >= 10.0
+    # -std=gnu++20 # requires clangd >= 11.0
+    # -std=gnu++23 # requires clangd >= 18.0
 ---
 # common flags for all C/C++ files
 If:

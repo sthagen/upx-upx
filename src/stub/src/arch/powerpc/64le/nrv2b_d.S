@@ -51,6 +51,11 @@
 #undef  jnextb0n
 #undef  jnextb1y
 #undef  jnextb1n
+
+/* "closed" coding (subroutine call to get1) saves space: 2 instr per jnextb*
+   and 1 instr per getnextb, in contrast to "open" coding of nrv2d and nrv2e;
+   but costs pipeline breaks.  Savings is (2*4*3 + 1*4*4) == 40 bytes.
+*/
 /* jump on next bit, with branch prediction: y==>likely; n==>unlikely
    cr0 is set by the cmpl ["compare logical"==>unsigned]:
     lt  next bit is 0
@@ -67,10 +72,10 @@
 #define getnextb(reg) call get1; adde. reg,reg,reg
 
 get2:
-        adde  bits,bits,bits  // shift in Carry from 'addc' below
+        adde  bits,bits,bits  // shift in Carry (== 1) from 'addc' below
         sldi bits,bits,32-1  // left justify 33-bit result
 get1:
-        cmpld bits,hibit  // cr0  for   jnextb
+        cmpld bits,hibit  // cr0  for   jnextb; NEQ because (1==Cin) at 'adde'
         addc  bits,bits,bits  // Carry for getnextb
         bnelr+ cr0  // return if reload not needed; likely 31/32
 

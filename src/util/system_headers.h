@@ -29,7 +29,7 @@
 #include "system_defs.h"
 
 #if !(__cplusplus + 0 >= 201703L)
-#error "C++17 is required"
+#error "FATAL ERROR: C++17 is required"
 #endif
 
 // check expected defines
@@ -125,6 +125,7 @@ static_assert(sizeof(void *) == sizeof(long));
 #include <type_traits>
 #include <utility>
 // C++ system headers
+#include <algorithm>
 #include <memory> // std::unique_ptr
 // C++ multithreading (UPX currently does not use multithreading)
 #if __STDC_NO_ATOMICS__
@@ -135,19 +136,19 @@ static_assert(sizeof(void *) == sizeof(long));
 #include <mutex>
 #endif
 
-// sanitizers
+// sanitizers: ASAN, MSAN, UBSAN
 #if !defined(__SANITIZE_ADDRESS__) && defined(__has_feature)
-#if __has_feature(address_sanitizer)
+#if __has_feature(address_sanitizer) // ASAN
 #define __SANITIZE_ADDRESS__ 1
 #endif
 #endif
 #if !defined(__SANITIZE_MEMORY__) && defined(__has_feature)
-#if __has_feature(memory_sanitizer)
+#if __has_feature(memory_sanitizer) // MSAN
 #define __SANITIZE_MEMORY__ 1
 #endif
 #endif
 #if !defined(__SANITIZE_UNDEFINED_BEHAVIOR__) && defined(__has_feature)
-#if __has_feature(undefined_behavior_sanitizer)
+#if __has_feature(undefined_behavior_sanitizer) // UBSAN
 #define __SANITIZE_UNDEFINED_BEHAVIOR__ 1
 #endif
 #endif

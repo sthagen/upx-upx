@@ -57,9 +57,9 @@ void Packer::assertPacker() const {
     assert(getVersion() >= 11);
     assert(getVersion() <= 14);
     assert(strlen(getName()) <= 15);
-    // info: 36 is the limit for show_all_packers() in help.cpp, but 32 should be enough
-    assert(strlen(getFullName(opt)) <= 32);
+    // info: 36 is the limit for show_all_packers() in help.cpp, but 32 should be enough for now
     assert(strlen(getFullName(nullptr)) <= 32);
+    assert(strlen(getFullName(opt)) <= 32);
     if (bele == nullptr)
         fprintf(stderr, "%s\n", getName());
     assert(bele != nullptr);
@@ -469,33 +469,10 @@ unsigned Packer::getRandomId() const {
     if (opt->debug.disable_random_id)
         return 0x01020304;
     unsigned id = 0;
-#if 0 && defined(__unix__)
-    // Don't consume precious bytes from /dev/urandom.
-    int fd = open("/dev/urandom", O_RDONLY | O_BINARY);
-    if (fd < 0)
-        fd = open("/dev/random", O_RDONLY | O_BINARY);
-    if (fd >= 0) {
-        if (read(fd, &id, 4) != 4)
-            id = 0;
-        close(fd);
-    }
-#endif
     while (id == 0) {
-#if (!(HAVE_GETTIMEOFDAY) || ((ACC_OS_DOS32) && defined(__DJGPP__))) && !defined(__wasi__)
-        id ^= (unsigned) time(nullptr);
-        id ^= ((unsigned) clock()) << 12;
-#else
-        struct timeval tv;
-        gettimeofday(&tv, nullptr);
-        id ^= (unsigned) tv.tv_sec;
-        id ^= ((unsigned) tv.tv_usec) << 12; // shift into high-bits
-#endif
-#if HAVE_GETPID
-        id ^= (unsigned) getpid();
-#endif
         id ^= (unsigned) fi->st.st_ino;
         id ^= (unsigned) fi->st.st_atime;
-        id ^= (unsigned) rand();
+        id ^= (unsigned) upx_rand();
     }
     return id;
 }
@@ -947,10 +924,10 @@ int Packer::prepareMethods(int *methods, int ph_method, const int *all_methods) 
     }
     // debug
     if (opt->debug.use_random_method && nmethods >= 2) {
-        int method = methods[rand() % nmethods];
+        int method = methods[upx_rand() % nmethods];
+        NO_printf("\nuse_random_method = %#x (%d)\n", method, nmethods);
         methods[0] = method;
         nmethods = 1;
-        NO_printf("\nuse_random_method = %d\n", method);
     }
     return nmethods;
 }
@@ -1015,12 +992,12 @@ done:
         filters[nfilters++] = 0;
     // debug
     if (opt->debug.use_random_filter && nfilters >= 3 && filters[nfilters - 1] == 0) {
-        int filter_id = filters[rand() % (nfilters - 1)];
+        int filter_id = filters[upx_rand() % (nfilters - 1)];
         if (filter_id > 0) {
+            NO_printf("\nuse_random_filter = %#x (%d)\n", filter_id, nfilters - 1);
             filters[0] = filter_id;
             filters[1] = 0;
             nfilters = 2;
-            NO_printf("\nuse_random_filter = %d\n", filter_id);
         }
     }
     return nfilters;
@@ -1054,14 +1031,14 @@ void Packer::compressWithFilters(byte *i_ptr,
     assert(orig_ft.id == 0);
 
     // prepare methods and filters
-    int methods[256];
+    int methods[MAX_METHODS];
     int nmethods = prepareMethods(methods, ph.method, getCompressionMethods(M_ALL, ph.level));
-    assert(nmethods > 0);
-    assert(nmethods < 256);
-    int filters[256];
+    assert_noexcept(nmethods > 0);
+    assert_noexcept(nmethods < (int) MAX_METHODS);
+    int filters[MAX_FILTERS];
     int nfilters = prepareFilters(filters, filter_strategy, getFilters());
-    assert(nfilters > 0);
-    assert(nfilters < 256);
+    assert_noexcept(nfilters > 0);
+    assert_noexcept(nfilters < (int) MAX_FILTERS);
 #if 0
     printf("compressWithFilters: m(%d):", nmethods);
     for (int i = 0; i < nmethods; i++)

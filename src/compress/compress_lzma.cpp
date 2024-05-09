@@ -37,9 +37,6 @@
 #if (ACC_CC_MSC)
 #pragma warning(disable : 4456) // -Wno-shadow
 #endif
-#if (ACC_CC_MSC && (_MSC_VER < 1900))
-#pragma warning(disable : 4127) // warning C4127: conditional expression is constant
-#endif
 
 void lzma_compress_config_t::reset() noexcept {
     pos_bits.reset();
@@ -206,15 +203,12 @@ error:
 // compress - cruft because of pseudo-COM layer
 **************************************************************************/
 
-// ensure proper nullptr usage
-// TODO later: examine why we need this in the first place
-#undef NULL
-// NOLINTBEGIN(clang-analyzer-optin.cplusplus.*)
-#define NULL nullptr
-// NOLINTEND(clang-analyzer-optin.cplusplus.*)
-#if defined(__GNUC__)
-#undef __null
-#define __null nullptr
+#if (ACC_CC_CLANG >= 0x080000)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wzero-as-null-pointer-constant"
+#elif (ACC_CC_GNUC >= 0x040700)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wzero-as-null-pointer-constant"
 #endif
 
 #undef MSDOS
@@ -316,6 +310,12 @@ STDMETHODIMP ProgressInfo::SetRatioInfo(const UInt64 *inSize, const UInt64 *outS
 #include <lzma-sdk/C/7zip/Compress/RangeCoder/RangeCoderBit.cpp>
 #undef RC_NORMALIZE
 
+#if (ACC_CC_CLANG >= 0x080000)
+#pragma clang diagnostic pop
+#elif (ACC_CC_GNUC >= 0x040700)
+#pragma GCC diagnostic pop
+#endif
+
 int upx_lzma_compress(const upx_bytep src, unsigned src_len, upx_bytep dst, unsigned *dst_len,
                       upx_callback_t *cb, int method, int level,
                       const upx_compress_config_t *cconf_parm, upx_compress_result_t *cresult) {
@@ -340,7 +340,8 @@ int upx_lzma_compress(const upx_bytep src, unsigned src_len, upx_bytep dst, unsi
     progress.cb = cb; // progress.Init()
 
     NCompress::NLZMA::CEncoder enc;
-    const PROPID propIDs[8] = {
+    constexpr unsigned NPROPS = 8;
+    static const PROPID propIDs[NPROPS] = {
         NCoderPropID::kPosStateBits,      // 0  pb    _posStateBits(2)
         NCoderPropID::kLitPosBits,        // 1  lp    _numLiteralPosStateBits(0)
         NCoderPropID::kLitContextBits,    // 2  lc    _numLiteralContextBits(3)
@@ -350,8 +351,7 @@ int upx_lzma_compress(const upx_bytep src, unsigned src_len, upx_bytep dst, unsi
         NCoderPropID::kMatchFinderCycles, // 6  mfc   _matchFinderCycles, _cutValue
         NCoderPropID::kMatchFinder        // 7  mf
     };
-    PROPVARIANT pr[8];
-    const unsigned nprops = 8;
+    PROPVARIANT pr[NPROPS];
     if (!prepare_result(res, src_len, method, level, lcconf))
         goto error;
     pr[0].vt = pr[1].vt = pr[2].vt = pr[3].vt = pr[4].vt = pr[5].vt = pr[6].vt = VT_UI4;
@@ -368,7 +368,7 @@ int upx_lzma_compress(const upx_bytep src, unsigned src_len, upx_bytep dst, unsi
     pr[7].bstrVal = ACC_PCAST(BSTR, ACC_UNCONST_CAST(wchar_t *, matchfinder));
 
     try {
-        if (enc.SetCoderProperties(propIDs, pr, nprops) != S_OK)
+        if (enc.SetCoderProperties(propIDs, pr, NPROPS) != S_OK)
             goto error;
         // encode properties in LZMA-style (5 bytes)
         if (enc.WriteCoderProperties(&os) != S_OK)

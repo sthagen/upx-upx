@@ -215,7 +215,7 @@ int PeFile::readFileHeader() {
 
 PeFile::Interval::Interval(SPAN_P(byte) b) : base(b) {}
 
-PeFile::Interval::~Interval() noexcept { free(ivarr); }
+PeFile::Interval::~Interval() noexcept { ::free(ivarr); }
 
 int __acc_cdecl_qsort PeFile::Interval::compare(const void *p1, const void *p2) {
     const interval *i1 = (const interval *) p1;
@@ -512,10 +512,10 @@ void PeFile32::processRelocs() // pass1
             infoWarning("skipping unsupported relocation type %d (%d)", ic, counts[ic]);
 
     LE32 *fix[4];
-    upx::ArrayDeleter<LE32 **> fixdel{fix, 0}; // don't leak memory
+    auto fix_deleter = upx::ArrayDeleter(fix, 0); // don't leak memory
     for (unsigned ic = 0; ic <= IMAGE_REL_BASED_HIGHLOW; ic++) {
         fix[ic] = New(LE32, counts[ic]);
-        fixdel.count += 1;
+        fix_deleter.count += 1;
     }
 
     unsigned xcounts[4];
@@ -614,10 +614,10 @@ void PeFile64::processRelocs() // pass1
             infoWarning("skipping unsupported relocation type %d (%d)", ic, counts[ic]);
 
     LE32 *fix[16];
-    upx::ArrayDeleter<LE32 **> fixdel{fix, 0}; // don't leak memory
+    auto fix_deleter = upx::ArrayDeleter(fix, 0); // don't leak memory
     for (unsigned ic = 0; ic < 16; ic++) {
         fix[ic] = New(LE32, counts[ic]);
-        fixdel.count += 1;
+        fix_deleter.count += 1;
     }
 
     unsigned xcounts[16];
@@ -859,6 +859,7 @@ public:
         outputlen = 0;
 
         // sort the sections by name before adding them all
+        // NOLINTNEXTLINE(bugprone-multi-level-implicit-pointer-conversion)
         upx_qsort(sections, nsections, sizeof(Section *), ImportLinker::compare);
 
         for (unsigned ic = 0; ic < nsections; ic++)
@@ -1041,6 +1042,7 @@ unsigned PeFile::processImports0(ord_mask_t ord_mask) // pass 1
     mb_oimport.clear();
     oimport = mb_oimport;
 
+    // NOLINTNEXTLINE(bugprone-multi-level-implicit-pointer-conversion)
     upx_qsort(idlls, dllnum, sizeof(*idlls), UDll::compare);
 
     info("Processing imports: %d DLLs", dllnum);
@@ -1175,14 +1177,14 @@ PeFile::Export::Export(char *_base) : base(_base), iv((byte *) _base) {
 }
 
 PeFile::Export::~Export() noexcept {
-    free(ename);
+    ::free(ename);
     delete[] functionptrs;
     delete[] ordinals;
     if (names) {
         const unsigned limit = edir.names + edir.functions;
         for (unsigned ic = 0; ic < limit; ic++)
             if (names[ic])
-                free(names[ic]); // allocated by strdup()
+                ::free(names[ic]); // allocated by strdup()
         delete[] names;
     }
 }
@@ -1924,7 +1926,7 @@ void PeFile::processResources(Resource *res) {
     SPAN_S_VAR(byte, ores, oresources + res->dirsize());
 
     char *keep_icons = nullptr; // icon ids in the first icon group
-    upx::ArrayDeleter<char **> keep_icons_deleter{&keep_icons, 1}; // don't leak memory
+    const auto keep_icons_deleter = upx::ArrayDeleter(&keep_icons, 1); // don't leak memory
     unsigned iconsin1stdir = 0;
     if (opt->win32_pe.compress_icons == 2)
         while (res->next()) // there is no rewind() in Resource

@@ -195,7 +195,7 @@ void throwAssertFailed(const char *expr, const char *file, int line, const char 
     }
 }
 
-const char *prettyName(const char *n) noexcept {
+const char *prettyExceptionName(const char *n) noexcept {
     if (n == nullptr)
         return "(null)";
     while (*n) {
@@ -203,7 +203,7 @@ const char *prettyName(const char *n) noexcept {
             n++;
         else if (*n == ' ')
             n++;
-        else if (strncmp(n, "class ", 6) == 0) // Visual C++ (msvc)
+        else if (strncmp(n, "class ", 6) == 0) // Visual C++ (MSVC)
             n += 6;
         else
             break;

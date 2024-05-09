@@ -94,8 +94,6 @@ ACC_COMPILE_TIME_ASSERT_HEADER(sizeof(SizeT) >= 4)
 #if (ACC_ARCH_I086)
 #  define char  char __huge
 #elif (ACC_CC_WATCOMC)
-#else
-#define CLzmaDecoderState   const CLzmaDecoderState
 #endif
 int LzmaDecodeProperties(CLzmaProperties *, const unsigned char *, int);
 int LzmaDecode(CLzmaDecoderState *, const unsigned char *, SizeT, SizeT *, unsigned char *, SizeT, SizeT *);

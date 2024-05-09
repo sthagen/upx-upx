@@ -77,7 +77,7 @@ T *NewArray(upx_uint64_t n) may_throw {
     T *array = new T[size_t(n)];
 #if !defined(__SANITIZE_MEMORY__)
     if (array != nullptr && bytes > 0) {
-        memset(array, 0xfb, bytes);
+        memset(array, 0xfb, bytes); // NOLINT(bugprone-multi-level-implicit-pointer-conversion)
         (void) VALGRIND_MAKE_MEM_UNDEFINED(array, bytes);
     }
 #endif
@@ -143,9 +143,14 @@ inline void ptr_invalidate_and_poison(T *(&ptr)) noexcept {
 // stdlib
 **************************************************************************/
 
-void *upx_calloc(size_t n, size_t element_size) may_throw;
+noinline void *upx_calloc(size_t n, size_t element_size) may_throw;
 
-void upx_memswap(void *a, void *b, size_t n) noexcept;
+noinline const char *upx_getenv(const char *envvar) noexcept;
+
+void upx_memswap(void *a, void *b, size_t bytes) noexcept;
+
+noinline void upx_rand_init(void) noexcept;
+noinline int upx_rand(void) noexcept;
 
 typedef int(__acc_cdecl_qsort *upx_compare_func_t)(const void *, const void *);
 typedef void (*upx_sort_func_t)(void *array, size_t n, size_t element_size, upx_compare_func_t);
@@ -165,7 +170,7 @@ void upx_std_stable_sort(void *array, size_t n, upx_compare_func_t compare);
     upx_std_stable_sort<(element_size)>((a), (n), (compare))
 #else
 // use libc qsort(); good enough for our use cases
-#define upx_qsort qsort
+#define upx_qsort ::qsort
 #endif
 
 /*************************************************************************

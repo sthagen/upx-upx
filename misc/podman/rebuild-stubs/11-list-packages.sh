@@ -5,6 +5,7 @@ argv0=$0; argv0abs="$(readlink -fn "$argv0")"; argv0dir="$(dirname "$argv0abs")"
 
 # list all system packages that are installed in the image
 # using a rootless Podman container
+# Copyright (C) Markus Franz Xaver Johannes Oberhumer
 
 image="$("$argv0dir/10-create-image.sh" --print-image)"
 

@@ -72,9 +72,9 @@ get32:  // IN: Carry set
                 // fetch 4 bytes unaligned and LITTLE ENDIAN
 #if 0  /*{ clean; but 4 instr larger, and 3 cycles longer */
         lbz bits,1(src)  // lo8
-        lbz   r0,2(src); rlwimi bits,r0, 8,16,23
-        lbz   r0,3(src); rlwimi bits,r0,16, 8,15
-        lbzu  r0,4(src); rlwimi bits,r0,24, 0, 7
+        lbz   t1,2(src); rlwimi bits,t1, 8,16,23
+        lbz   t1,3(src); rlwimi bits,t1,16, 8,15
+        lbzu  t1,4(src); rlwimi bits,t1,24, 0, 7
 #else  /*}{ pray for no unalignment trap or slowdown */
         li bits,1  // compensate for 'lbzu'
 #if BIG_ENDIAN  //{

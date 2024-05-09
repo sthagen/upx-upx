@@ -162,7 +162,7 @@ ACC_COMPILE_TIME_ASSERT_HEADER(sizeof(upx_charptr_unit_type) == 1)
 typedef upx_int64_t upx_off_t;
 #undef off_t
 #if 0
-// TODO cleanup: at some future point we can do this:
+// TODO later cleanup: at some future point we can do this:
 #define off_t DO_NOT_USE_off_t
 #else
 #define off_t upx_off_t
@@ -180,7 +180,7 @@ typedef upx_int64_t upx_off_t;
 #if defined(__clang__) || defined(__GNUC__)
 #define noreturn noinline __attribute__((__noreturn__))
 #elif (ACC_CC_MSC)
-// do not use, generates annoying "warning C4702: unreachable code"
+// do not use, triggers annoying "warning C4702: unreachable code"
 ////#define noreturn noinline __declspec(noreturn)
 #define noreturn noinline
 #else
@@ -193,7 +193,7 @@ typedef upx_int64_t upx_off_t;
 #define very_unlikely         __acc_very_unlikely
 
 // cosmetic: explicitly annotate some functions which may throw exceptions
-//   note: noexcept(false) is the default for all C++ functions anyway
+//   note that noexcept(false) is the default for all C++ functions anyway
 #define may_throw noexcept(false)
 
 #define COMPILE_TIME_ASSERT(e) ACC_COMPILE_TIME_ASSERT(e)
@@ -228,12 +228,6 @@ typedef upx_int64_t upx_off_t;
 #endif
 #if (ACC_OS_DOS32) && defined(__DJGPP__)
 #undef sopen
-#endif
-
-#if defined(HAVE_DUP) && (HAVE_DUP + 0 == 0)
-// TODO later: add upx_fd_dup() util
-#undef dup
-#define dup(x) (-1)
 #endif
 
 #ifndef STDIN_FILENO
@@ -338,7 +332,7 @@ typedef upx_int64_t upx_off_t;
 // TODO later: check __MINGW_PRINTF_FORMAT
 #if defined(_WIN32) && defined(__MINGW32__) && defined(__GNUC__) && !defined(__clang__)
 #define attribute_format(a, b) __attribute__((__format__(__gnu_printf__, a, b)))
-#elif (ACC_CC_CLANG || ACC_CC_GNUC)
+#elif defined(__clang__) || defined(__GNUC__)
 #define attribute_format(a, b) __attribute__((__format__(__printf__, a, b)))
 #else
 #define attribute_format(a, b) /*empty*/
@@ -442,6 +436,7 @@ inline void mem_clear(T *object) noexcept {
     static_assert(size >= 1 && size <= UPX_RSIZE_MAX_MEM);
     memset((void *) object, 0, size);
 }
+// disable some overloads
 #if defined(__clang__) || __GNUC__ != 7
 template <class T>
 inline void mem_clear(T (&array)[]) noexcept DELETED_FUNCTION;
@@ -463,7 +458,7 @@ noreturn void throwAssertFailed(const char *expr, const char *file, int line, co
 #if defined(__clang__) || defined(__GNUC__)
 #undef assert
 #if DEBUG || 0
-// generate a warning if assert() is used inside a "noexcept" context
+// trigger a warning if assert() is used inside a "noexcept" context
 #define assert(e)                                                                                  \
     ((void) (__acc_cte(e) || (assertFailed(#e, __FILE__, __LINE__, __func__), throw 1, 0)))
 #else
@@ -594,7 +589,7 @@ using upx::tribool;
 // #define M_CL1B_8      12
 // #define M_CL1B_LE16   13
 #define M_LZMA        14
-#define M_DEFLATE     15 // zlib
+#define M_DEFLATE     15 // NOT YET USED
 #define M_ZSTD        16 // NOT YET USED
 #define M_BZIP2       17 // NOT YET USED
 // compression methods internal usage
@@ -712,7 +707,7 @@ struct upx_compress_config_t final {
     }
 };
 
-#define NULL_cconf ((upx_compress_config_t *) nullptr)
+#define NULL_cconf ((const upx_compress_config_t *) nullptr)
 
 /*************************************************************************
 // compression - result_t
@@ -786,18 +781,18 @@ struct upx_compress_result_t final {
 
 // classes
 class ElfLinker;
-typedef ElfLinker Linker;
+typedef ElfLinker Linker; // shortcut
 class Throwable;
+
+// check/dt_check.cpp
+noinline void upx_compiler_sanity_check() noexcept;
+noinline int upx_doctest_check(int argc, char **argv);
+int upx_doctest_check();
 
 // util/membuffer.h
 class MemBuffer;
 void *membuffer_get_void_ptr(MemBuffer &mb) noexcept;
 unsigned membuffer_get_size(MemBuffer &mb) noexcept;
-
-// util/dt_check.cpp
-noinline void upx_compiler_sanity_check() noexcept;
-noinline int upx_doctest_check(int argc, char **argv);
-int upx_doctest_check();
 
 // main.cpp
 extern const char *progname;
@@ -827,7 +822,7 @@ int do_files(int i, int argc, char *argv[]) may_throw;
 // help.cpp
 extern const char gitrev[];
 void show_header();
-void show_help(int verbose = 0);
+void show_help(int verbose);
 void show_license();
 void show_sysinfo(const char *options_var);
 void show_usage();

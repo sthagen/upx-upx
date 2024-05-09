@@ -30,7 +30,7 @@
 // of class PackerBase which then does the actual work.
 // And see p_com.cpp for a simple executable format.
 //
-// This file also has the burden to deal with all those pesky low-level
+// And this file also has the burden to deal with all those pesky low-level
 // file handling issues.
 
 #define WANT_WINDOWS_LEAN_H 1 // _get_osfhandle, GetFileTime, SetFileTime
@@ -47,7 +47,7 @@
 #include "util/membuffer.h"
 
 #if USE_UTIMENSAT && defined(AT_FDCWD)
-#elif (defined(_WIN32) || defined(__CYGWIN__)) && 1
+#elif defined(_WIN32) || defined(__CYGWIN__)
 #define USE_SETFILETIME 1
 #elif (ACC_OS_DOS32) && defined(__DJGPP__)
 #define USE_FTIME 1

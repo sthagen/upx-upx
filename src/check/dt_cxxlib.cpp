@@ -27,24 +27,8 @@
 // lots of tests (and probably quite a number of redundant tests)
 // modern compilers will optimize away much of this code
 
-#if 0 // TODO later
-// libc++ hardenining
-#if defined(__clang__) && defined(__clang_major__) && (__clang_major__ + 0 >= 18)
-#if DEBUG
-#define _LIBCPP_HARDENING_MODE _LIBCPP_HARDENING_MODE_DEBUG
-#else
-#define _LIBCPP_HARDENING_MODE _LIBCPP_HARDENING_MODE_EXTENSIVE
-#endif
-#endif
-#if defined(__clang__) && defined(__clang_major__) && (__clang_major__ + 0 < 18)
-#if DEBUG
-#define _LIBCPP_ENABLE_ASSERTIONS 1
-#endif
-#endif
-#endif // TODO later
-
 #include "../util/system_headers.h"
-#include <vector>
+#include <vector> // std::vector
 #include "../conf.h"
 
 /*************************************************************************
@@ -121,11 +105,17 @@ ACC_COMPILE_TIME_ASSERT_HEADER(!compile_time::string_gt("abc", "abz"))
 ACC_COMPILE_TIME_ASSERT_HEADER(!compile_time::string_ge("abc", "abz"))
 ACC_COMPILE_TIME_ASSERT_HEADER(compile_time::string_le("abc", "abz"))
 
+ACC_COMPILE_TIME_ASSERT_HEADER(compile_time::mem_eq((const char *) nullptr, nullptr, 0))
+ACC_COMPILE_TIME_ASSERT_HEADER(compile_time::mem_eq((const byte *) nullptr, nullptr, 0))
+ACC_COMPILE_TIME_ASSERT_HEADER(compile_time::mem_eq("", "", 0))
+ACC_COMPILE_TIME_ASSERT_HEADER(compile_time::mem_eq("abc", "abc", 3))
+ACC_COMPILE_TIME_ASSERT_HEADER(!compile_time::mem_eq("abc", "abz", 3))
+
 /*************************************************************************
 //
 **************************************************************************/
 
-TEST_CASE("libc++") {
+TEST_CASE("std::vector") {
     constexpr size_t N = 16;
     std::vector<int> v(N);
     CHECK(v.end() - v.begin() == N);
@@ -260,28 +250,93 @@ struct Z2_X2 : public X2 {
 // util
 **************************************************************************/
 
+#if WITH_THREADS
+TEST_CASE("upx::ptr_std_atomic_cast") {
+    // pointer-size
+    CHECK_EQ(upx::ptr_std_atomic_cast((void **) nullptr), nullptr);
+    CHECK_EQ(upx::ptr_std_atomic_cast((uintptr_t *) nullptr), nullptr);
+    CHECK_EQ(upx::ptr_std_atomic_cast((upx_uintptr_t *) nullptr), nullptr);
+#if 1
+    // more fundamental types
+    CHECK_EQ(upx::ptr_std_atomic_cast((char *) nullptr), nullptr);
+    CHECK_EQ(upx::ptr_std_atomic_cast((short *) nullptr), nullptr);
+    CHECK_EQ(upx::ptr_std_atomic_cast((int *) nullptr), nullptr);
+    CHECK_EQ(upx::ptr_std_atomic_cast((long *) nullptr), nullptr);
+    CHECK_EQ(upx::ptr_std_atomic_cast((ptrdiff_t *) nullptr), nullptr);
+    CHECK_EQ(upx::ptr_std_atomic_cast((size_t *) nullptr), nullptr);
+    CHECK_EQ(upx::ptr_std_atomic_cast((upx_int8_t *) nullptr), nullptr);
+    CHECK_EQ(upx::ptr_std_atomic_cast((upx_int16_t *) nullptr), nullptr);
+    CHECK_EQ(upx::ptr_std_atomic_cast((upx_int32_t *) nullptr), nullptr);
+#endif
+}
+#endif
+
+TEST_CASE("upx::atomic_exchange") {
+    {
+        upx_uintptr_t x = (upx_uintptr_t) 0 - 1;
+        upx_uintptr_t y = upx::atomic_exchange(&x, (upx_uintptr_t) 2);
+        CHECK_EQ(x, 2);
+        CHECK_EQ(y, (upx_uintptr_t) 0 - 1);
+        UNUSED(y);
+    }
+    {
+        const int buf[2] = {101, 202};
+        const int *ptr_array[2] = {&buf[0], &buf[1]};
+        assert_noexcept(*ptr_array[0] == 101 && *ptr_array[1] == 202);
+        const int *p = upx::atomic_exchange(&ptr_array[0], ptr_array[1]);
+        CHECK_EQ(p, buf + 0);
+        assert_noexcept(*ptr_array[0] == 202 && *ptr_array[1] == 202);
+        p = upx::atomic_exchange(&ptr_array[1], p);
+        CHECK_EQ(p, buf + 1);
+        assert_noexcept(*ptr_array[0] == 202 && *ptr_array[1] == 101);
+        UNUSED(p);
+    }
+}
+
 TEST_CASE("upx::ObjectDeleter 1") {
     LE16 *o = nullptr; // object
     LE32 *a = nullptr; // array
+    LE64 *m = nullptr; // malloc
     {
-        const upx::ObjectDeleter<LE16 **> o_deleter{&o, 1};
+        auto o_deleter = upx::ObjectDeleter(&o, 1);
         o = new LE16;
         assert(o != nullptr);
-        const upx::ArrayDeleter<LE32 **> a_deleter{&a, 1};
+        auto a_deleter = upx::ArrayDeleter(&a, 1);
         a = New(LE32, 1);
         assert(a != nullptr);
+        auto m_deleter = upx::MallocDeleter(&m, 1);
+        m = (LE64 *) ::malloc(sizeof(LE64));
+        assert(m != nullptr);
     }
     assert(o == nullptr);
     assert(a == nullptr);
+    assert(m == nullptr);
+    // test "const" versions
+    {
+        const auto o_deleter = upx::ObjectDeleter(&o, 1);
+        o = new LE16;
+        assert(o != nullptr);
+        const auto a_deleter = upx::ArrayDeleter(&a, 1);
+        a = New(LE32, 1);
+        assert(a != nullptr);
+        const auto m_deleter = upx::MallocDeleter(&m, 1);
+        m = (LE64 *) ::malloc(sizeof(LE64));
+        assert(m != nullptr);
+    }
+    assert(o == nullptr);
+    assert(a == nullptr);
+    assert(m == nullptr);
 }
 
 TEST_CASE("upx::ObjectDeleter 2") {
     constexpr size_t N = 2;
     BE16 *o[N]; // multiple objects
     BE32 *a[N]; // multiple arrays
+    BE64 *m[N]; // multiple mallocs
     {
-        upx::ObjectDeleter<BE16 **> o_deleter{o, 0};
-        upx::ArrayDeleter<BE32 **> a_deleter{a, 0};
+        auto o_deleter = upx::ObjectDeleter(o, 0);
+        auto a_deleter = upx::ArrayDeleter(a, 0);
+        auto m_deleter = upx::MallocDeleter(m, 0);
         for (size_t i = 0; i < N; i++) {
             o[i] = new BE16;
             assert(o[i] != nullptr);
@@ -289,16 +344,20 @@ TEST_CASE("upx::ObjectDeleter 2") {
             a[i] = New(BE32, 1 + i);
             assert(a[i] != nullptr);
             a_deleter.count += 1;
+            m[i] = (BE64 *) ::malloc(sizeof(BE64));
+            assert(m[i] != nullptr);
+            m_deleter.count += 1;
         }
     }
     for (size_t i = 0; i < N; i++) {
         assert(o[i] == nullptr);
         assert(a[i] == nullptr);
+        assert(m[i] == nullptr);
     }
 }
 
 TEST_CASE("upx::ptr_static_cast") {
-    // check that we don't trigger any -Wcast-align warnings
+    // check that we do not trigger any -Wcast-align warnings
     using upx::ptr_static_cast;
     void *vp = nullptr;
     byte *bp = nullptr;
@@ -361,7 +420,7 @@ TEST_CASE("upx::noncopyable") {
 namespace {
 template <class T>
 struct TestTriBool {
-    static void test(bool expect_true) {
+    static noinline void test(bool expect_true) {
         static_assert(std::is_class<T>::value);
         static_assert(std::is_nothrow_default_constructible<T>::value);
         static_assert(std::is_nothrow_destructible<T>::value);
@@ -369,8 +428,12 @@ struct TestTriBool {
         static_assert(std::is_trivially_copyable<T>::value);
         static_assert(sizeof(typename T::value_type) == sizeof(typename T::underlying_type));
         static_assert(alignof(typename T::value_type) == alignof(typename T::underlying_type));
-#if (ACC_ARCH_M68K && ACC_OS_TOS && ACC_CC_GNUC) && defined(__MINT__)
+#if defined(__m68k__) && defined(__atarist__) && defined(__GNUC__)
         // broken compiler or broken ABI
+#elif defined(__i386__) && defined(__GNUC__) && (__GNUC__ == 7) && !defined(__clang__)
+        static_assert(sizeof(T) == sizeof(typename T::underlying_type));
+        // i386: "long long" enum align bug/ABI problem on older compilers
+        static_assert(alignof(T) <= alignof(typename T::underlying_type));
 #else
         static_assert(sizeof(T) == sizeof(typename T::underlying_type));
         static_assert(alignof(T) == alignof(typename T::underlying_type));
@@ -445,9 +508,11 @@ struct TestTriBool {
             assert(a);
             assert(bool(a));
             assert((a ? true : false));
+            assert((!a ? false : true));
         } else {
             assert(!a);
             assert(!bool(a));
+            assert((a ? false : true));
             assert((!a ? true : false));
         }
         assert(!a.isStrictFalse());

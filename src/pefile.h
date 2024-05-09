@@ -579,7 +579,7 @@ protected:
         ddirs_t ddirs[16];
     };
 
-    pe_header_t ih, oh;
+    pe_header_t ih = {}, oh = {};
 };
 
 class PeFile64 : public PeFile {
@@ -640,7 +640,7 @@ protected:
         ddirs_t ddirs[16];
     };
 
-    pe_header_t ih, oh;
+    pe_header_t ih = {}, oh = {};
 };
 
 /* vim:set ts=4 sw=4 et: */

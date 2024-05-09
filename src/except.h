@@ -178,7 +178,7 @@ public:
 // util
 **************************************************************************/
 
-const char *prettyName(const char *n) noexcept;
+const char *prettyExceptionName(const char *n) noexcept;
 
 noreturn void throwCantPack(const char *msg) may_throw;
 noreturn void throwCantPackExact() may_throw;

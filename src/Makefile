@@ -3,8 +3,8 @@
 # Copyright (C) Markus Franz Xaver Johannes Oberhumer
 #
 
-# NOTE: this Makefile is deprecated - please directly use
-# the top-level CMake build instead.
+# NOTE: this Makefile is intended for developers - please use
+#   the top-level Makefile instead
 
 ifndef srcdir
   srcdir := $(patsubst %/,%,$(dir $(lastword $(MAKEFILE_LIST))))
@@ -14,7 +14,7 @@ ifndef top_srcdir
 endif
 
 #***********************************************************************
-# redirect to top-level CMake build
+# redirect to top-level Makefile
 #***********************************************************************
 
 # NOTE that the top-level Makefile .DEFAULT_GOAL is build/release
@@ -31,11 +31,7 @@ build/debug+test build/release+test build/all+test: PHONY; $(MAKE) -C $(top_srcd
 debug release all:                                  PHONY; $(MAKE) -C $(top_srcdir) $@
 debug+test release+test all+test:                   PHONY; $(MAKE) -C $(top_srcdir) $@
 
-test:: build/all+test PHONY
-
-# OLD target names [deprecated]
-$(top_srcdir)/build/debug:   build/debug PHONY
-$(top_srcdir)/build/release: build/release PHONY
+test: $$(patsubst %+test,%,$$(.DEFAULT_GOAL))+test PHONY
 
 #***********************************************************************
 # make run-testsuite
@@ -59,7 +55,8 @@ endif
 # The   actual (new) checksums are in ./tmp-upx-testsuite-*/testsuite_1/.sha256sums.recreate
 ifneq ($(wildcard $(upx_testsuite_SRCDIR)/files/packed/.),)
 ifneq ($(wildcard $(top_srcdir)/misc/testsuite/upx_testsuite_1.sh),)
-run-testsuite: run-testsuite-release PHONY
+run-testsuite:     run-testsuite-release PHONY
+run-testsuite-all: run-testsuite-debug run-testsuite-release PHONY
 run-testsuite-%: export upx_testsuite_SRCDIR := $(upx_testsuite_SRCDIR)
 run-testsuite-debug: export upx_testsuite_BUILDDIR := ./tmp-upx-testsuite-debug
 run-testsuite-debug: export upx_exe := $(top_srcdir)/build/debug/upx

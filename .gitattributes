@@ -3,6 +3,10 @@
 #
 # HINT: check settings with
 #   git ls-files | git check-attr --stdin --all
+#   git ls-files --eol
+
+# disable all line ending conversions
+* -text
 
 #
 # tell diff tools that these files are generated automatically

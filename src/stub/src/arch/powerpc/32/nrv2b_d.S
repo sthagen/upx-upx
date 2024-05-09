@@ -65,7 +65,7 @@
 /* rotate next bit into bottom bit of reg; set cr0 based on entire result reg */
 #define getnextb(reg) call get1; adde. reg,reg,reg
 
-get1:
+get1:  // PowerPC: cannot branch on CArry (independent of OVerflow)
         cmpl  cr0,bits,hibit  // cr0  for   jnextb
         addc bits,bits,bits  // Carry for getnextb
         bnelr+ cr0  // return if reload not needed; likely 31/32
@@ -83,7 +83,8 @@ get1:
         addi src,src,4
 #endif  /*}*/
 
-        cmpl  cr0,bits,hibit  // cr0  for   jnextb
+        ori t1,bits,1  // loaded bits might equal hibit; we want 'bgt' to succeed
+        cmpl  cr0,t1,hibit  // cr0  for   jnextb
         adde bits,bits,bits  // Carry for getnextb; set lo bit from CarryIn
         ret
 

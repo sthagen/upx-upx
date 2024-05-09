@@ -104,6 +104,10 @@ protected:
     static unsigned update_u_len;
     static unsigned update_fc_len;
     static unsigned update_fu_len;
+
+private: // UPX conventions
+    UPX_CXX_DISABLE_ADDRESS(UiPacker)
+    UPX_CXX_DISABLE_COPY_MOVE(UiPacker)
 };
 
 /* vim:set ts=4 sw=4 et: */

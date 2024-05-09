@@ -481,7 +481,7 @@ unsigned PackUnix::unpackExtent(unsigned wanted, OutputFile *fo,
         int const sz_cpr = ph.c_len = get_te32(&hdr.sz_cpr);
         ph.filter_cto = hdr.b_cto8;
 
-        if (sz_unc == 0) { // must never happen while 0!=wanted
+        if (sz_unc == 0 || M_LZMA < hdr.b_method) {
             throwCantUnpack("corrupt b_info");
             break;
         }
@@ -491,8 +491,10 @@ unsigned PackUnix::unpackExtent(unsigned wanted, OutputFile *fo,
             throwCantUnpack("corrupt b_info");
 
         // place the input for overlapping de-compression
-        // FIXME: inlen cheats OVERHEAD; assumes small wanted peek length
-        int j = inlen + blocksize + OVERHEAD - sz_cpr;
+        int j = inlen + sz_unc + OVERHEAD - sz_cpr;
+        if (ibuf.getSize() < (unsigned)(j + sz_cpr)) {
+            throwCantUnpack("corrupt b_info");
+        }
         fi->readx(ibuf+j, sz_cpr);
         total_in += sz_cpr;
         // update checksum of compressed data

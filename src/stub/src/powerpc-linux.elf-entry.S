@@ -210,10 +210,7 @@ unfold:  // IN: r_exp, r_auxv, r_PMASK
         bctrl  // decompress it
 
 // Generate code to compute PAGE_MASK.
-        lwz r0,0(r_ADRU)  // "li r3,PAGE_MASK>>9"
-        srwi a0,r_PMASK,9
-        insrwi r0,a0,16,16  // replace the immediate constant
-        stw r0,0(r_ADRU)  // get_page_mask: li r3,PAGE_MASK>>9
+        stw r_PMASK,0(r_ADRU)  // page_mask in powerpc-linux.elf-fold.S
 
 // PROT_EXEC
         li a2,PROT_EXEC|PROT_READ
@@ -222,7 +219,7 @@ unfold:  // IN: r_exp, r_auxv, r_PMASK
         li r0,__NR_mprotect; sc
 
 // Use the unfolded code
-          addi r0,r_ADRU,4*4  // skip get_page_mask()
+          addi r0,r_ADRU,8*4  // skip get_page_mask()
         lwz r_LENX, sz_pack2 - f_exp(r_exp)
           mtctr r0
         add r_ADRX,r_elf,r_obinf  // compressed data

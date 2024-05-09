@@ -86,7 +86,7 @@ protected:
         LE32 firstreloc;
     };
 
-    exe_header_t ih, oh;
+    exe_header_t ih = {}, oh = {};
 
     unsigned ih_exesize = 0;
     unsigned ih_imagesize = 0;

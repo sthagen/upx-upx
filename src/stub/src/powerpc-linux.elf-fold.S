@@ -75,11 +75,18 @@ av_len=  20
 cblk=    19
 r_buf=   18
 
+page_mask:
+        .int -0x1000  // default page mask (4KiB)
+        .balign 4
 get_page_mask: .globl get_page_mask
-        li r3,0 -0x1000>>9  // modified by elf-entry.S
-        slwi r3,r3,9
+        mflr t1  // retaddr
+        call L60  // for PC-relative addressing
+L60:
+        mflr r3  // L60
+        mtlr t1  // original retaddr
+        lwz r3,page_mask - L60(r3)
         blr
-        nop
+        nop  // pad to known 8-word block
 
 fold_begin:
         call L90
@@ -177,6 +184,7 @@ p_memsz= 5*NBPW
         //lhz r0,e_type(r_elf); cmpwi r0,ET_EXEC; bne 1f  // only ET_EXEC
         movr a0,r_elf; call brk  // also set the brk
 1:
+        lwz a1,p_memsz+sz_Phdr+sz_Ehdr(r_elf)  // Phdr[C_TEXT= 1].p_memsz
         movr a0,r_elf; call munmap  # discard C_TEXT compressed data
 
 // first page of /proc/self/exe, to preserve it despite munmap(ADRU, LENU)

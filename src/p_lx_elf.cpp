@@ -320,7 +320,7 @@ PackLinuxElf32::PackLinuxElf32help1(InputFile *f)
     sz_elf_hdrs = sz_phdrs + sizeof(Elf32_Ehdr);
 
     if (f && Elf32_Ehdr::ET_DYN!=e_type) {
-        unsigned const len = sz_phdrs + e_phoff;
+        unsigned const len = file_size;  // (sz_phdrs + e_phoff) except --preserve-build-id
         alloc_file_image(file_image, len);
         f->seek(0, SEEK_SET);
         f->readx(file_image, len);
@@ -437,7 +437,7 @@ off_t PackLinuxElf::pack3(OutputFile *fo, Filter &ft) // return length of output
     // FIXME: debugging aid: entry to decompressor
     if (lowmem.getSize()) {
         Elf32_Ehdr *const ehdr = (Elf32_Ehdr *)&lowmem[0];
-        set_te32(&ehdr->e_entry, sz_pack2);  // hint for decomperssor
+        set_te32(&ehdr->e_entry, sz_pack2);  // hint for decompressor
     }
     // end debugging aid
 
@@ -1031,7 +1031,7 @@ PackLinuxElf64::PackLinuxElf64help1(InputFile *f)
     sz_elf_hdrs = sz_phdrs + sizeof(Elf64_Ehdr);
 
     if (f && Elf64_Ehdr::ET_DYN!=e_type) {
-        unsigned const len = sz_phdrs + e_phoff;
+        unsigned const len = file_size;  // (sz_phdrs + e_phoff) except --preserve-build-id
         alloc_file_image(file_image, len);
         f->seek(0, SEEK_SET);
         f->readx(file_image, len);
@@ -1989,6 +1989,7 @@ void
 PackLinuxElf32::sort_DT32_offsets(Elf32_Dyn const *const dynp0)
 {
     mb_dt_offsets.alloc(sizeof(unsigned) * sizeof(dt_keys)/sizeof(dt_keys[0]));
+    mb_dt_offsets.clear();
     dt_offsets = (unsigned *)mb_dt_offsets.getVoidPtr();
     unsigned n_off = 0, k;
     for (unsigned j=0; ((k = dt_keys[j]),  k); ++j) {
@@ -2196,7 +2197,7 @@ PackLinuxElf32::invert_pt_dynamic(Elf32_Dyn const *dynp, u32_t headway)
         //    (037 & (hash_32 >> gnu_shift))
         // but compilers can be stupid.
         if (31 < gnu_shift) {
-            throwCantPack("bad gnu_shift %d", gnu_shift);
+            throwCantPack("bad gnu_shift %#x", gnu_shift);
         }
         // unsigned const *const gashend = &hasharr[n_bucket];
         // minimum, except:
@@ -3984,8 +3985,8 @@ void PackLinuxElf32::pack1(OutputFile * /*fo*/, Filter &ft)
     phdr = phdri;
     for (unsigned j=0; j < e_phnum; ++phdr, ++j) {
         unsigned const type = get_te32(&phdr->p_type);
-        if (PT_NOTE32 == type) {
-            unsigned const len = get_te32(&phdr->p_filesz);
+        unsigned const len = get_te32(&phdr->p_filesz);
+        if (PT_NOTE32 == type && len && note_body.getSize()) {
             fi->seek(get_te32(&phdr->p_offset), SEEK_SET);
             fi->readx(&note_body[note_size], len);
             note_size += up4(len);
@@ -4031,10 +4032,9 @@ void PackLinuxElf32::pack1(OutputFile * /*fo*/, Filter &ft)
     if (opt->o_unix.preserve_build_id) {
         // set this so we can use elf_find_section_name
         e_shnum = get_te16(&ehdri.e_shnum);
-        MemBuffer mb_shdri;
         if (!shdri) {
-            mb_shdri.alloc(e_shnum * sizeof(Elf32_Shdr));
-            shdri = (Elf32_Shdr *)mb_shdri.getVoidPtr();
+            mb_shdr.alloc(e_shnum * sizeof(Elf32_Shdr));
+            shdri = (Elf32_Shdr *)mb_shdr.getVoidPtr();
             e_shoff = get_te32(&ehdri.e_shoff);
             fi->seek(e_shoff, SEEK_SET);
             fi->readx(shdri, e_shnum * sizeof(Elf32_Shdr));
@@ -4921,10 +4921,9 @@ void PackLinuxElf64::pack1(OutputFile * /*fo*/, Filter &ft)
     if (opt->o_unix.preserve_build_id) {
         // set this so we can use elf_find_section_name
         e_shnum = get_te16(&ehdri.e_shnum);
-        MemBuffer mb_shdri;
         if (!shdri) {
-            mb_shdri.alloc(e_shnum * sizeof(Elf64_Shdr));
-            shdri = (Elf64_Shdr *)mb_shdri.getVoidPtr();
+            mb_shdr.alloc(e_shnum * sizeof(Elf64_Shdr));
+            shdri = (Elf64_Shdr *)mb_shdr.getVoidPtr();
             e_shoff = get_te64(&ehdri.e_shoff);
             fi->seek(e_shoff, SEEK_SET);
             fi->readx(shdri, e_shnum * sizeof(Elf64_Shdr));
@@ -5127,7 +5126,7 @@ int PackLinuxElf32::pack2(OutputFile *fo, Filter &ft)
                     fo->seek(x.offset, SEEK_SET);
                     fo->write(&file_image[x.offset], x.size);
                     total_out += x.size;
-                    // Kepp the input side in sync
+                    // Keep the input side in sync
                     total_in  += x.size;
                     fi->seek(x.size + x.offset, SEEK_SET);
                 }
@@ -5385,7 +5384,7 @@ int PackLinuxElf64::pack2(OutputFile *fo, Filter &ft)
                     fo->seek(x.offset, SEEK_SET);
                     fo->write(&file_image[x.offset], x.size);
                     total_out += x.size;
-                    // Kepp the input side in sync
+                    // Keep the input side in sync
                     total_in  += x.size;
                     fi->seek(x.size + x.offset, SEEK_SET);
                 }
@@ -6484,13 +6483,17 @@ void PackLinuxElf64::un_shlib_1(
     struct {
         struct l_info l;
         struct p_info p;
+        struct b_info b;
     } hdr;
     fi->readx(&hdr, sizeof(hdr));
     if (hdr.l.l_magic != UPX_MAGIC_LE32
-    ||  hdr.l.l_lsize != (unsigned)lsize
-    ||  hdr.p.p_filesize != ph.u_file_size) {
-        throwCantUnpack("corrupt l_info/p_info");
+    ||  get_te16(&hdr.l.l_lsize) != (unsigned)lsize
+    ||  get_te32(&hdr.p.p_filesize) != ph.u_file_size
+    ||  get_te32(&hdr.b.sz_unc) < sz_elf_hdrs  // peek: 1st b_info covers Elf headers
+    ) {
+        throwCantUnpack("corrupt l_info/p_info/b_info");
     }
+    fi->seek(-(off_t)sizeof(struct b_info), SEEK_CUR); // hdr.b_info was a peek
 
 // The default layout for a shared library created by binutils-2.29
 // (Fedora 28; 2018) has two PT_LOAD: permissions r-x and rw-.
@@ -6680,13 +6683,17 @@ void PackLinuxElf32::un_shlib_1(
     struct {
         struct l_info l;
         struct p_info p;
+        struct b_info b;
     } hdr;
     fi->readx(&hdr, sizeof(hdr));
     if (hdr.l.l_magic != UPX_MAGIC_LE32
-    ||  hdr.l.l_lsize != (unsigned)lsize
-    ||  hdr.p.p_filesize != ph.u_file_size) {
-        throwCantUnpack("corrupt l_info/p_info");
+    ||  get_te16(&hdr.l.l_lsize) != (unsigned)lsize
+    ||  get_te32(&hdr.p.p_filesize) != ph.u_file_size
+    ||  get_te32(&hdr.b.sz_unc) < sz_elf_hdrs  // peek: 1st b_info covers Elf headers
+    ) {
+        throwCantUnpack("corrupt l_info/p_info/b_info");
     }
+    fi->seek(-(off_t)sizeof(struct b_info), SEEK_CUR); // hdr.b_info was a peek
 
 // The default layout for a shared library created by binutils-2.29
 // (Fedora 28; 2018) has two PT_LOAD: permissions r-x and rw-.
@@ -7903,6 +7910,7 @@ void
 PackLinuxElf64::sort_DT64_offsets(Elf64_Dyn const *const dynp0)
 {
     mb_dt_offsets.alloc(sizeof(unsigned) * sizeof(dt_keys)/sizeof(dt_keys[0]));
+    mb_dt_offsets.clear();
     dt_offsets = (unsigned *)mb_dt_offsets.getVoidPtr();
     unsigned n_off = 0, k;
     for (unsigned j=0; ((k = dt_keys[j]),  k); ++j) {
@@ -8115,7 +8123,7 @@ PackLinuxElf64::invert_pt_dynamic(Elf64_Dyn const *dynp, upx_uint64_t headway)
         //    (077 & (hash_32 >> gnu_shift))
         // but compilers can be stupid.
         if (31 < gnu_shift) {
-            throwCantPack("bad gnu_shift %d", gnu_shift);
+            throwCantPack("bad gnu_shift %#x", gnu_shift);
         }
         // unsigned const *const gashend = &hasharr[n_bucket];
         // minimum, except:
@@ -8232,6 +8240,9 @@ Elf32_Sym const *PackLinuxElf32::elf_lookup(char const *name) const
         unsigned const *const bitmask = &gashtab[4];
         unsigned const *const buckets = &bitmask[n_bitmask];
         unsigned const *const hasharr = &buckets[n_bucket];
+        if (31 < gnu_shift) {
+            throwCantPack("bad gnu_shift %#x", gnu_shift);
+        }
         if ((file_size + file_image) <= (void const *)hasharr) {
             char msg[80]; snprintf(msg, sizeof(msg),
                 "bad n_bucket %#x\n", n_bucket);
@@ -8313,6 +8324,9 @@ Elf64_Sym const *PackLinuxElf64::elf_lookup(char const *name) const
         unsigned     const *const buckets = (unsigned const *)&bitmask[n_bitmask];
         unsigned     const *const hasharr = &buckets[n_bucket];
 
+        if (31 < gnu_shift) {
+            throwCantPack("bad gnu_shift %#x", gnu_shift);
+        }
         if ((file_size + file_image) <= (void const *)hasharr) {
             char msg[80]; snprintf(msg, sizeof(msg),
                 "bad n_bucket %#x\n", n_bucket);
@@ -8604,7 +8618,7 @@ void PackLinuxElf32::unpack(OutputFile *fo)
                         }
                     }
                     int boff = find_le32(peek_arr, sizeof(peek_arr), size);
-                    if (boff < 0) {
+                    if (boff < 0 || sizeof(peek_arr) < (sizeof(*bp) + boff)) {
                         throwCantUnpack("b_info corrupted");
                     }
                     bp = (b_info *)(void *)&peek_arr[boff];

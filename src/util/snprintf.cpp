@@ -128,7 +128,7 @@ int upx_safe_vasprintf(char **ptr, const char *format, va_list ap) {
     va_end(ap_copy);
 
     if (len >= 0) {
-        *ptr = (char *) malloc(len + 1);
+        *ptr = (char *) ::malloc(len + 1);
         assert(*ptr != nullptr);
         if (*ptr == nullptr)
             return -1;

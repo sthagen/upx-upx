@@ -3,6 +3,15 @@
 # Copyright (C) Markus Franz Xaver Johannes Oberhumer
 #
 
+# set USE_STRICT_DEFAULTS
+if(NOT DEFINED USE_STRICT_DEFAULTS AND IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/.git")
+    include("${CMAKE_CURRENT_SOURCE_DIR}/misc/cmake/use_strict_defaults.cmake" OPTIONAL)
+endif()
+if(NOT DEFINED USE_STRICT_DEFAULTS)
+    # use permissive config defaults when building from source code tarball
+    set(USE_STRICT_DEFAULTS FALSE CACHE INTERNAL "" FORCE)
+endif()
+
 #***********************************************************************
 # macros
 #***********************************************************************
@@ -56,9 +65,37 @@ macro(upx_apply_build_type)
     endif()
 endmacro()
 
+# ternary conditional operator
+macro(upx_ternary result_var_name condition true_value false_value)
+    if(${condition})
+        set(${result_var_name} "${true_value}")
+    else()
+        set(${result_var_name} "${false_value}")
+    endif()
+endmacro()
+
 #***********************************************************************
 # util
 #***********************************************************************
+
+# convert to CMake bool
+function(upx_make_bool_var result_var_name var_name default_value)
+    set(result "${default_value}")
+    # only query $var_name if it is defined and not empty
+    if(NOT ",${var_name}," STREQUAL ",,")
+        if(DEFINED ${var_name})
+            if(NOT ",${${var_name}}," STREQUAL ",,")
+                set(result "${${var_name}}")
+            endif()
+        endif()
+    endif()
+    if(${result})
+        set(result ON)
+    else()
+        set(result OFF)
+    endif()
+    set(${result_var_name} "${result}" PARENT_SCOPE) # return value
+endfunction()
 
 function(upx_print_var) # ARGV
     foreach(var_name ${ARGV})
@@ -76,20 +113,29 @@ function(upx_print_env_var) # ARGV
     foreach(var_name ${ARGV})
         if(DEFINED ENV{${var_name}})
             if(NOT ",$ENV{${var_name}}," STREQUAL ",,")
-                message(STATUS "ENV{${var_name}} = $ENV{${var_name}}")
+                message(STATUS "ENV{${var_name}} = '$ENV{${var_name}}'")
             endif()
         endif()
     endforeach()
 endfunction()
 
 function(upx_print_have_symbol) # ARGV; needs include(CheckSymbolExists)
+    set(rq "${CMAKE_REQUIRED_QUIET}")
+    set(CMAKE_REQUIRED_QUIET ON)
     foreach(symbol ${ARGV})
         set(cache_var_name "HAVE_symbol_${symbol}")
-        check_symbol_exists(${symbol} "limits.h;stddef.h;stdint.h" ${cache_var_name})
+        check_symbol_exists("${symbol}" "limits.h;stddef.h;stdint.h" "${cache_var_name}")
         if(${cache_var_name})
-            message(STATUS "HAVE ${symbol}")
+            message(STATUS "HAVE_symbol ${symbol}")
         endif()
     endforeach()
+    set(CMAKE_REQUIRED_QUIET "${rq}")
+endfunction()
+
+# examine compiler configuration
+function(upx_print_common_symbols)
+    upx_print_have_symbol(__FAST_MATH__)
+    upx_print_have_symbol(__PIC__ __pic__ __PIE__ __pie__)
 endfunction()
 
 # examine MinGW/Cygwin compiler configuration
@@ -97,7 +143,7 @@ function(upx_print_mingw_symbols)
     if(WIN32 OR MINGW OR CYGWIN)
         if(CMAKE_C_COMPILER_ID MATCHES "(Clang|GNU)")
             # runtime library: msvcrt vs ucrt vs cygwin
-            upx_print_have_symbol(__CRTDLL__ __CYGWIN__ __CYGWIN32__ __CYGWIN64__ __MINGW32__ __MINGW64__ __MINGW64_VERSION_MAJOR __MSVCRT__ __MSVCRT_VERSION__ _UCRT _WIN32 _WIN64)
+            upx_print_have_symbol(__CRTDLL__ __CYGWIN__ __CYGWIN32__ __CYGWIN64__ __MINGW32__ __MINGW64__ __MINGW64_VERSION_MAJOR __MSVCRT__ __MSVCRT_VERSION__ _UCRT _WIN32 _WIN32_WINNT _WIN64)
             # exception handing: SJLJ (setjmp/longjmp) vs DWARF vs SEH
             upx_print_have_symbol(__GCC_HAVE_DWARF2_CFI_ASM __SEH__ __USING_SJLJ_EXCEPTIONS__)
             # threads: win32 vs posix/pthread/winpthreads vs mcfgthread
@@ -110,7 +156,11 @@ endfunction()
 function(upx_add_glob_files) # ARGV
     set(var_name ${ARGV0})
     list(REMOVE_AT ARGV 0)
-    file(GLOB files ${ARGV})
+    if(${CMAKE_VERSION} VERSION_LESS "3.3")
+        file(GLOB files ${ARGV})
+    else()
+        file(GLOB files LIST_DIRECTORIES false ${ARGV})
+    endif()
     set(result "")
     if(DEFINED ${var_name})
         set(result "${${var_name}}")
@@ -151,7 +201,7 @@ function(upx_cache_bool_vars) # ARGV
         elseif(DEFINED ${var_name})                 # defined via "cmake -DXXX=YYY"
             set(value "${${var_name}}")
         elseif(DEFINED ENV{${var_name}})            # check environment
-            if("$ENV{${var_name}}" MATCHES "^(0|1|OFF|ON|FALSE|TRUE)$")
+            if("$ENV{${var_name}}" MATCHES "^(0|1|OFF|ON|FALSE|TRUE|off|on|false|true)$")
                 set(value "$ENV{${var_name}}")
                 set(UPX_CACHE_ORIGIN_FROM_ENV_${var_name} TRUE CACHE INTERNAL "" FORCE) # for status message below
             endif()
@@ -189,7 +239,7 @@ endfunction()
 
 function(upx_internal_add_definitions_with_prefix) # ARGV; needs include(CheckCCompilerFlag)
     set(flag_prefix "${ARGV0}")
-    if(flag_prefix MATCHES "^empty$") # need "empty" to work around bug in old CMake versions
+    if("${flag_prefix}" MATCHES "^empty$") # need "empty" to work around bug in old CMake versions
         set(flag_prefix "")
     endif()
     list(REMOVE_AT ARGV 0)
@@ -270,7 +320,7 @@ function(upx_compile_source_debug_with_O2) # ARGV
             # MSVC uses some Debug compilation options like -RTC1 that are incompatible with -O2
         else()
             get_source_file_property(prop "${source}" COMPILE_FLAGS)
-            if(prop MATCHES "^(NOTFOUND)?$")
+            if("${prop}" MATCHES "^(NOTFOUND)?$")
                 set_source_files_properties("${source}" PROPERTIES COMPILE_FLAGS "${flags}")
             else()
                 set_source_files_properties("${source}" PROPERTIES COMPILE_FLAGS "${prop} ${flags}")
@@ -286,11 +336,17 @@ function(upx_sanitize_target) # ARGV
             # no-op
         elseif(MSVC_FRONTEND)
             # MSVC uses -GS (similar to -fstack-protector) by default
+        elseif(NOT GNU_FRONTEND)
+            # unknown compiler
         elseif(MINGW OR CYGWIN)
             # avoid link errors with current MinGW-w64 versions
             # see https://www.mingw-w64.org/contribute/#sanitizers-asan-tsan-usan
+        elseif(CMAKE_C_COMPILER_ID MATCHES "^Clang$" AND CMAKE_C_COMPILER_VERSION VERSION_LESS "9.0")
+            # unreliable/broken sanitize implementation before clang-9 (Sep 2019)
+            message(WARNING "WARNING: ignoring SANITIZE for target '${t}'")
         elseif(CMAKE_C_COMPILER_ID MATCHES "^GNU" AND CMAKE_C_COMPILER_VERSION VERSION_LESS "8.0")
-            # unsupported compiler; unreliable/broken sanitize implementation
+            # unsupported compiler; unreliable/broken sanitize implementation before gcc-8 (May 2018)
+            message(WARNING "WARNING: ignoring SANITIZE for target '${t}'")
         else()
             # default sanitizer for Debug builds
             target_compile_options(${t} PRIVATE $<$<CONFIG:Debug>:-fsanitize=undefined -fsanitize-undefined-trap-on-error -fstack-protector-all>)
@@ -306,11 +362,21 @@ endfunction()
 # test
 #***********************************************************************
 
-function(upx_add_serial_test) # ARGV
+function(upx_add_test) # ARGV
     set(name "${ARGV0}")
     list(REMOVE_AT ARGV 0)
     add_test(NAME "${name}" COMMAND ${ARGV})
-    set_tests_properties("${name}" PROPERTIES RUN_SERIAL TRUE) # run these tests sequentially
+endfunction()
+
+function(upx_test_depends) # ARGV
+    set(name "${ARGV0}")
+    list(REMOVE_AT ARGV 0)
+    get_property(prop TEST "${name}" PROPERTY DEPENDS)
+    if("${prop}" MATCHES "^(NOTFOUND)?$")
+        set_tests_properties("${name}" PROPERTIES DEPENDS "${ARGV}")
+    else()
+        set_tests_properties("${name}" PROPERTIES DEPENDS "${prop};${ARGV}")
+    endif()
 endfunction()
 
 # vim:set ft=cmake ts=4 sw=4 tw=0 et:

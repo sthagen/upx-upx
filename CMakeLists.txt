@@ -25,7 +25,7 @@ else()
     cmake_minimum_required(VERSION "3.8" FATAL_ERROR) # CMake >= 3.8 is needed for CXX_STANDARD 17
 endif()
 
-# support functions
+# support functions and some utility
 include("${CMAKE_CURRENT_SOURCE_DIR}/misc/cmake/functions.cmake")
 
 #***********************************************************************
@@ -35,30 +35,31 @@ include("${CMAKE_CURRENT_SOURCE_DIR}/misc/cmake/functions.cmake")
 upx_cmake_include_hook(1_options)
 
 # compilation config options
-if(NOT IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/.git" OR NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/misc/cmake/use_strict_defaults.cmake")
+if(NOT USE_STRICT_DEFAULTS)
     # permissive config defaults when building from source code tarball
-    option(UPX_CONFIG_DISABLE_GITREV   "Do not compile with default Git version info." ON)
-    option(UPX_CONFIG_DISABLE_SANITIZE "Do not compile with default sanitize options." ON)
+    option(UPX_CONFIG_DISABLE_GITREV   "Do not compile with Git version info."         ON)
+    option(UPX_CONFIG_DISABLE_SANITIZE "Do not compile with sanitize options."         ON)
+    option(UPX_CONFIG_DISABLE_WERROR   "Do not compile with -Werror option."           ON)
     option(UPX_CONFIG_DISABLE_WSTRICT  "Do not compile with strict compiler warnings." ON)
-    option(UPX_CONFIG_DISABLE_WERROR   "Do not compile with default -Werror option."   ON)
 else()
     # strict config defaults for Git developer builds
     message(STATUS "===== UPX info: strict config defaults enabled")
-    option(UPX_CONFIG_DISABLE_GITREV   "Do not compile with default Git version info." OFF)
-    option(UPX_CONFIG_DISABLE_SANITIZE "Do not compile with default sanitize options." OFF)
+    option(UPX_CONFIG_DISABLE_GITREV   "Do not compile with Git version info."         OFF)
+    option(UPX_CONFIG_DISABLE_SANITIZE "Do not compile with sanitize options."         OFF)
+    option(UPX_CONFIG_DISABLE_WERROR   "Do not compile with -Werror option."           OFF)
     option(UPX_CONFIG_DISABLE_WSTRICT  "Do not compile with strict compiler warnings." OFF)
-    option(UPX_CONFIG_DISABLE_WERROR   "Do not compile with default -Werror option."   OFF)
 endif()
 
 # test config options (see below)
 # IMPORTANT NOTE: self-pack test can only work if the host executable format is supported by UPX!
-option(UPX_CONFIG_DISABLE_SELF_PACK_TEST "Do not test packing UPX with itself" OFF)
+option(UPX_CONFIG_DISABLE_SELF_PACK_TEST   "Do not test packing UPX with itself" OFF)
+option(UPX_CONFIG_DISABLE_EXHAUSTIVE_TESTS "Do not run exhaustive tests"         OFF)
 
 #***********************************************************************
 # init
 #***********************************************************************
 
-set(UPX_VERSION_STRING "4.2.3") # this should match src/version.h
+set(UPX_VERSION_STRING "4.2.4") # this should match src/version.h
 
 upx_cmake_include_hook(2_init)
 
@@ -78,13 +79,15 @@ upx_cache_bool_vars(ON
     CMAKE_C_STANDARD_REQUIRED CMAKE_CXX_STANDARD_REQUIRED
     CMAKE_EXPORT_COMPILE_COMMANDS CMAKE_REQUIRED_QUIET
 )
-# internal UPX settings that default to OFF
+# internal UPX settings
 upx_cache_bool_vars(OFF
     UPX_CONFIG_CMAKE_DISABLE_TEST UPX_CONFIG_CMAKE_DISABLE_INSTALL
     UPX_CONFIG_CMAKE_DISABLE_PRINT_INFO UPX_CONFIG_CMAKE_DISABLE_PLATFORM_CHECK
     UPX_CONFIG_DISABLE_C_STANDARD UPX_CONFIG_DISABLE_CXX_STANDARD
-    UPX_CONFIG_EXPECT_THREADS UPX_CONFIG_REQUIRE_THREADS
+    UPX_CONFIG_DISABLE_RUN_UNPACKED_TEST UPX_CONFIG_DISABLE_RUN_PACKED_TEST
+    UPX_CONFIG_REQUIRE_THREADS
 )
+upx_cache_bool_vars(ON UPX_CONFIG_EXPECT_THREADS)
 upx_print_env_var(CC CXX)
 
 # determine Git revision
@@ -134,9 +137,11 @@ upx_set_default_build_type(Release) # default is CMAKE_BUILD_TYPE=Release
 project(upx VERSION "${UPX_VERSION_STRING}" LANGUAGES C CXX)
 upx_apply_build_type()
 
-# set MSVC_FRONTEND and MINGW
+# set MSVC_FRONTEND, GNU_FRONTEND and MINGW
 if(NOT DEFINED MSVC_FRONTEND AND (MSVC OR CMAKE_C_COMPILER_FRONTEND_VARIANT MATCHES "^MSVC"))
     set(MSVC_FRONTEND 1)
+elseif (NOT DEFINED GNU_FRONTEND AND (CMAKE_C_COMPILER_FRONTEND_VARIANT MATCHES "^GNU" OR CMAKE_C_COMPILER_ID MATCHES "(Clang|GNU)"))
+    set(GNU_FRONTEND 1)
 endif()
 if(NOT DEFINED MINGW AND CMAKE_C_PLATFORM_ID MATCHES "^MinGW")
     set(MINGW 1)
@@ -232,8 +237,9 @@ if(NOT CMAKE_C_COMPILER_ID MATCHES "^MSVC")
     endif()
 endif()
 
-# examine MinGW/Cygwin compiler configuration
-if(IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/.git")
+# examine compiler configuration
+if(NOT UPX_CONFIG_CMAKE_DISABLE_PRINT_INFO)
+    upx_print_common_symbols()
     upx_print_mingw_symbols()
 endif()
 
@@ -253,7 +259,7 @@ if(NOT UPX_CONFIG_DISABLE_THREADS)
 endif()
 # make sure that threads are indeed fully supported in C++
 if(Threads_FOUND)
-    foreach(f std_lock_guard.cpp)
+    foreach(f std_lock_guard.cpp types_abi.cpp)
         set(CMAKE_TRY_COMPILE_TARGET_TYPE "EXECUTABLE")
         if(NOT UPX_CONFIG_DISABLE_CXX_STANDARD)
             try_compile(result "${CMAKE_CURRENT_BINARY_DIR}"
@@ -266,7 +272,7 @@ if(Threads_FOUND)
         endif()
         if(NOT result)
             # failed; under MinGW be sure to use the posix-threads and NOT the win32-threads version
-            #message(STATUS "Threads FAILED: ${output}") # debug output from try_compile
+            #message(STATUS "Threads FAILED ${f}: ${output}") # debug output from try_compile
             set(Threads_FOUND OFF)
             break()
         endif()
@@ -330,7 +336,7 @@ upx_sanitize_target(${t})
 target_compile_definitions(${t} PRIVATE BZ_NO_STDIO=1)
 if(MSVC_FRONTEND)
     target_compile_options(${t} PRIVATE ${warn_WN} -wd4127 -wd4244 -wd4267 ${warn_WX})
-else()
+elseif(GNU_FRONTEND)
     target_compile_options(${t} PRIVATE ${warn_Wall} ${warn_Werror})
 endif()
 upx_add_target_extra_compile_options(${t} UPX_CONFIG_EXTRA_COMPILE_OPTIONS_BZIP2)
@@ -342,7 +348,7 @@ upx_compile_target_debug_with_O2(${t})
 upx_sanitize_target(${t})
 if(MSVC_FRONTEND)
     target_compile_options(${t} PRIVATE ${warn_WN} ${warn_WX})
-else()
+elseif(GNU_FRONTEND)
     target_compile_options(${t} PRIVATE ${warn_Wall} ${warn_Werror})
 endif()
 upx_add_target_extra_compile_options(${t} UPX_CONFIG_EXTRA_COMPILE_OPTIONS_UCL)
@@ -356,7 +362,7 @@ if(HAVE_UNISTD_H)
 endif()
 if(MSVC_FRONTEND)
     target_compile_options(${t} PRIVATE -W3 ${warn_WX})
-else()
+elseif(GNU_FRONTEND)
     target_compile_options(${t} PRIVATE ${warn_Wall} -Wno-cast-align -Wno-cast-qual ${warn_Werror})
 endif()
 upx_add_target_extra_compile_options(${t} UPX_CONFIG_EXTRA_COMPILE_OPTIONS_ZLIB)
@@ -368,7 +374,7 @@ upx_sanitize_target(${t})
 target_compile_definitions(${t} PRIVATE DYNAMIC_BMI2=0 ZSTD_DISABLE_ASM=1)
 if(MSVC_FRONTEND)
     target_compile_options(${t} PRIVATE ${warn_WN} ${warn_WX})
-else()
+elseif(GNU_FRONTEND)
     target_compile_options(${t} PRIVATE ${warn_Wall} ${warn_Werror})
 endif()
 upx_add_target_extra_compile_options(${t} UPX_CONFIG_EXTRA_COMPILE_OPTIONS_ZSTD)
@@ -411,7 +417,7 @@ upx_compile_source_debug_with_O2(src/filter/filter_impl.cpp)
 upx_sanitize_target(${t})
 if(MSVC_FRONTEND)
     target_compile_options(${t} PRIVATE -EHsc ${warn_WN} ${warn_WX})
-else()
+elseif(GNU_FRONTEND)
     target_compile_options(${t} PRIVATE ${warn_Wall} ${warn_Werror})
 endif()
 upx_add_target_extra_compile_options(${t} UPX_CONFIG_EXTRA_COMPILE_OPTIONS_UPX)
@@ -429,30 +435,20 @@ if(NOT UPX_CONFIG_CMAKE_DISABLE_TEST)
 
 include(CTest)
 if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR)
-    add_test(NAME upx-version COMMAND upx --version)
-    add_test(NAME upx-help    COMMAND upx --help)
-    add_test(NAME upx-sysinfo COMMAND upx --sysinfo -v)
-if(NOT UPX_CONFIG_DISABLE_SELF_PACK_TEST)
-    # IMPORTANT NOTE: these tests can only work if the host executable format is supported by UPX!
-    set(emu "")
-    if(DEFINED CMAKE_CROSSCOMPILING_EMULATOR)
-        set(emu "${CMAKE_CROSSCOMPILING_EMULATOR}")
+    upx_add_test(upx-version       upx --version)
+    upx_add_test(upx-version-short upx --version-short)
+    upx_add_test(upx-license       upx --license)
+    upx_add_test(upx-help-1        upx --help)
+    upx_add_test(upx-help-2        upx --help-short)
+    upx_add_test(upx-help-3        upx --help-verbose)
+    upx_add_test(upx-sysinfo-1     upx --sysinfo)
+    upx_add_test(upx-sysinfo-2     upx --sysinfo -v)
+    upx_add_test(upx-sysinfo-3     upx --sysinfo -vv)
+    if(NOT UPX_CONFIG_DISABLE_SELF_PACK_TEST)
+        # IMPORTANT NOTE: these tests can only work if the host executable format
+        #   is supported by UPX!
+        include("${CMAKE_CURRENT_SOURCE_DIR}/misc/cmake/self_pack_test.cmake")
     endif()
-    set(exe "${CMAKE_EXECUTABLE_SUFFIX}")
-    set(upx_self_exe "$<TARGET_FILE:upx>")
-    set(fo "--force-overwrite")
-    upx_add_serial_test(upx-self-pack      upx -3         "${upx_self_exe}" ${fo} -o upx-packed${exe})
-    upx_add_serial_test(upx-self-pack-n2b  upx -3 --nrv2b "${upx_self_exe}" ${fo} -o upx-packed-n2b${exe})
-    upx_add_serial_test(upx-self-pack-n2d  upx -3 --nrv2d "${upx_self_exe}" ${fo} -o upx-packed-n2d${exe})
-    upx_add_serial_test(upx-self-pack-n2e  upx -3 --nrv2e "${upx_self_exe}" ${fo} -o upx-packed-n2e${exe})
-    upx_add_serial_test(upx-self-pack-lzma upx -1 --lzma  "${upx_self_exe}" ${fo} -o upx-packed-lzma${exe})
-    upx_add_serial_test(upx-list           upx -l         upx-packed${exe} upx-packed-n2b${exe} upx-packed-n2d${exe} upx-packed-n2e${exe} upx-packed-lzma${exe})
-    upx_add_serial_test(upx-fileinfo       upx --fileinfo upx-packed${exe} upx-packed-n2b${exe} upx-packed-n2d${exe} upx-packed-n2e${exe} upx-packed-lzma${exe})
-    upx_add_serial_test(upx-test           upx -t         upx-packed${exe} upx-packed-n2b${exe} upx-packed-n2d${exe} upx-packed-n2e${exe} upx-packed-lzma${exe})
-    upx_add_serial_test(upx-unpack         upx -d upx-packed${exe} ${fo} -o upx-unpacked${exe})
-    upx_add_serial_test(upx-run-unpacked   ${emu} ./upx-unpacked${exe} --version-short)
-    upx_add_serial_test(upx-run-packed     ${emu} ./upx-packed${exe} --version-short)
-endif() # UPX_CONFIG_DISABLE_SELF_PACK_TEST
 endif()
 
 endif() # UPX_CONFIG_CMAKE_DISABLE_TEST
@@ -497,25 +493,15 @@ upx_cmake_include_hook(8_summary)
 
 upx_print_var(CMAKE_VERSION UPX_CONFIG_CMAKE_MINIMUM_REQUIRED_VERSION CMAKE_GENERATOR)
 if(NOT UPX_CONFIG_CMAKE_DISABLE_PRINT_INFO)
-if(NOT ",${CMAKE_BINARY_DIR}," STREQUAL ",${CMAKE_CURRENT_BINARY_DIR}," OR NOT ",${CMAKE_SOURCE_DIR}," STREQUAL ",${CMAKE_CURRENT_SOURCE_DIR},")
-    upx_print_var(CMAKE_BINARY_DIR CMAKE_SOURCE_DIR CMAKE_CURRENT_BINARY_DIR CMAKE_CURRENT_SOURCE_DIR)
+    include("${CMAKE_CURRENT_SOURCE_DIR}/misc/cmake/print_info.cmake")
 endif()
-upx_print_var(CMAKE_HOST_SYSTEM_NAME CMAKE_HOST_SYSTEM_VERSION CMAKE_HOST_SYSTEM_PROCESSOR CMAKE_APPLE_SILICON_PROCESSOR)
-upx_print_var(CMAKE_SYSTEM_NAME CMAKE_SYSTEM_VERSION CMAKE_SYSTEM_PROCESSOR CMAKE_CROSSCOMPILING CMAKE_CROSSCOMPILING_EMULATOR)
-upx_print_var(CMAKE_OSX_DEPLOYMENT_TARGET CMAKE_OSX_SYSROOT)
-upx_print_var(CMAKE_C_COMPILER CMAKE_CXX_COMPILER CMAKE_AR CMAKE_RANLIB)
-upx_print_var(CMAKE_C_COMPILER_ID CMAKE_C_COMPILER_VERSION CMAKE_C_COMPILER_FRONTEND_VARIANT CMAKE_C_COMPILER_ARCHITECTURE_ID CMAKE_C_PLATFORM_ID CMAKE_C_COMPILER_ABI)
-upx_print_var(CMAKE_CXX_COMPILER_ID CMAKE_CXX_COMPILER_VERSION CMAKE_CXX_COMPILER_FRONTEND_VARIANT CMAKE_CXX_COMPILER_ARCHITECTURE_ID CMAKE_CXX_PLATFORM_ID CMAKE_CXX_COMPILER_ABI)
-upx_print_var(CMAKE_INTERPROCEDURAL_OPTIMIZATION CMAKE_POSITION_INDEPENDENT_CODE CMAKE_TRY_COMPILE_CONFIGURATION)
-upx_print_var(APPLE CYGWIN GNUC MINGW MSVC MSVC_FRONTEND MSVC_IDE UNIX WIN32 WIN64)
-endif() # UPX_CONFIG_CMAKE_DISABLE_PRINT_INFO
-upx_print_var(CMAKE_INSTALL_PREFIX CMAKE_CONFIGURATION_TYPES CMAKE_BUILD_TYPE)
+upx_print_var(CMAKE_INSTALL_PREFIX CMAKE_CONFIGURATION_TYPES CMAKE_TRY_COMPILE_CONFIGURATION CMAKE_BUILD_TYPE)
 if(Threads_FOUND)
     message(STATUS "WITH_THREADS = 1")
 elseif(UPX_CONFIG_REQUIRE_THREADS)
     message(FATAL_ERROR "ERROR: WITH_THREADS required")
 elseif(UPX_CONFIG_EXPECT_THREADS AND NOT UPX_CONFIG_DISABLE_THREADS)
-    message(FATAL_ERROR "ERROR: WITH_THREADS expected")
+    message(FATAL_ERROR "ERROR: WITH_THREADS expected; set UPX_CONFIG_EXPECT_THREADS=OFF")
 endif()
 if(CMAKE_BUILD_TYPE AND NOT CMAKE_BUILD_TYPE MATCHES "^(Debug|None|Release)$")
     message(WARNING "WARNING: unsupported CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}; please use \"Debug\" or \"Release\"")
@@ -526,7 +512,7 @@ if(NOT UPX_CONFIG_CMAKE_DISABLE_PLATFORM_CHECK)
     upx_platform_check_mismatch(CMAKE_C_PLATFORM_ID CMAKE_CXX_PLATFORM_ID)
     upx_platform_check_mismatch(CMAKE_C_COMPILER_ABI CMAKE_CXX_COMPILER_ABI)
     upx_platform_check_mismatch(CMAKE_C_COMPILER_FRONTEND_VARIANT CMAKE_CXX_COMPILER_FRONTEND_VARIANT)
-endif() # UPX_CONFIG_CMAKE_DISABLE_PLATFORM_CHECK
+endif()
 
 upx_cmake_include_hook(9_finish)
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/.upx_cmake_config_done.txt" "")

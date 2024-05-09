@@ -38,7 +38,7 @@
 
 // Automatic conversion to underlying pointer; do NOT enable this config as this
 // defeats the main purpose of a checked pointer => use raw_bytes() as needed;
-// and see xspan_fwd.h how to make this more convenient.
+// and see "xspan_fwd.h" how to make this more convenient.
 #ifndef XSPAN_CONFIG_ENABLE_IMPLICIT_CONVERSION
 #define XSPAN_CONFIG_ENABLE_IMPLICIT_CONVERSION 0
 #endif
@@ -161,7 +161,7 @@ inline R *xspan_make_helper__(MemBuffer &mb) noexcept {
 // cast to a different type (creates a new value)
 #define XSPAN_TYPE_CAST(type, x)           (upx::ptr_static_cast<type *>(x))
 // poison a pointer: point to a non-null invalid address
-#define XSPAN_INVALIDATE(x)                ptr_invalidate_and_poison(x)
+#define XSPAN_INVALIDATE(x)                (ptr_invalidate_and_poison(x))
 
 #endif // WITH_XSPAN
 

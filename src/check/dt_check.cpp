@@ -24,6 +24,9 @@
    <markus@oberhumer.com>
  */
 
+// doctest checks, and various tests to catch toolchain/qemu/sanitizer/valgrind/wine/etc
+// problems; grown historically
+
 #include "../util/system_headers.h"
 #include <cmath> // std::isinf std::isnan
 #include "../conf.h"
@@ -53,7 +56,7 @@ int upx_doctest_check(int argc, char **argv) {
     // default for debug builds: do show the [doctest] summary
     minimal = false;
 #endif
-    const char *e = getenv("UPX_DEBUG_DOCTEST_VERBOSE");
+    const char *e = upx_getenv("UPX_DEBUG_DOCTEST_VERBOSE");
     if (e && e[0]) {
         if (strcmp(e, "0") == 0) {
             minimal = true;
@@ -75,7 +78,7 @@ int upx_doctest_check(int argc, char **argv) {
         context.setOption("dt-duration", true);
     if (success)
         context.setOption("dt-success", true);
-    // this requires that main_get_options() understands "--dt-XXX" options
+    // this requires that main_get_options() understands/ignores doctest "--dt-XXX" options
     if (argc > 0 && argv != nullptr)
         context.applyCommandLine(argc, argv);
     int r = context.run();
@@ -326,6 +329,13 @@ struct TestIntegerWrap {
 // basic exception handling checks to early catch toolchain/qemu/wine/etc problems
 //
 
+struct TestDestructor {
+    explicit TestDestructor(int *pp, int vv) noexcept : p(pp), v(vv) {}
+    virtual noinline ~TestDestructor() noexcept { *p = (*p << 2) + v; }
+    int *p;
+    int v;
+};
+
 static noinline void throwSomeValue(int x) may_throw {
     if (x < 0)
         throw int(x);
@@ -333,12 +343,19 @@ static noinline void throwSomeValue(int x) may_throw {
         throw size_t(x);
 }
 
+static noinline void check_exceptions_2(void (*func)(int), int *x) may_throw {
+    TestDestructor d(x, *x);
+    func(*x);
+}
+
 static noinline void check_basic_cxx_exception_handling(void (*func)(int)) noexcept {
     bool cxx_exception_handling_works = false;
+    int x = 1;
     try {
-        func(42);
+        TestDestructor d(&x, 3);
+        check_exceptions_2(func, &x);
     } catch (const size_t &e) {
-        if (e == 42)
+        if (e == 1 && x == 23)
             cxx_exception_handling_works = true;
     } catch (...) {
     }
@@ -376,21 +393,21 @@ struct TestFloat {
     static noinline Float add_div_x(Int a, Int b) { return Float(a + b) / Float(X); }
     static noinline Float sub_div_x(Int a, Int b) { return Float(a - b) / Float(X); }
     static noinline void check() noexcept {
+        assert_noexcept(div(2 * X, Float(X)) == Float(2));
         assert_noexcept(add_div(X, X, Float(X)) == Float(2));
         assert_noexcept(add_div_x(X, X) == Float(2));
         assert_noexcept(sub_div(3 * X, X, Float(X)) == Float(2));
         assert_noexcept(sub_div_x(3 * X, X) == Float(2));
         // extra debugging; floating point edge cases cause portability problems in practice
-        if (is_envvar_true("UPX_DEBUG_TEST_FLOAT_DIVISION_BY_ZERO")) {
-#if defined(__clang__) && defined(__FAST_MATH__) && defined(__INTEL_LLVM_COMPILER)
+        static const char envvar[] = "UPX_DEBUG_TEST_FLOAT_DIVISION_BY_ZERO";
+        if (is_envvar_true(envvar)) {
+#if defined(__FAST_MATH__)
             // warning: comparison with NaN always evaluates to false in fast floating point modes
-            fprintf(stderr, "upx: WARNING: ignoring UPX_DEBUG_TEST_FLOAT_DIVISION_BY_ZERO\n");
-#elif defined(__clang__) && (__clang_major__ < 9) && defined(__SANITIZE_UNDEFINED_BEHAVIOR__)
-            // @COMPILER_BUG @CLANG_BUG
-            fprintf(stderr, "upx: WARNING: ignoring UPX_DEBUG_TEST_FLOAT_DIVISION_BY_ZERO\n");
+            fprintf(stderr, "upx: WARNING: ignoring %s: __FAST_MATH__\n", envvar);
 #else
             assert_noexcept(std::isnan(div(0, Float(0))));
             assert_noexcept(std::isinf(div(1, Float(0))));
+            assert_noexcept(std::isinf(div(Int(-1), Float(0))));
 #endif
         }
     }
@@ -422,6 +439,8 @@ static noinline void check_basic_floating_point(void) noexcept {
 #include "../util/miniacc.h"
 
 void upx_compiler_sanity_check(void) noexcept {
+    check_basic_floating_point();
+
     if (is_envvar_true("UPX_DEBUG_DOCTEST_DISABLE", "UPX_DEBUG_DISABLE_DOCTEST")) {
         // If UPX_DEBUG_DOCTEST_DISABLE is set then we don't want to throw any
         // exceptions in order to improve debugging experience.
@@ -430,7 +449,18 @@ void upx_compiler_sanity_check(void) noexcept {
         check_basic_cxx_exception_handling(throwSomeValue);
     }
 
-    check_basic_floating_point();
+    // check_basic_decltype()
+    {
+        auto a = +0;
+        constexpr auto b = -0;
+        const auto &c = -1;
+        COMPILE_TIME_ASSERT((std::is_same<int, decltype(a)>::value))
+        COMPILE_TIME_ASSERT((std::is_same<const int, decltype(b)>::value))
+        COMPILE_TIME_ASSERT((std::is_same<const int &, decltype(c)>::value))
+        UNUSED(a);
+        UNUSED(b);
+        UNUSED(c);
+    }
 
 #define ACC_WANT_ACC_CHK_CH 1
 #undef ACCCHK_ASSERT
@@ -474,13 +504,25 @@ void upx_compiler_sanity_check(void) noexcept {
     COMPILE_TIME_ASSERT_ALIGNED1(upx_charptr_unit_type)
     COMPILE_TIME_ASSERT(sizeof(*((charptr) nullptr)) == 1)
 
-    COMPILE_TIME_ASSERT(sizeof(UPX_VERSION_STRING4) == 4 + 1)
-    assert_noexcept(strlen(UPX_VERSION_STRING4) == 4);
-    COMPILE_TIME_ASSERT(sizeof(UPX_VERSION_YEAR) == 4 + 1)
-    assert_noexcept(strlen(UPX_VERSION_YEAR) == 4);
-    assert_noexcept(memcmp(UPX_VERSION_DATE_ISO, UPX_VERSION_YEAR, 4) == 0);
-    assert_noexcept(
-        memcmp(&UPX_VERSION_DATE[sizeof(UPX_VERSION_DATE) - 1 - 4], UPX_VERSION_YEAR, 4) == 0);
+    // check UPX_VERSION_xxx
+    {
+        using upx::compile_time::mem_eq;
+        using upx::compile_time::string_len;
+        static_assert(string_len(UPX_VERSION_STRING4) == 4);
+        static_assert(string_len(UPX_VERSION_YEAR) == 4);
+        static_assert(string_len(UPX_VERSION_DATE_ISO) == 10);
+        static_assert(string_len(UPX_VERSION_DATE) == 12 || string_len(UPX_VERSION_DATE) == 13);
+        static_assert(mem_eq(UPX_VERSION_STRING4, UPX_VERSION_STRING, 3));
+        static_assert(mem_eq(UPX_VERSION_YEAR, UPX_VERSION_DATE_ISO, 4));
+        static_assert(mem_eq(UPX_VERSION_YEAR, &UPX_VERSION_DATE[sizeof(UPX_VERSION_DATE) - 5], 4));
+        char buf[16];
+        constexpr long long v = UPX_VERSION_HEX;
+        upx_safe_snprintf(buf, sizeof(buf), "%lld.%lld.%lld", (v >> 16), (v >> 8) & 255, v & 255);
+        assert_noexcept(strcmp(buf, UPX_VERSION_STRING) == 0);
+        upx_safe_snprintf(buf, sizeof(buf), "%lld.%lld%lld", (v >> 16), (v >> 8) & 255, v & 255);
+        assert_noexcept(strcmp(buf, UPX_VERSION_STRING4) == 0);
+    }
+
     if (gitrev[0]) {
         size_t revlen = strlen(gitrev);
         if (strncmp(gitrev, "ERROR", 5) == 0) {
@@ -646,7 +688,7 @@ void upx_compiler_sanity_check(void) noexcept {
 **************************************************************************/
 
 TEST_CASE("assert_noexcept") {
-    // just to make sure that our own assert() macros don't generate any warnings
+    // just to make sure that our own assert() macros do not trigger any compiler warnings
     byte dummy = 0;
     byte *ptr1 = &dummy;
     const byte *const ptr2 = &dummy;
@@ -668,10 +710,13 @@ TEST_CASE("acc_vget") {
     CHECK_EQ(acc_vget_long(1, -1), 1);
     CHECK_EQ(acc_vget_acc_int64l_t(2, 1), 2);
     CHECK_EQ(acc_vget_acc_hvoid_p(nullptr, 0), nullptr);
+    if (acc_vget_int(1, 0) > 0)
+        return;
+    assert_noexcept(false);
 }
 
 TEST_CASE("ptr_invalidate_and_poison") {
-    int *ip = nullptr;
+    int *ip = nullptr; // initialized
     ptr_invalidate_and_poison(ip);
     assert(ip != nullptr);
     (void) ip;
@@ -679,6 +724,11 @@ TEST_CASE("ptr_invalidate_and_poison") {
     ptr_invalidate_and_poison(dp);
     assert(dp != nullptr);
     (void) dp;
+}
+
+TEST_CASE("upx_getenv") {
+    CHECK_EQ(upx_getenv(nullptr), nullptr);
+    CHECK_EQ(upx_getenv(""), nullptr);
 }
 
 TEST_CASE("working -fno-strict-aliasing") {
@@ -751,11 +801,13 @@ TEST_CASE("libc snprintf") {
     CHECK_EQ(strcmp(buf, "0X1A   0x1b   0x1c  "), 0);
 }
 
-#if 0
 TEST_CASE("libc qsort") {
     // runtime check that libc qsort() never compares identical objects
-    // UPDATE: while only poor implementations of qsort() would actually do
-    //   this, it is probably allowed by the standard; so skip this test case
+    // UPDATE: while only poor implementations of qsort() would actually do this
+    //   it is probably allowed by the standard, so skip this test by default
+    if (!is_envvar_true("UPX_DEBUG_TEST_LIBC_QSORT"))
+        return;
+
     struct Elem {
         upx_uint16_t id;
         upx_uint16_t value;
@@ -765,35 +817,41 @@ TEST_CASE("libc qsort") {
             assert_noexcept(a->id != b->id); // check not IDENTICAL
             return a->value < b->value ? -1 : (a->value == b->value ? 0 : 1);
         }
-        static bool check_sort(upx_sort_func_t sort, Elem *e, size_t n) {
-            upx_uint32_t x = 5381 + n + ((upx_uintptr_t) e & 0xff);
+        static noinline bool check_sort(upx_sort_func_t sort, Elem *e, size_t n, bool is_stable) {
+            upx_uint32_t x = 5381 + (upx_rand() & 255);
             for (size_t i = 0; i < n; i++) {
                 e[i].id = (upx_uint16_t) i;
                 x = x * 33 + 1 + (i & 255);
-                e[i].value = (upx_uint16_t) x;
+                e[i].value = (upx_uint16_t) ((x >> 4) & 15);
             }
             sort(e, n, sizeof(Elem), Elem::compare);
-            for (size_t i = 1; i < n; i++)
+            // verify
+            for (size_t i = 1; i < n; i++) {
                 if very_unlikely (e[i - 1].value > e[i].value)
                     return false;
+                if (is_stable)
+                    if very_unlikely (e[i - 1].value == e[i].value && e[i - 1].id >= e[i].id)
+                        return false;
+            }
             return true;
         }
     };
     constexpr size_t N = 4096;
     Elem e[N];
     for (size_t n = 0; n <= N; n = 2 * n + 1) {
-        // CHECK(Elem::check_sort(qsort, e, n)); // libc qsort()
-        CHECK(Elem::check_sort(upx_gnomesort, e, n));
-        CHECK(Elem::check_sort(upx_shellsort_memswap, e, n));
-        CHECK(Elem::check_sort(upx_shellsort_memcpy, e, n));
+        // system sort functions
+        CHECK(Elem::check_sort(::qsort, e, n, false)); // libc qsort()
 #if UPX_CONFIG_USE_STABLE_SORT
         upx_sort_func_t wrap_stable_sort = [](void *aa, size_t nn, size_t, upx_compare_func_t cc) {
             upx_std_stable_sort<sizeof(Elem)>(aa, nn, cc);
         };
-        CHECK(Elem::check_sort(wrap_stable_sort, e, n));
+        CHECK(Elem::check_sort(wrap_stable_sort, e, n, true)); // std::stable_sort()
 #endif
+        // simple UPX sort functions
+        CHECK(Elem::check_sort(upx_gnomesort, e, n, true));
+        CHECK(Elem::check_sort(upx_shellsort_memswap, e, n, false));
+        CHECK(Elem::check_sort(upx_shellsort_memcpy, e, n, false));
     }
 }
-#endif
 
 /* vim:set ts=4 sw=4 et: */

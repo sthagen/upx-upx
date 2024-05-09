@@ -80,7 +80,8 @@ get32:
         addi src,src,4
 #endif  /*}*/
 
-        cmpl    0,bits,hibit  // cr0  for   jnextb
+        ori t1,bits,1  // loaded bits might equal hibit; we want 'bgt' to succeed
+        cmpl  cr0,t1,hibit  // cr0  for   jnextb
         addc bits,bits,bits  // Carry for getnextb
         ori  bits,bits,1  // the flag bit
         ret

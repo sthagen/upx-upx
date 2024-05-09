@@ -25,10 +25,16 @@
    <markus@oberhumer.com>               <ezerotven+github@gmail.com>
  */
 
+#if defined(_WIN32_WINNT)
+static constexpr long long initial_win32_winnt = _WIN32_WINNT + 0LL;
+#else
+static constexpr long long initial_win32_winnt = 0;
+#endif
 #define WANT_WINDOWS_LEAN_H 1 // _WIN32_WINNT
 #include "conf.h"
 #include "compress/compress.h" // upx_ucl_version_string()
 // for list_all_packers():
+#include "filter.h" // Filter::isValidFilter
 #include "packer.h"
 #include "packmast.h" // PackMaster::visitAllPackers
 
@@ -95,49 +101,84 @@ void show_usage(void) {
 **************************************************************************/
 
 namespace {
-struct PackerNames {
-    PackerNames() noexcept = default;
+struct PackerNames final {
+    explicit PackerNames() noexcept = default;
     ~PackerNames() noexcept = default;
+
+    static constexpr unsigned MAX_NAMES = 64; // arbitrary limit, increase as needed
     struct Entry {
         const char *fname;
         const char *sname;
+        unsigned methods_count;
+        unsigned filters_count;
+        unsigned methods[PackerBase::MAX_METHODS];
+        unsigned filters[PackerBase::MAX_FILTERS];
     };
-    static constexpr size_t MAX_NAMES = 64;
     Entry names[MAX_NAMES];
-    size_t names_count = 0;
+    unsigned names_count = 0;
     const Options *o = nullptr;
+
     void add(const PackerBase *pb) {
         assert_noexcept(names_count < MAX_NAMES);
-        names[names_count].fname = pb->getFullName(o);
-        names[names_count].sname = pb->getName();
-        names_count++;
+        Entry &e = names[names_count++];
+        e.fname = pb->getFullName(o);
+        e.sname = pb->getName();
+        e.methods_count = e.filters_count = 0;
+        for (const int *m = pb->getCompressionMethods(M_ALL, 10); *m != M_END; m++) {
+            if (*m >= 0) {
+                assert_noexcept(Packer::isValidCompressionMethod(*m));
+                assert_noexcept(e.methods_count < PackerBase::MAX_METHODS);
+                e.methods[e.methods_count++] = *m;
+            }
+        }
+        for (const int *f = pb->getFilters(); f != nullptr && *f != FT_END; f++) {
+            if (*f >= 0) {
+                assert_noexcept(Filter::isValidFilter(*f));
+                assert_noexcept(e.filters_count < PackerBase::MAX_FILTERS);
+                e.filters[e.filters_count++] = *f;
+            }
+        }
+        upx_gnomesort(e.methods, e.methods_count, sizeof(e.methods[0]), ne32_compare);
+        upx_gnomesort(e.filters, e.filters_count, sizeof(e.filters[0]), ne32_compare);
     }
     static tribool visit(PackerBase *pb, void *user) {
+        NO_fprintf(stderr, "visit %s\n", pb->getFullName(nullptr));
         PackerNames *self = (PackerNames *) user;
         self->add(pb);
         return false;
     }
-    static int __acc_cdecl_qsort cmp_fname(const void *a, const void *b) {
+    static int __acc_cdecl_qsort compare_fname(const void *a, const void *b) {
         return strcmp(((const Entry *) a)->fname, ((const Entry *) b)->fname);
     }
-    static int __acc_cdecl_qsort cmp_sname(const void *a, const void *b) {
+    static int __acc_cdecl_qsort compare_sname(const void *a, const void *b) {
         return strcmp(((const Entry *) a)->sname, ((const Entry *) b)->sname);
     }
 };
 } // namespace
 
-static void list_all_packers(FILE *f, int verbose) {
+static noinline void list_all_packers(FILE *f, int verbose) {
     Options o;
     o.reset();
     PackerNames pn;
     pn.o = &o;
     (void) PackMaster::visitAllPackers(PackerNames::visit, nullptr, &o, &pn);
-    upx_qsort(pn.names, pn.names_count, sizeof(PackerNames::Entry), PackerNames::cmp_fname);
+    upx_gnomesort(pn.names, pn.names_count, sizeof(PackerNames::Entry), PackerNames::compare_fname);
     size_t pos = 0;
-    for (size_t i = 0; i < pn.names_count; ++i) {
-        const char *fn = pn.names[i].fname;
-        const char *sn = pn.names[i].sname;
-        if (verbose > 0) {
+    for (size_t i = 0; i < pn.names_count; i++) {
+        const PackerNames::Entry &e = pn.names[i];
+        const char *const fn = e.fname;
+        const char *const sn = e.sname;
+        if (verbose >= 3) {
+            con_fprintf(f, "    %-36s %s\n", fn, sn);
+            con_fprintf(f, "        methods:");
+            for (size_t j = 0; j < e.methods_count; j++)
+                con_fprintf(f, " %#x", e.methods[j]);
+            con_fprintf(f, "\n");
+            con_fprintf(f, "        filters:");
+            for (size_t j = 0; j < e.filters_count; j++)
+                con_fprintf(f, " %#x", e.filters[j]);
+            con_fprintf(f, "\n");
+        } else if (verbose >= 2) {
             con_fprintf(f, "    %-36s %s\n", fn, sn);
         } else {
             size_t fl = strlen(fn);
@@ -153,7 +194,7 @@ static void list_all_packers(FILE *f, int verbose) {
             }
         }
     }
-    if (verbose <= 0 && pn.names_count)
+    if (verbose < 2 && pn.names_count)
         con_fprintf(f, "\n");
 }
 
@@ -425,11 +466,12 @@ void show_version(bool one_line) {
     fprintf(f, "Copyright (C) 1996-2024 Markus Franz Xaver Johannes Oberhumer\n");
     fprintf(f, "Copyright (C) 1996-2024 Laszlo Molnar\n");
     fprintf(f, "Copyright (C) 2000-2024 John F. Reiser\n");
-    fprintf(f, "Copyright (C) 2002-2024 Jens Medoch\n");
 #if (WITH_ZLIB)
+    // see vendor/zlib/LICENSE
     fprintf(f, "Copyright (C) 1995" "-2024 Jean-loup Gailly and Mark Adler\n");
 #endif
 #if (WITH_LZMA)
+    // see vendor/lzma-sdk/lzma.txt
     fprintf(f, "Copyright (C) 1999" "-2006 Igor Pavlov\n");
 #endif
 #if (WITH_ZSTD)
@@ -437,13 +479,15 @@ void show_version(bool one_line) {
     fprintf(f, "Copyright (C) 2015" "-2024 Meta Platforms, Inc. and affiliates\n");
 #endif
 #if (WITH_BZIP2)
-    fprintf(f, "Copyright (C) 1996" "-2010 Julian Seward\n"); // see <bzlib.h>
+    // see vendor/bzip2/bzlib.h
+    fprintf(f, "Copyright (C) 1996" "-2010 Julian Seward\n");
 #endif
 #if !defined(DOCTEST_CONFIG_DISABLE)
+    // see vendor/doctest/LICENSE.txt
     fprintf(f, "Copyright (C) 2016" "-2023 Viktor Kirilov\n");
 #endif
-    fprintf(f, "UPX comes with ABSOLUTELY NO WARRANTY; for details type '%s -L'.\n", progname);
     // clang-format on
+    fprintf(f, "UPX comes with ABSOLUTELY NO WARRANTY; for details type '%s -L'.\n", progname);
 }
 
 /*************************************************************************
@@ -525,6 +569,8 @@ void show_sysinfo(const char *options_var) {
 #endif
 #if defined(_WIN32_WINNT)
         cf_print("_WIN32_WINNT", "0x%04llx", _WIN32_WINNT + 0);
+        if (initial_win32_winnt != 0 && initial_win32_winnt != _WIN32_WINNT + 0)
+            cf_print("INITIAL_WIN32_WINNT", "0x%04llx", initial_win32_winnt);
 #endif
 #if defined(__MSVCRT_VERSION__)
         cf_print("__MSVCRT_VERSION__", "0x%04llx", __MSVCRT_VERSION__ + 0);
@@ -556,6 +602,7 @@ void show_sysinfo(const char *options_var) {
 #endif
         UNUSED(cf_count);
         UNUSED(cf_print);
+        UNUSED(initial_win32_winnt);
     }
 
     // run-time
@@ -578,7 +625,7 @@ void show_sysinfo(const char *options_var) {
 #endif
 
     if (options_var && options_var[0]) {
-        const char *e = getenv(options_var);
+        const char *e = upx_getenv(options_var);
         con_fprintf(f, "\n");
         if (e && e[0])
             con_fprintf(f, "Contents of environment variable %s: '%s'\n\n", options_var, e);

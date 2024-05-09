@@ -26,7 +26,6 @@
  */
 
 #include "system_headers.h"
-#include <algorithm>
 #define ACC_WANT_ACC_INCI_H 1
 #include "miniacc.h"
 #define ACC_WANT_ACCLIB_GETOPT   1
@@ -254,17 +253,44 @@ TEST_CASE("ptr_check_no_overlap 3") {
 // stdlib
 **************************************************************************/
 
+const char *upx_getenv(const char *envvar) noexcept {
+    if (envvar != nullptr && envvar[0])
+        return ::getenv(envvar);
+    return nullptr;
+}
+
+// random value from libc; quality is not important for UPX
+int upx_rand(void) noexcept { return ::rand(); }
+
+void upx_rand_init(void) noexcept {
+    unsigned seed = 0;
+    seed ^= UPX_VERSION_HEX;
+#if (!HAVE_GETTIMEOFDAY || (ACC_OS_DOS32 && defined(__DJGPP__))) && !defined(__wasi__)
+    seed ^= (unsigned) time(nullptr);
+    seed ^= ((unsigned) clock()) << 12;
+#else
+    struct timeval tv = {};
+    (void) gettimeofday(&tv, nullptr);
+    seed ^= (unsigned) tv.tv_sec;
+    seed ^= ((unsigned) tv.tv_usec) << 12;
+#endif
+#if HAVE_GETPID
+    seed ^= ((unsigned) getpid()) << 4;
+#endif
+    ::srand(seed);
+}
+
 void *upx_calloc(size_t n, size_t element_size) may_throw {
     size_t bytes = mem_size(element_size, n); // assert size
-    void *p = malloc(bytes);
+    void *p = ::malloc(bytes);
     if (p != nullptr)
         memset(p, 0, bytes);
     return p;
 }
 
 // simple unoptimized memswap()
-void upx_memswap(void *a, void *b, size_t n) noexcept {
-    if (a != b && n != 0) {
+void upx_memswap(void *a, void *b, size_t bytes) noexcept {
+    if (a != b && bytes != 0) {
         byte *x = (byte *) a;
         byte *y = (byte *) b;
         do {
@@ -273,36 +299,36 @@ void upx_memswap(void *a, void *b, size_t n) noexcept {
             byte tmp = *x; // NOLINT(*core.uninitialized.Assign) // bogus clang-analyzer warning
             *x++ = *y;
             *y++ = tmp;
-        } while (--n != 0);
+        } while (--bytes != 0);
     }
 }
 
 // much better memswap(), optimized for our use case in sort functions below
-static void memswap_no_overlap(byte *a, byte *b, size_t n) noexcept {
+static inline void memswap_no_overlap(byte *a, byte *b, size_t bytes) noexcept {
 #if defined(__clang__) && __clang_major__ < 15
     // work around a clang < 15 ICE (Internal Compiler Error)
     // @COMPILER_BUG @CLANG_BUG
-    upx_memswap(a, b, n);
+    upx_memswap(a, b, bytes);
 #else // clang bug
     upx_alignas_max byte tmp_buf[16];
-#define SWAP(x)                                                                                    \
+#define SWAP(n)                                                                                    \
     do {                                                                                           \
-        upx_memcpy_inline(tmp_buf, a, x);                                                          \
-        upx_memcpy_inline(a, b, x);                                                                \
-        upx_memcpy_inline(b, tmp_buf, x);                                                          \
-        a += x;                                                                                    \
-        b += x;                                                                                    \
+        upx_memcpy_inline(tmp_buf, a, n);                                                          \
+        upx_memcpy_inline(a, b, n);                                                                \
+        upx_memcpy_inline(b, tmp_buf, n);                                                          \
+        a += n;                                                                                    \
+        b += n;                                                                                    \
     } while (0)
 
-    for (; n >= 16; n -= 16)
+    for (; bytes >= 16; bytes -= 16)
         SWAP(16);
-    if (n & 8)
+    if (bytes & 8)
         SWAP(8);
-    if (n & 4)
+    if (bytes & 4)
         SWAP(4);
-    if (n & 2)
+    if (bytes & 2)
         SWAP(2);
-    if (n & 1) {
+    if (bytes & 1) {
         byte tmp = *a;
         *a = *b;
         *b = tmp;
@@ -347,7 +373,7 @@ void upx_shellsort_memcpy(void *array, size_t n, size_t element_size, upx_compar
     upx_alignas_max byte tmp_buf[MAX_INLINE_ELEMENT_SIZE]; // buffer for one element
     byte *tmp = tmp_buf;
     if (element_size > MAX_INLINE_ELEMENT_SIZE) {
-        tmp = (byte *) malloc(element_size);
+        tmp = (byte *) ::malloc(element_size);
         assert(tmp != nullptr);
     }
     size_t gap = 0;         // 0, 1, 4, 13, 40, 121, 364, 1093, ...
@@ -368,13 +394,13 @@ void upx_shellsort_memcpy(void *array, size_t n, size_t element_size, upx_compar
             }
     }
     if (element_size > MAX_INLINE_ELEMENT_SIZE)
-        free(tmp);
+        ::free(tmp);
 }
 
 // wrap std::stable_sort()
 template <size_t ElementSize>
 void upx_std_stable_sort(void *array, size_t n, upx_compare_func_t compare) {
-    static_assert(ElementSize > 0 && ElementSize <= UPX_RSIZE_MAX);
+    static_assert(ElementSize >= 1 && ElementSize <= UPX_RSIZE_MAX);
     mem_size_assert(ElementSize, n); // check size
 #if 0
     // just for testing
@@ -391,9 +417,10 @@ void upx_std_stable_sort(void *array, size_t n, upx_compare_func_t compare) {
 }
 
 #if UPX_CONFIG_USE_STABLE_SORT
-// instantiate function templates for all element sizes we need; efficient run time, but code size
-// bloat (about 4KiB code size for each function with my current libstdc++); not really needed as
-// libc qsort() is good enough for our use cases
+// instantiate function templates for all element sizes we need; efficient
+// run-time, but code size bloat (about 4KiB code size for each function
+// with my current libstdc++); not really needed as libc qsort() is
+// good enough for our use cases
 template void upx_std_stable_sort<1>(void *, size_t, upx_compare_func_t);
 template void upx_std_stable_sort<2>(void *, size_t, upx_compare_func_t);
 template void upx_std_stable_sort<4>(void *, size_t, upx_compare_func_t);
@@ -403,9 +430,9 @@ template void upx_std_stable_sort<16>(void *, size_t, upx_compare_func_t);
 template void upx_std_stable_sort<32>(void *, size_t, upx_compare_func_t);
 template void upx_std_stable_sort<56>(void *, size_t, upx_compare_func_t);
 template void upx_std_stable_sort<72>(void *, size_t, upx_compare_func_t);
-#endif
+#endif // UPX_CONFIG_USE_STABLE_SORT
 
-#if !defined(DOCTEST_CONFIG_DISABLE) && DEBUG >= 1
+#if !defined(DOCTEST_CONFIG_DISABLE) && DEBUG
 #if __cplusplus >= 202002L // use C++20 std::next_permutation() to test all permutations
 namespace {
 template <class ElementType, upx_compare_func_t CompareFunc>
@@ -427,7 +454,7 @@ struct TestSortAllPermutations {
             memcpy(a, perm, sizeof(*a) * n);
             sort(a, n, sizeof(*a), CompareFunc);
             for (size_t i = 0; i < n; i++)
-                assert_noexcept((a[i] == 255 + i));
+                assert_noexcept(a[i] == 255 + i);
             num_perms += 1;
         } while (std::next_permutation(perm, perm + n));
         return num_perms;
@@ -588,7 +615,7 @@ int find(const void *buf, int blen, const void *what, int wlen) noexcept {
         return -1;
 
     const byte *b = (const byte *) buf;
-    byte first_byte = *(const byte *) what;
+    const byte first_byte = *(const byte *) what;
 
     blen -= wlen;
     for (int i = 0; i <= blen; i++, b++)
@@ -769,13 +796,13 @@ int fn_strcmp(const char *n1, const char *n2) {
 // misc
 **************************************************************************/
 
+// UPX convention: any environment variable that is set and is not strictly equal to "0" is true
 bool is_envvar_true(const char *envvar, const char *alternate_name) noexcept {
-    // UPX convention: any environment variable that is set and is not strictly equal to "0" is true
-    const char *e = getenv(envvar);
+    const char *e = upx_getenv(envvar);
     if (e != nullptr && e[0])
         return strcmp(e, "0") != 0;
     if (alternate_name != nullptr) {
-        e = getenv(alternate_name);
+        e = upx_getenv(alternate_name);
         if (e != nullptr && e[0])
             return strcmp(e, "0") != 0;
     }
@@ -910,15 +937,15 @@ bool makebakname(char *ofilename, size_t size, const char *ifilename, bool force
 **************************************************************************/
 
 unsigned get_ratio(upx_uint64_t u_len, upx_uint64_t c_len) {
-    constexpr unsigned n = 1000 * 1000;
+    constexpr unsigned N = 1000 * 1000;
     if (u_len == 0)
-        return c_len == 0 ? 0 : n;
-    upx_uint64_t x = c_len * n;
-    assert(x / n == c_len);
+        return c_len == 0 ? 0 : N;
+    upx_uint64_t x = c_len * N;
+    assert(x / N == c_len); // sanity check
     x /= u_len;
-    x += 50;         // rounding
-    if (x >= 10 * n) // >= "1000%"
-        x = 10 * n - 1;
+    x += 50;         // rounding; cannot overflow
+    if (x >= 10 * N) // >= "1000%"
+        x = 10 * N - 1;
     return ACC_ICONV(unsigned, x);
 }
 

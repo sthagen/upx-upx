@@ -26,6 +26,7 @@
 
 #pragma once
 
+// #include <atomic>
 // #include <cstddef>
 // #include <new>
 // #include <type_traits>
@@ -177,43 +178,91 @@ template <class Result, class From>
 forceinline Result ptr_static_cast(From *ptr) noexcept {
     static_assert(std::is_pointer_v<Result>);
     static_assert(!std::is_const_v<std::remove_pointer_t<Result> >); // enforce same constness
+    // NOLINTNEXTLINE(bugprone-multi-level-implicit-pointer-conversion)
     return static_cast<Result>(static_cast<void *>(ptr));
 }
 template <class Result, class From>
 forceinline Result ptr_static_cast(const From *ptr) noexcept {
     static_assert(std::is_pointer_v<Result>);
     static_assert(std::is_const_v<std::remove_pointer_t<Result> >); // required
+    // NOLINTNEXTLINE(bugprone-multi-level-implicit-pointer-conversion)
     return static_cast<Result>(static_cast<const void *>(ptr));
 }
 
-// helper classes so we don't leak memory on exceptions; NOT thread-safe
-template <class T> // T is "Type **"
+#if WITH_THREADS
+// cast "T *" to "std::atomic<T> *"
+template <class T>
+forceinline std::atomic<T> *ptr_std_atomic_cast(T *ptr) noexcept {
+    // TODO later: make sure that this cast is indeed legal
+    std::atomic<T> *result = ptr_static_cast<std::atomic<T> *>(ptr);
+    static_assert(sizeof(*result) == sizeof(*ptr));
+    static_assert(alignof(decltype(*result)) == alignof(decltype(*ptr)));
+    return result;
+}
+#endif // WITH_THREADS
+
+// atomic_exchange
+template <class T>
+forceinline T atomic_exchange(T *ptr, T new_value) noexcept {
+#if 1
+    static_assert(sizeof(T) == sizeof(void *)); // UPX convention: restrict to pointer-size for now
+#endif
+    static_assert(std::is_standard_layout_v<T>);
+    static_assert(std::is_trivially_copyable_v<T>);
+#if !(WITH_THREADS)
+    T old_value = *ptr;
+    *ptr = new_value;
+    return old_value;
+#else
+    static_assert(sizeof(T) <= sizeof(void *)); // UPX convention: restrict to fundamental types
+    static_assert(alignof(T) == sizeof(T));     // UPX convention: require proper alignment
+#if __has_builtin(__atomic_exchange_n) && defined(__ATOMIC_SEQ_CST)
+    return __atomic_exchange_n(ptr, new_value, __ATOMIC_SEQ_CST);
+#elif __has_builtin(__sync_swap)
+    return __sync_swap(ptr, new_value);
+#else
+    return std::atomic_exchange(ptr_std_atomic_cast(ptr), new_value);
+#endif
+#endif
+}
+
+// helper classes so we don't leak memory on exceptions
+template <class T>
 struct ObjectDeleter final {
-    static_assert(std::is_pointer_v<T>);
-    static_assert(std::is_pointer_v<std::remove_pointer_t<T> >);
-    T items;      // public
-    size_t count; // public
+    T **items;         // public
+    std::size_t count; // public
+    explicit ObjectDeleter(T **p, std::size_t n) noexcept : items(p), count(n) {}
     ~ObjectDeleter() noexcept { delete_items(); }
     void delete_items() noexcept {
-        for (size_t i = 0; i < count; i++) {
-            auto item = items[i];
-            items[i] = nullptr;
+        for (std::size_t i = 0; i < count; i++) {
+            T *item = atomic_exchange(&items[i], (T *) nullptr);
             delete item; // single object delete
         }
     }
 };
-template <class T> // T is "Type **"
+template <class T>
 struct ArrayDeleter final {
-    static_assert(std::is_pointer_v<T>);
-    static_assert(std::is_pointer_v<std::remove_pointer_t<T> >);
-    T items;      // public
-    size_t count; // public
+    T **items;         // public
+    std::size_t count; // public
+    explicit ArrayDeleter(T **p, std::size_t n) noexcept : items(p), count(n) {}
     ~ArrayDeleter() noexcept { delete_items(); }
     void delete_items() noexcept {
-        for (size_t i = 0; i < count; i++) {
-            auto item = items[i];
-            items[i] = nullptr;
+        for (std::size_t i = 0; i < count; i++) {
+            T *item = atomic_exchange(&items[i], (T *) nullptr);
             delete[] item; // array delete
+        }
+    }
+};
+template <class T>
+struct MallocDeleter final {
+    T **items;         // public
+    std::size_t count; // public
+    explicit MallocDeleter(T **p, std::size_t n) noexcept : items(p), count(n) {}
+    ~MallocDeleter() noexcept { delete_items(); }
+    void delete_items() noexcept {
+        for (std::size_t i = 0; i < count; i++) {
+            T *item = atomic_exchange(&items[i], (T *) nullptr);
+            ::free(item); // free memory from malloc()
         }
     }
 };
@@ -241,6 +290,13 @@ constexpr bool string_ne(const char *a, const char *b) { return !string_eq(a, b)
 constexpr bool string_gt(const char *a, const char *b) { return string_lt(b, a); }
 constexpr bool string_le(const char *a, const char *b) { return !string_lt(b, a); }
 constexpr bool string_ge(const char *a, const char *b) { return !string_lt(a, b); }
+
+constexpr bool mem_eq(const char *a, const char *b, std::size_t n) {
+    return n == 0 || (*a == *b && mem_eq(a + 1, b + 1, n - 1));
+}
+constexpr bool mem_eq(const unsigned char *a, const unsigned char *b, std::size_t n) {
+    return n == 0 || (*a == *b && mem_eq(a + 1, b + 1, n - 1));
+}
 } // namespace compile_time
 
 /*************************************************************************
@@ -427,7 +483,7 @@ template <class T>
 inline void owner_free(OwningPointer(T)(&object)) noexcept {
     static_assert(!std::is_class_v<T>); // UPX convention
     if (object != nullptr) {
-        free((T *) object);
+        ::free((T *) object);
         object = nullptr;
     }
     assert_noexcept((T *) object == nullptr);

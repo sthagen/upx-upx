@@ -59,6 +59,11 @@ private:
     // setup local options for each file
     Options local_options;
     Options *saved_opt = nullptr;
+
+private: // UPX conventions
+    UPX_CXX_DISABLE_ADDRESS(PackMaster)
+    UPX_CXX_DISABLE_COPY_MOVE(PackMaster)
+    UPX_CXX_DISABLE_NEW_DELETE(PackMaster)
 };
 
 /* vim:set ts=4 sw=4 et: */

@@ -49,8 +49,8 @@ struct PackHeader final {
     // enum { magic = UPX_MAGIC_LE32 };
     int version;
     int format; // executable format UPX_F_xxx
-    int method; // compresison method M_xxx
-    int level;  // compresison level 1..10
+    int method; // compression method M_xxx
+    int level;  // compression level 1..10
     unsigned u_len;
     unsigned c_len;
     unsigned u_adler;
@@ -84,10 +84,14 @@ struct PackHeader final {
 
     // info fields set by Packer::compressWithFilters()
     unsigned overlap_overhead;
+
+private: // UPX conventions
+    UPX_CXX_DISABLE_ADDRESS(PackHeader)
+    UPX_CXX_DISABLE_NEW_DELETE(PackHeader)
 };
 
 /*************************************************************************
-// ph default util functions
+// PackHeader ph util functions
 **************************************************************************/
 
 bool ph_is_forced_method(int method) noexcept; // predicate

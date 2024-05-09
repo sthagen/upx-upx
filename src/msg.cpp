@@ -102,7 +102,7 @@ void printErr(const char *iname, const Throwable &e) noexcept {
     char buf[1024];
     size_t l;
 
-    upx_safe_snprintf(buf, sizeof(buf), "%s", prettyName(typeid(e).name()));
+    upx_safe_snprintf(buf, sizeof(buf), "%s", prettyExceptionName(typeid(e).name()));
     l = strlen(buf);
     if (l < sizeof(buf) && e.getMsg())
         upx_safe_snprintf(buf + l, sizeof(buf) - l, ": %s", e.getMsg());
@@ -143,8 +143,8 @@ void printWarn(const char *iname, const char *format, ...) noexcept {
 }
 
 void printUnhandledException(const char *iname, const std::exception *e) noexcept {
-    if (e)
-        printErr(iname, "unhandled exception: %s\n", prettyName(e->what()));
+    if (e != nullptr)
+        printErr(iname, "unhandled exception: %s\n", prettyExceptionName(e->what()));
     else
         printErr(iname, "internal error: unhandled exception!\n");
     if (opt->cmd != CMD_COMPRESS) {

@@ -49,13 +49,13 @@
 #pragma GCC diagnostic ignored "-Wshadow"
 #endif
 
-#if !defined(UPX_DOCTEST_CONFIG_MULTITHREADING) && !(WITH_THREADS)
+#if !(WITH_THREADS) && !defined(UPX_DOCTEST_CONFIG_MULTITHREADING)
 #ifndef DOCTEST_CONFIG_NO_MULTITHREADING
 #define DOCTEST_CONFIG_NO_MULTITHREADING
 #endif
 #endif
 
-#if defined(__clang__) && defined(__FAST_MATH__) && defined(__INTEL_LLVM_COMPILER)
+#if defined(__FAST_MATH__) && defined(__clang__) && (__clang_major__ + 0 >= 6)
 // warning: comparison with NaN always evaluates to false in fast floating point modes
 #pragma clang diagnostic ignored "-Wtautological-constant-compare"
 #endif

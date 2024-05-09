@@ -92,9 +92,9 @@ private:
 #define C const noexcept override
 #endif
 
-struct BEPolicy
+struct BEPolicy final
 #if defined(BELE_RTP)
-    final : public AbstractPolicy
+    : public AbstractPolicy
 #endif
 {
     explicit inline BEPolicy() noexcept {}
@@ -151,9 +151,9 @@ private:
     UPX_CXX_DISABLE_NEW_DELETE(BEPolicy)
 };
 
-struct LEPolicy
+struct LEPolicy final
 #if defined(BELE_RTP)
-    final : public AbstractPolicy
+    : public AbstractPolicy
 #endif
 {
     explicit inline LEPolicy() noexcept {}

@@ -190,8 +190,7 @@ protected:
     unsigned le_offset = 0;
     unsigned exe_offset = 0;
 
-    le_header_t ih;
-    le_header_t oh;
+    le_header_t ih = {}, oh = {};
 
     le_object_table_entry_t *iobject_table = nullptr;
     le_object_table_entry_t *oobject_table = nullptr;

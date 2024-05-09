@@ -108,20 +108,20 @@ protected:
         LE16 hi2, op3, lo2, op4;
     };
 
-    ps1_exe_t ih, oh;
-    ps1_exe_hb_t bh;
+    ps1_exe_t ih = {}, oh = {};
+    ps1_exe_hb_t bh = {};
 
-    bool isCon;
-    bool is32Bit;
-    bool buildPart2;
-    bool foundBss;
-    unsigned ram_size;
-    unsigned sa_cnt, overlap;
-    unsigned sz_lunc, sz_lcpr;
-    unsigned pad_code;
-    unsigned bss_start, bss_end;
+    bool isCon = false;
+    bool is32Bit = false;
+    bool buildPart2 = false;
+    bool foundBss = false;
+    unsigned ram_size = 0;
+    unsigned sa_cnt = 0, overlap = 0;
+    unsigned sz_lunc = 0, sz_lcpr = 0;
+    unsigned pad_code = 0;
+    unsigned bss_start = 0, bss_end = 0;
     // filesize-PS_HDR_SIZE
-    unsigned fdata_size;
+    unsigned fdata_size = 0;
 };
 
 /* vim:set ts=4 sw=4 et: */

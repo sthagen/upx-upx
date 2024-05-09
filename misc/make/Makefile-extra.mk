@@ -6,31 +6,29 @@
 ifeq ($(UPX_MAKEFILE_EXTRA_MK_INCLUDED),)
 override UPX_MAKEFILE_EXTRA_MK_INCLUDED := 1
 
+#***********************************************************************
+# support functions
+#***********************************************************************
+
 override check_defined   = $(foreach 1,$1,$(if $(filter undefined,$(origin $1)),$(error ERROR: variable '$1' is not defined),))
 override check_undefined = $(foreach 1,$1,$(if $(filter undefined,$(origin $1)),,$(error ERROR: variable '$1' is already defined)))
-$(call check_defined,run_config run_build)
-$(call check_undefined,run_config_and_build)
 
-#***********************************************************************
-# build and test
-#***********************************************************************
+# return "1" or empty-string
+override eq = $(if $(subst x$1,,x$2)$(subst x$2,,x$1),,1)
+override ne = $(if $(subst x$1,,x$2)$(subst x$2,,x$1),1,)
 
-CTEST = ctest
+override tolower = $(subst A,a,$(subst B,b,$(subst C,c,$(subst D,d,$(subst E,e,$(subst F,f,$(subst G,g,$(subst H,h,$(subst I,i,$(subst J,j,$(subst K,k,$(subst L,l,$(subst M,m,$(subst N,n,$(subst O,o,$(subst P,p,$(subst Q,q,$(subst R,r,$(subst S,s,$(subst T,t,$(subst U,u,$(subst V,v,$(subst W,w,$(subst X,x,$(subst Y,y,$(subst Z,z,$1))))))))))))))))))))))))))
+override toupper = $(subst a,A,$(subst b,B,$(subst c,C,$(subst d,D,$(subst e,E,$(subst f,F,$(subst g,G,$(subst h,H,$(subst i,I,$(subst j,J,$(subst k,K,$(subst l,L,$(subst m,M,$(subst n,N,$(subst o,O,$(subst p,P,$(subst q,Q,$(subst r,R,$(subst s,S,$(subst t,T,$(subst u,U,$(subst v,V,$(subst w,W,$(subst x,X,$(subst y,Y,$(subst z,Z,$1))))))))))))))))))))))))))
 
-build/debug+test:     $$(dir $$@)debug PHONY; cd "$(dir $@)debug" && $(CTEST)
-build/%/debug+test:   $$(dir $$@)debug PHONY; cd "$(dir $@)debug" && $(CTEST)
-build/release+test:   $$(dir $$@)release PHONY; cd "$(dir $@)release" && $(CTEST)
-build/%/release+test: $$(dir $$@)release PHONY; cd "$(dir $@)release" && $(CTEST)
-build/%/all+test:     $$(dir $$@)debug+test $$(dir $$@)release+test PHONY ;
-
-# shortcuts
-debug+test:   build/debug+test PHONY
-release+test: build/release+test PHONY
-all+test build/all+test: build/debug+test build/release+test PHONY
+# canonicalize case of CMAKE_BUILD_TYPE to "Debug" and "Release"
+override cm_build_type = $(if $(call eq,$1,),$(error EMPTY-build-type),$(if $(call eq,$(call tolower,$1),debug),Debug,$(if $(call eq,$(call tolower,$1),release),Release,$(if $(call eq,$(call tolower,$1),none),None,$1))))
 
 #***********************************************************************
 # extra builds: some pre-defined build configurations
 #***********************************************************************
+
+$(call check_defined,run_config run_build)
+$(call check_undefined,run_config_and_build)
 
 define run_config_and_build
 	$(call run_config,$1,$2)
@@ -185,7 +183,7 @@ build/extra/cross-windows-mingw64/%: export CC  = x86_64-w64-mingw32-gcc -static
 build/extra/cross-windows-mingw64/%: export CXX = x86_64-w64-mingw32-g++ -static -D_WIN32_WINNT=0x0501
 build/extra/cross-windows-mingw64/%: CMAKE_SYSTEM_NAME ?= Windows
 build/extra/cross-windows-mingw64/%: CMAKE_SYSTEM_PROCESSOR ?= AMD64
-build/extra/cross-windows-mingw64/%: CMAKE_CROSSCOMPILING_EMULATOR ?= wine64
+build/extra/cross-windows-mingw64/%: CMAKE_CROSSCOMPILING_EMULATOR ?= wine
 
 # cross compiler: macOS arm64 (aarch64)
 build/extra/cross-darwin-arm64/debug:   PHONY; $(call run_config_and_build,$@,Debug)
@@ -215,19 +213,20 @@ build/analyze/clang-analyzer/%: override CMAKE := $(SCAN_BUILD) $(CMAKE)
 build/analyze/clang-analyzer/%: export CCC_CC  ?= clang
 build/analyze/clang-analyzer/%: export CCC_CXX ?= clang++
 
-# run clang-tidy: uses file compile_commands.json from an existing clang build
-# does not create any actual files, so purely PHONY
+# run clang-tidy: uses file compile_commands.json from an existing clang build;
+#   does not create any actual files, so purely PHONY
+CLANG_TIDY_BUILD_BASE = build/extra/clang
 RUN_CLANG_TIDY = time python3 ./misc/analyze/clang-tidy/run-clang-tidy.py -p $<
 RUN_CLANG_TIDY_WERROR = $(RUN_CLANG_TIDY) '-warnings-as-errors=*'
-build/analyze/clang-tidy-upx/debug build/analyze/clang-tidy-upx/release: build/extra/clang/$$(notdir $$@) PHONY
+build/analyze/clang-tidy-upx/debug build/analyze/clang-tidy-upx/release: $$(CLANG_TIDY_BUILD_BASE)/$$(notdir $$@) PHONY
 	$(RUN_CLANG_TIDY_WERROR) -config-file ./.clang-tidy '/src/.*\.cpp'
-build/analyze/clang-tidy-bzip2/debug build/analyze/clang-tidy-bzip2/release: build/extra/clang/$$(notdir $$@) PHONY
+build/analyze/clang-tidy-bzip2/debug build/analyze/clang-tidy-bzip2/release: $$(CLANG_TIDY_BUILD_BASE)/$$(notdir $$@) PHONY
 	$(RUN_CLANG_TIDY)        -config-file ./misc/analyze/clang-tidy/clang-tidy-bzip2.yml /vendor/bzip2/
-build/analyze/clang-tidy-ucl/debug build/analyze/clang-tidy-ucl/release: build/extra/clang/$$(notdir $$@) PHONY
+build/analyze/clang-tidy-ucl/debug build/analyze/clang-tidy-ucl/release: $$(CLANG_TIDY_BUILD_BASE)/$$(notdir $$@) PHONY
 	$(RUN_CLANG_TIDY_WERROR) -config-file ./misc/analyze/clang-tidy/clang-tidy-ucl.yml   /vendor/ucl/
-build/analyze/clang-tidy-zlib/debug build/analyze/clang-tidy-zlib/release: build/extra/clang/$$(notdir $$@) PHONY
-	$(RUN_CLANG_TIDY_WERROR) -config-file ./misc/analyze/clang-tidy/clang-tidy-zlib.yml  /vendor/zlib/
-build/analyze/clang-tidy-zstd/debug build/analyze/clang-tidy-zstd/release: build/extra/clang/$$(notdir $$@) PHONY
+build/analyze/clang-tidy-zlib/debug build/analyze/clang-tidy-zlib/release: $$(CLANG_TIDY_BUILD_BASE)/$$(notdir $$@) PHONY
+	$(RUN_CLANG_TIDY)        -config-file ./misc/analyze/clang-tidy/clang-tidy-zlib.yml  /vendor/zlib/
+build/analyze/clang-tidy-zstd/debug build/analyze/clang-tidy-zstd/release: $$(CLANG_TIDY_BUILD_BASE)/$$(notdir $$@) PHONY
 	$(RUN_CLANG_TIDY)        -config-file ./misc/analyze/clang-tidy/clang-tidy-zstd.yml  /vendor/zstd/
 build/analyze/clang-tidy/debug build/analyze/clang-tidy/release: build/analyze/clang-tidy-upx/$$(notdir $$@)
 build/analyze/clang-tidy/debug build/analyze/clang-tidy/release: build/analyze/clang-tidy-bzip2/$$(notdir $$@)
@@ -236,8 +235,8 @@ build/analyze/clang-tidy/debug build/analyze/clang-tidy/release: build/analyze/c
 build/analyze/clang-tidy/debug build/analyze/clang-tidy/release: build/analyze/clang-tidy-zstd/$$(notdir $$@)
 
 # OLD names [deprecated]
-build/extra/scan-build/debug:   build/analyze/clang-analyzer/debug
-build/extra/scan-build/release: build/analyze/clang-analyzer/release
+build/extra/scan-build/debug:   build/analyze/clang-analyzer/debug PHONY
+build/extra/scan-build/release: build/analyze/clang-analyzer/release PHONY
 
 #***********************************************************************
 # advanced: generic eXtra target
@@ -277,49 +276,46 @@ endif
 # it easy to set other variables like CMAKE_AR or CMAKE_RANLIB
 #***********************************************************************
 
-ifneq ($(origin UPX_CMAKE_CONFIG_FLAGS),command line) # GNU make bug work-around
-# GNU make bug, see https://savannah.gnu.org/bugs/index.php?64822
-# and commit https://git.savannah.gnu.org/cgit/make.git/commit/?id=07187db947ba25e6c59b55f10660a04f8e9c5229
-
 $(call check_undefined,__add_cmake_config)
+# promote an environment or Make variable to a CMake cache entry:
 __add_cmake_config = $(and $($1),-D$1="$($1)")
-# pass common CMake settings from environment/make to cmake
-build/%: UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,CMAKE_VERBOSE_MAKEFILE)
-# pass common CMake toolchain settings from environment/make to cmake
-build/%: UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,CMAKE_ADDR2LINE)
-build/%: UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,CMAKE_AR)
-build/%: UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,CMAKE_DLLTOOL)
-build/%: UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,CMAKE_LINKER)
-build/%: UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,CMAKE_NM)
-build/%: UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,CMAKE_OBJCOPY)
-build/%: UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,CMAKE_OBJDUMP)
-build/%: UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,CMAKE_RANLIB)
-build/%: UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,CMAKE_READELF)
-build/%: UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,CMAKE_STRIP)
-build/%: UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,CMAKE_TAPI)
-# pass common CMake LTO toolchain settings from environment/make to cmake (for use with "-flto")
-build/%: UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,CMAKE_C_COMPILER_AR)
-build/%: UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,CMAKE_C_COMPILER_RANLIB)
-build/%: UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,CMAKE_CXX_COMPILER_AR)
-build/%: UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,CMAKE_CXX_COMPILER_RANLIB)
-# pass common CMake cross compilation settings from environment/make to cmake
-build/%: UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,CMAKE_SYSTEM_NAME)
-build/%: UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,CMAKE_SYSTEM_PROCESSOR)
-build/%: UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,CMAKE_CROSSCOMPILING_EMULATOR)
-# pass UPX config options from environment/make to cmake; see CMakeLists.txt
-build/%: UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,UPX_CONFIG_DISABLE_GITREV)
-build/%: UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,UPX_CONFIG_DISABLE_SANITIZE)
-build/%: UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,UPX_CONFIG_DISABLE_WSTRICT)
-build/%: UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,UPX_CONFIG_DISABLE_WERROR)
-build/%: UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,UPX_CONFIG_DISABLE_SELF_PACK_TEST)
-# pass UPX extra compile options from environment/make to cmake; see CMakeLists.txt
-build/%: UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,UPX_CONFIG_EXTRA_COMPILE_OPTIONS_BZIP2)
-build/%: UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,UPX_CONFIG_EXTRA_COMPILE_OPTIONS_UCL)
-build/%: UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,UPX_CONFIG_EXTRA_COMPILE_OPTIONS_UPX)
-build/%: UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,UPX_CONFIG_EXTRA_COMPILE_OPTIONS_ZLIB)
-build/%: UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,UPX_CONFIG_EXTRA_COMPILE_OPTIONS_ZSTD)
 
-endif # GNU make bug work-around
+# pass common CMake settings
+UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,CMAKE_VERBOSE_MAKEFILE)
+# pass common CMake toolchain settings
+UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,CMAKE_ADDR2LINE)
+UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,CMAKE_AR)
+UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,CMAKE_DLLTOOL)
+UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,CMAKE_LINKER)
+UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,CMAKE_NM)
+UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,CMAKE_OBJCOPY)
+UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,CMAKE_OBJDUMP)
+UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,CMAKE_RANLIB)
+UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,CMAKE_READELF)
+UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,CMAKE_STRIP)
+UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,CMAKE_TAPI)
+# pass common CMake LTO toolchain settings
+UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,CMAKE_C_COMPILER_AR)
+UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,CMAKE_C_COMPILER_RANLIB)
+UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,CMAKE_CXX_COMPILER_AR)
+UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,CMAKE_CXX_COMPILER_RANLIB)
+# pass common CMake cross compilation settings
+UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,CMAKE_SYSTEM_NAME)
+UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,CMAKE_SYSTEM_PROCESSOR)
+UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,CMAKE_CROSSCOMPILING_EMULATOR)
+# pass UPX config options; see CMakeLists.txt
+UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,UPX_CONFIG_DISABLE_GITREV)
+UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,UPX_CONFIG_DISABLE_SANITIZE)
+UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,UPX_CONFIG_DISABLE_WERROR)
+UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,UPX_CONFIG_DISABLE_WSTRICT)
+UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,UPX_CONFIG_DISABLE_SELF_PACK_TEST)
+UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,UPX_CONFIG_DISABLE_EXHAUSTIVE_TESTS)
+# pass UPX extra compile options; see CMakeLists.txt
+UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,UPX_CONFIG_EXTRA_COMPILE_OPTIONS_BZIP2)
+UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,UPX_CONFIG_EXTRA_COMPILE_OPTIONS_UCL)
+UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,UPX_CONFIG_EXTRA_COMPILE_OPTIONS_UPX)
+UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,UPX_CONFIG_EXTRA_COMPILE_OPTIONS_ZLIB)
+UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,UPX_CONFIG_EXTRA_COMPILE_OPTIONS_ZSTD)
 
 #***********************************************************************
 # check git submodules

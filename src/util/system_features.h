@@ -30,7 +30,7 @@
 
 #if defined(__has_include)
 #if __has_include(<features.h>)
-#include <features.h> // for __GLIBC__
+#include <features.h> // for __GLIBC__ and __GLIBC_MINOR__
 #endif
 #endif
 
@@ -42,8 +42,8 @@
 #endif
 #endif // _LIBCPP_HAS_NO_LIBRARY_ALIGNED_ALLOCATION
 
-#if 0 // TODO later
 // libc++ hardenining
+#if defined(__cplusplus) && 0 // TODO later
 #if defined(__clang__) && defined(__clang_major__) && (__clang_major__ + 0 >= 18)
 #if DEBUG
 #define _LIBCPP_HARDENING_MODE _LIBCPP_HARDENING_MODE_DEBUG
@@ -55,7 +55,7 @@
 #if DEBUG
 #define _LIBCPP_ENABLE_ASSERTIONS 1
 #endif
-#endif
+#endif // clang >= 18
 #endif // TODO later
 
 /* vim:set ts=4 sw=4 et: */

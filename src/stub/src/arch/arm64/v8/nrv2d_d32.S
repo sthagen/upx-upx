@@ -157,7 +157,7 @@ getoff_n2d:
         CHECK_SRC; LDRB3(off,[src],#1)  // low 7+1 bits
         orr  off,off,tmp,lsl #8
         mvn off,off; cbz off,eof_n2d  // off= ~off
-        lsl tmp,off,#31; lsr off,off,#1; adds tmp,tmp,tmp
+        lsl tmp,off,#31; asr off,off,#1; adds tmp,tmp,tmp
         b len_n2d -4 // CHEAT [getnextb ends in ADC2(reg,reg)]
 
 offprev_n2d:
@@ -172,7 +172,7 @@ lenmore_n2d:
 gotlen_n2d:  // 'cmn': add the inputs, set condition codes, discard the sum
         ADD2(len,#1)  // 1..3 ==> 2..4;  4.. ==> 5..
         cmn off,#5<<8  // displ<=M2_MAX_OFFSET ==> no increment
-        csinc len,len,len,cc  // too far away, so minimum match length is 3
+        cinc len,len,cc  // too far away, so minimum match length is 3
 #if 1==SAFE  /*{*/
         ldr tmp,[sp,#sp_DST0]
         SUB2( tmp,dst)

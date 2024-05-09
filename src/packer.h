@@ -76,6 +76,10 @@ public:
     virtual void doList() = 0;
     virtual void doFileInfo() = 0;
 
+    // arbitrary limits, increase as needed
+    static constexpr unsigned MAX_METHODS = 8;  // for getCompressionMethods()
+    static constexpr unsigned MAX_FILTERS = 16; // for getFilters()
+
 protected:
     InputFile *const fi;                // reference
     union {                             // unnamed union

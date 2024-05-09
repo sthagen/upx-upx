@@ -51,22 +51,38 @@ release: build/release PHONY
 all build/all: build/debug build/release PHONY
 build/%/all:   $$(dir $$@)debug $$(dir $$@)release PHONY ;
 
+#***********************************************************************
+# test
+#***********************************************************************
+
+CTEST = ctest
+CTEST_JOBS ?= 8
+CTEST_FLAGS = --output-on-failure --parallel $(CTEST_JOBS)
+
+build/debug+test:     $$(dir $$@)debug PHONY; cd "$(dir $@)debug" && $(CTEST) $(CTEST_FLAGS) -C Debug
+build/%/debug+test:   $$(dir $$@)debug PHONY; cd "$(dir $@)debug" && $(CTEST) $(CTEST_FLAGS) -C Debug
+build/release+test:   $$(dir $$@)release PHONY; cd "$(dir $@)release" && $(CTEST) $(CTEST_FLAGS) -C Release
+build/%/release+test: $$(dir $$@)release PHONY; cd "$(dir $@)release" && $(CTEST) $(CTEST_FLAGS) -C Release
+build/%/all+test:     $$(dir $$@)debug+test $$(dir $$@)release+test PHONY ;
+
+# shortcuts
+debug+test:   build/debug+test PHONY
+release+test: build/release+test PHONY
+all+test build/all+test: build/debug+test build/release+test PHONY
+
+test: $$(patsubst %+test,%,$$(.DEFAULT_GOAL))+test PHONY
+
 #
 # END of Makefile
 #
 
 # extra pre-defined build configurations and some utility; optional
-ifneq ($(MAKEFILE_LIST),)
-include $(dir $(lastword $(MAKEFILE_LIST)))/misc/make/Makefile-extra.mk
-else
 include ./misc/make/Makefile-extra.mk
-endif
 
 # developer convenience
-test:: build/all+test PHONY
 ifneq ($(wildcard /usr/bin/env),) # need Unix utils like bash, perl, sed, xargs, etc.
 ifneq ($(wildcard ./misc/scripts/.),)
-check-whitespace clang-format run-testsuite run-testsuite-debug run-testsuite-release: src/Makefile PHONY
+check-whitespace clang-format run-testsuite run-testsuite-all run-testsuite-debug run-testsuite-release: src/Makefile PHONY
 	$(MAKE) -C src $@
 endif
 endif

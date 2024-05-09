@@ -3,7 +3,7 @@
 # Copyright (C) Markus Franz Xaver Johannes Oberhumer
 #
 
-# NOTE: see misc/podman/rebuild-stubs/20-image-run-shell.sh
+# NOTE: see misc/podman/rebuild-stubs/30-rebuild-stubs.sh
 #   how to rebuild the UPX stubs from source code
 
 MAKEFLAGS += -rR

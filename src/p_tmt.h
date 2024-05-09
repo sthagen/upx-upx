@@ -70,7 +70,7 @@ protected:
         byte ___[12]; // esp,numfixups,flags
         LE32 relocsize;
     };
-    tmt_header_t ih, oh;
+    tmt_header_t ih = {}, oh = {};
 };
 
 /* vim:set ts=4 sw=4 et: */

@@ -40,9 +40,9 @@
         add lsrc,lsrc,src  // input eof
 
         lis hibit,0x8000  // 0x80000000 for detecting next bit
-        rldicr  hibit,hibit,32,31        // upper bits
+        sldi hibit,hibit,32        // upper bits
         lis  bits,0x8000 // prepare for first load
-        rldicr  bits,bits,32,31        // upper bits
+        sldi bits,bits,32        // upper bits
         addi src,src,-1  // prepare for 'lbzu'
         addi dst,dst,-1  // prepare for 'stbu'
         li disp,-1  // initial displacement
@@ -59,11 +59,14 @@
     eq  must load next 32 bits from memory
 
    beql-: branch and link [call subroutine] if cr0 is eq, unlikely
+
+   'cmpld' sets EQ/NE to detect empty bit buffer, and LT/GT to detect 0/1
+   'addc' shifts left, and puts old MSB into CArry for its 0/1 data value
 */
-#define jnextb0y  cmpld bits,hibit; add bits,bits,bits; beql- get32d; blt+
-#define jnextb0n  cmpld bits,hibit; add bits,bits,bits; beql- get32d; blt-
-#define jnextb1y  cmpld bits,hibit; add bits,bits,bits; beql- get32d; bgt+
-#define jnextb1n  cmpld bits,hibit; add bits,bits,bits; beql- get32d; bgt-
+#define jnextb0y  cmpld bits,hibit; addc bits,bits,bits; beql- get32d; blt+
+#define jnextb0n  cmpld bits,hibit; addc bits,bits,bits; beql- get32d; blt-
+#define jnextb1y  cmpld bits,hibit; addc bits,bits,bits; beql- get32d; bgt+
+#define jnextb1n  cmpld bits,hibit; addc bits,bits,bits; beql- get32d; bgt-
 
 #undef  getnextb
 /* rotate next bit into bottom bit of reg, set CC on entire result */
@@ -73,9 +76,9 @@ get32d:
                 // fetch 4 bytes unaligned and LITTLE ENDIAN
 #if 0  /*{ clean; but 4 instr larger, and 3 cycles longer */
         lbz bits,1(src)  // lo8
-        lbz   r0,2(src); rlwimi bits,r0, 8,16,23
-        lbz   r0,3(src); rlwimi bits,r0,16, 8,15
-        lbzu  r0,4(src); rlwimi bits,r0,24, 0, 7
+        lbz   t1,2(src); rlwimi bits,t1, 8,16,23
+        lbz   t1,3(src); rlwimi bits,t1,16, 8,15
+        lbzu  t1,4(src); rlwimi bits,t1,24, 0, 7
 #else  /*}{ pray for no unalignment trap or slowdown */
         li bits,1  // compensate for 'lbzu'
 #if BIG_ENDIAN  //{
@@ -86,12 +89,10 @@ get32d:
         addi src,src,4
 #endif  /*}*/
 
-        rldicr  bits,bits,32,31        // upper bits
-        cmpld   bits,hibit  // cr0  for   jnextb
-        addc    bits,bits,bits  // Carry for getnextb
-        li      t2,1  // flag bit on upper bit pos
-        rldicr  t2,t2,32,31
-        or      bits,bits,t2  // the flag bit
+        adde  bits,bits,bits  // shift in Carry (== 1) from addc. in getnextb()
+        sldi  bits,bits,32-1  // left justify 33-bit result of 'adde'
+        cmpld bits,hibit  // cr0  for   jnextb; NEQ because (1==Cin) at 'adde'
+        addc  bits,bits,bits  // Carry for getnextb
         ret
 
 lit_n2d:
@@ -115,8 +116,8 @@ getoff_n2d:
         addic. off,off,-3  // Carry set [and ignored], but no 'addi.'
         rlwinm off,off,8,0,31-8  // off<<=8;
         blt- offprev_n2d
-        lbzu r0,1(src)
-        nor. disp,off,r0  // disp = -(1+ (off|r0));
+        lbzu t1,1(src)
+        nor. disp,off,t1  // disp = -(1+ (off|t1));
         srawi disp,disp,1  // shift off low bit (sets Carry)
         cmpdi disp,0  // test result of srawi instead of nor.
         beq-  eof_nrv  //

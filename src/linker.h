@@ -68,7 +68,6 @@ protected:
     void preprocessSymbols(char *start, char const *end);
     void preprocessRelocations(char *start, char const *end);
     Section *findSection(const char *name, bool fatal = true) const;
-    Symbol *findSymbol(const char *name, bool fatal = true) const;
 
     Symbol *addSymbol(const char *name, const char *section, upx_uint64_t offset);
     Relocation *addRelocation(const char *section, unsigned off, const char *type,
@@ -92,6 +91,7 @@ public:
     int getSectionSize(const char *sname) const;
     byte *getLoader(int *llen = nullptr) const;
     void defineSymbol(const char *name, upx_uint64_t value);
+    Symbol *findSymbol(const char *name, bool fatal = true) const;
     upx_uint64_t getSymbolOffset(const char *) const;
 
     void dumpSymbol(const Symbol *, unsigned flags, FILE *fp) const;
