@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2024 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2024 Laszlo Molnar
+   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2025 Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -243,7 +243,8 @@ void PackW32PeI386::setOhDataBase(const pe_section_t *osection) { oh.database = 
 
 void PackW32PeI386::setOhHeaderSize(const pe_section_t *osection) {
     // SizeOfHeaders
-    oh.headersize = ALIGN_UP(pe_offset + sizeof(oh) + sizeof(*osection) * oh.objects, oh.filealign);
+    oh.headersize =
+        ALIGN_UP(pe_offset + usizeof(oh) + usizeof(*osection) * oh.objects, oh.filealign);
 }
 
 void PackW32PeI386::pack(OutputFile *fo) {

@@ -2,7 +2,7 @@
 //
 //  This file is part of the UPX executable compressor.
 //
-//  Copyright (C) 2000-2024 John F. Reiser
+//  Copyright (C) 2000-2025 John F. Reiser
 //  All Rights Reserved.
 //
 //  UPX and the UCL library are free software; you can redistribute them
@@ -30,7 +30,7 @@
 NBPW= 8
 #define call bl
 
-#define ARM_OLDABI 1
+#define ARMEL_EABI4 1
 #include "arch/arm64/v8/macros.S"
 
 sz_Ehdr= 8*NBPW
@@ -48,6 +48,10 @@ sz_b_info = 12
   sz_cpr= 4
   b_method= 8
 sz_auxv= 2*NBPW
+
+//is_ptinterp=     (1<<0)
+Bunmap_all_pages= 1  // bit position for 'tbnz' opcode
+//unmap_all_pages= (1<<Bunmap_all_pages=)
 
 MAP_PRIVATE=   0x02
 MAP_FIXED=     0x10
@@ -89,10 +93,10 @@ bits_privanon:  // known offset (NBPW + 2*4)
         .int MAP_PRIVATE | MAP_ANONYMOUS  // Linux default; else QNX
 
 fold_begin:  // known offset (NBPW + 3*4)
-////    brk #0  // DEBUG
+////    bkpt  // DEBUG
         b L10
 
-// In:  sp/ PMASK,fd,ADRU,LENU, x0,x1, argc,argv,...
+// In:  sp/ PMASK,LENC,ADRU,LENU, x0,x1, argc,argv,...
 //lr   .req x30
 wLENC  .req w29  // compressed input
   xLENC  .req x29
@@ -109,7 +113,8 @@ xauxv  .req x22
 
 wfd    .req w21
   xfd    .req x21
-xPMASK .req x20
+xFOLD .req x20
+  wFOLD  .req w20
 
 mmap_privanon: .globl mmap_privanon
         ldr w6,bits_privanon  // r12 === ip
@@ -117,6 +122,14 @@ mmap_privanon: .globl mmap_privanon
         mov x4,#-1  // fd= -1
         orr w3,w3,w6  // flags |= MAP_{PRIVATE|ANON}  [QNX vs Linux]
     // FALL THROUGH to mmap
+
+Psync: .globl Psync
+        ldr x8,PAGE_MASK
+        bic x8,x0,x8
+        sub x0,x0,x8
+        add x1,x1,x8
+msync: .globl msync
+        do_sys __NR_msync; ret
 
         .globl mmap
 mmap:
@@ -136,7 +149,8 @@ mprotect: .globl mprotect
         do_sys __NR_mprotect; ret
 
 L10:
-        POP4(xPMASK,xfd, xADRU,xLENU)
+        add sp,sp,#2*NBPW  // toss xPMASK,sz_pack2
+        POP2(xADRU,xLENU)
 
         mov x7,sp  // old_sp: x0,x1,argc,...
         mov x0,sp  // current stack pointer
@@ -146,6 +160,13 @@ L10:
         ldr x2,[x1],#2*NBPW
         cbnz x2,.L20  // AT_NULL
 
+        ldr wFOLD,[xFOLD]
+        tbz wFOLD,#Bunmap_all_pages,yes_buf_pse
+          add x1,sp,#3*NBPW  // old_argv; avoid 0==argc impostor for terminator of argv
+          add x0,sp,#3*NBPW  // new argv
+        b no_buf_pse
+
+yes_buf_pse:
         sub x0,x1,#PATH_MAX // buffer for readlink
         sub x6,x0,#4  // space for copy of space3eq
         sub x1,x1,x6  // amount needed for x0,x1,argc,argv,env,auxv
@@ -159,6 +180,7 @@ L10:
         ldr x2,[x7,#2*NBPW]  // argc
         str x2,[sp,#2*NBPW]
         add x0,sp,#3*NBPW  // new argv
+no_buf_pse:
 
 .Larg:  // copy argv
         ldr x2,[x1],#NBPW
@@ -170,9 +192,11 @@ L10:
         str x2,[x0],#NBPW
         cbnz x2,.Lenv
 
+        tbnz wFOLD,#Bunmap_all_pages,0f
         sub x4,x0,#NBPW  // added env ptr goes here
         str xzr,[x0],#NBPW  // terminator after added ptr
         mov x7,x0  // new &Elf64_auxv_t
+0:
 
         mov xauxv,x0  // new auxv
 .Laux:  // copy auxv
@@ -181,6 +205,7 @@ L10:
         cbnz x2,.Laux  // AT_NULL
         mov xauxe,x0  // last of new auxv
 
+        tbnz wFOLD,#Bunmap_all_pages,no_env_pse
         mov x1,x0
         str x1,[x4]  // new env ptr
         ldr w2,space3eq
@@ -192,18 +217,19 @@ L10:
         cmn x0,#4096; bcs 0f  // error
         strb wzr,[x2,x0]  // null terminate pathname (x2 is old x1)
 0:
+        adr x0,proc_self_exe
+        mov w1,#O_RDONLY
+        call open; mov wfd,w0
+no_env_pse:
 
 /* Construct arglist for upx_main */
-        mov x7,xPMASK
-        mov x6,xelfa  // Elf64_Ehdr (reloc if ET_DYN and not pre-link)
+        mov x4,xelfa  // Elf64_Ehdr (reloc if ET_DYN and not pre-link)
           sub sp,sp,#MAX_ELF_HDR_64 + OVERHEAD  // alloca
-        adr x5,f_unfilter
-        mov x4,xfexp  // &f_decompress
         mov x3,xauxv  // new &Elf64_auxv_t
         mov x2,sp  // ehdr
         mov w1,wLENC  // total size of compressed data
         mov x0,xADRC  // &b_info
-        call upx_main
+        call upx_main2
           add sp,sp,#MAX_ELF_HDR_64 + OVERHEAD  // un-alloca
         mov xfexp,x0  // entry address
 
@@ -216,6 +242,7 @@ L10:
         mov x0,xelfa  // hi &Elf64_Ehdr
         call munmap  // discard C_TEXT compressed data
 
+        tbnz wFOLD,#Bunmap_all_pages,no_map_pse
 // Map 1 page of /proc/self/exe so that munmap does not remove all references
         mov x5,#0  // offset
         mov w4,wfd  // fd
@@ -300,8 +327,10 @@ space3eq:
         .ascii "   ="
 proc_self_exe:
         .asciz "/proc/self/exe"
-        .balign 4
+devshm:
+        .asciz "/dev/shm"
 
+        .balign 4
 f_unfilter:  // (char *ptr, uint len, uint cto, uint fid)
         ptr  .req x0
         len  .req x1
@@ -431,6 +460,8 @@ hex:
         .unreq cto
         .unreq fid
 
+  section SYSCALLS; .balign 4
+
 __NR_SYSCALL_BASE= 0
 
 __NR_exit     = 0x5d + __NR_SYSCALL_BASE  // 93
@@ -445,11 +476,14 @@ __NR_readlink = 0x4e + __NR_SYSCALL_BASE  // 78
 
 __NR_mmap     = 0xde + __NR_SYSCALL_BASE  // 222
 __NR_mprotect = 0xe2 + __NR_SYSCALL_BASE  // 226
+__NR_msync    = 0xe3 + __NR_SYSCALL_BASE  // 227
 __NR_munmap   = 0xd7 + __NR_SYSCALL_BASE  // 215
+__NR_memfd_create= 0x117 + __NR_SYSCALL_BASE  // 279
+__NR_ftruncate= 0x2e + __NR_SYSCALL_BASE  // 46
 
         .globl my_bkpt
 my_bkpt:
-        brk #0  // my_bkpt
+        bkpt  // my_bkpt
         ret
 
         .globl exit
@@ -457,28 +491,47 @@ exit:
         do_sys __NR_exit
 
         .globl read
-read:
-        do_sys __NR_read; ret
+read:   do_sys __NR_read; ret
 
         .globl write
-write:
-        do_sys __NR_write; ret
+write:  do_sys __NR_write; ret
 
         .globl close
-close:
-        do_sys __NR_close; ret
+close:  do_sys __NR_close; ret
 
         .globl getpid
-getpid:
-        do_sys __NR_getpid; ret
+getpid: do_sys __NR_getpid; ret
 
         .globl brk
-brk:
-        do_sys __NR_brk; ret
+brk:    do_sys __NR_brk; ret
 
         .globl munmap
-munmap:
-        do_sys __NR_munmap; ret
+munmap: do_sys __NR_munmap; ret
+
+O_RDWR= 2
+O_DIRECTORY= 0200000  // 0x010000
+O_TMPFILE= 020000000  // 0x400000
+
+ufdc_bits: .int O_RDWR|O_DIRECTORY|O_TMPFILE
+upxfd_create: .globl upxfd_create // (char *tag, unsigned flags)
+        mov x3,x0  // save tag
+0: // try memfd_create
+        mov w8,#__NR_memfd_create; svc #0
+        tst w0,w0; bpl ok_memfd  // success
+        cbz w1, no_memfd  // memfd_create failed twice
+        mov x0,x3  // tag
+        mov w1,#0; b 0b  // try again without MFD_EXEC
+no_memfd:  // so try /dev/shm
+        mov w3,#0700
+        ldr w2,ufdc_bits
+        adr x1,devshm
+        mov w0,#AT_FDCWD
+        mov w8,#__NR_openat; svc #0
+ok_memfd:
+        ret
+
+        .globl ftruncate
+ftruncate: do_sys __NR_ftruncate; ret
 
         .globl unlink
 unlink:
@@ -518,6 +571,16 @@ div10: .globl div10
         udiv x0,x0,x1
         ret
 #endif  /*}*/
+
+memcpy: .globl memcpy  // void *memcpy(void *dst, void const *src, size_t len)
+        ldrb w3,[x1],#1; sub  x2,x2,#1
+        strb w3,[x0],#1; cbnz x2,memcpy
+        ret
+
+memset: .globl memset  // void *memset(void *dst, int c, size_t len);
+        strb w1,[x0],#1; sub  x2,x2,#1
+                         cbnz x2,memset
+        ret
 
 // vi:ts=8:et:nowrap
 

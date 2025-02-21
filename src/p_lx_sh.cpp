@@ -2,9 +2,9 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2024 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2024 Laszlo Molnar
-   Copyright (C) 2000-2024 John F. Reiser
+   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2025 Laszlo Molnar
+   Copyright (C) 2000-2025 John F. Reiser
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -62,15 +62,6 @@ PackLinuxI386sh::~PackLinuxI386sh()
 {
 }
 
-static unsigned
-umax(unsigned a, unsigned b)
-{
-    if (a <= b) {
-        return b;
-    }
-    return a;
-}
-
 void
 PackLinuxI386sh::buildLoader(Filter const *ft)
 {
@@ -94,7 +85,7 @@ PackLinuxI386sh::buildLoader(Filter const *ft)
         sizeof(Elf32_Phdr) * get_te16(&((Elf32_Ehdr const *)(void *)buf)->e_phnum);
     if (0 == get_le32(buf + fold_hdrlen)) {
         // inconsistent SIZEOF_HEADERS in *.lds (ld, binutils)
-        fold_hdrlen = umax(0x80, fold_hdrlen);
+        fold_hdrlen = upx::umax(0x80u, fold_hdrlen);
     }
     bool success = fold_ft.filter(buf + fold_hdrlen, sz_fold - fold_hdrlen);
     UNUSED(success);

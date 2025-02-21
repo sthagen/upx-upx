@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2024 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2024 Laszlo Molnar
+   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2025 Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -51,7 +51,7 @@ void printClearLine(FILE *f) noexcept {
     fflush(stderr);
     if (f == nullptr)
         f = stdout;
-    con_fprintf(f, "%s", clear_line_msg);
+    con_fprintf(f, "%s", clear_line_msg); // NOLINT(clang-analyzer-unix.Stream)
     fflush(f);
     printSetNl(0);
 }

@@ -2,9 +2,9 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2024 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2024 Laszlo Molnar
-   Copyright (C) 2004-2024 John F. Reiser
+   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2025 Laszlo Molnar
+   Copyright (C) 2004-2025 John F. Reiser
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -44,7 +44,7 @@ static int F(Filter *f) {
     // scan
     const byte *b = f->buf;
 #endif
-    const unsigned size = umin(f->buf_len, 0u - (~0u << (32 - (6 + W_CTO))));
+    const unsigned size = upx::umin(f->buf_len, 0u - (~0u << (32 - (6 + W_CTO))));
     const unsigned size4 = size - 4;
 
     unsigned ic;
@@ -123,7 +123,7 @@ static int F(Filter *f) {
 #ifdef U
 static int U(Filter *f) {
     byte *b = f->buf;
-    const unsigned size4 = umin(f->buf_len - 4, 0u - (~0u << (32 - (6 + W_CTO))));
+    const unsigned size4 = upx::umin(f->buf_len - 4, 0u - (~0u << (32 - (6 + W_CTO))));
     const unsigned addvalue = f->addvalue;
 
     unsigned ic;

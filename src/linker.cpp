@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2024 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2024 Laszlo Molnar
+   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2025 Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -227,7 +227,7 @@ void ElfLinker::preprocessSymbols(char *start, char const *end) {
         else if (sscanf(start, "%x%*8c %1023s %*x %1023s", &offset, section, symbol) == 3)
 #else
         // work around broken scanf() implementations
-        // http://bugs.winehq.org/show_bug.cgi?id=10401 (fixed in Wine 0.9.58)
+        // https://bugs.winehq.org/show_bug.cgi?id=10401 (fixed in Wine 0.9.58)
         else if (sscanf(start, "%x%*c%*c%*c%*c%*c%*c%*c%*c %1023s %*x %1023s", &offset, section,
                         symbol) == 3)
 #endif
@@ -680,7 +680,7 @@ void ElfLinkerArm64LE::relocate1(const Relocation *rel, byte *location, upx_uint
         upx_uint32_t const m19 = ~(~0u << 19);
         upx_uint32_t w = get_le32(location);
         set_le32(location, (w & ~(m19 << 5)) | ((((w >> 5) + (value >> 2)) & m19) << 5));
-    } else if (!strcmp(type, "CALL26")) {
+    } else if (!strcmp(type, "CALL26") || !strcmp(type, "JUMP26")) {
         value -= rel->section->offset + rel->offset;
         upx_uint32_t const m26 = ~(~0u << 26);
         upx_uint32_t w = get_le32(location);

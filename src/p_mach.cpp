@@ -2,7 +2,7 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 2004-2024 John Reiser
+   Copyright (C) 2004-2025 John Reiser
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -43,6 +43,9 @@
 #endif
 #if (ACC_CC_GNUC >= 0x040200)
 #  pragma GCC diagnostic ignored "-Wcast-align"
+#endif
+#if defined(__CHERI__) && defined(__CHERI_PURE_CAPABILITY__)
+#  pragma clang diagnostic ignored "-Wcheri-capability-misuse" // TODO later
 #endif
 
 static const CLANG_FORMAT_DUMMY_STATEMENT
@@ -1462,12 +1465,6 @@ void PackMachBase<T>::pack1(OutputFile *const fo, Filter &/*ft*/)  // generate e
 #define WANT_MACH_HEADER_ENUM 1
 #include "p_mach_enum.h"
 
-static unsigned
-umin(unsigned a, unsigned b)
-{
-    return (a <= b) ? a : b;
-}
-
 #define MAX_N_CMDS 256
 
 template <class T>
@@ -1549,7 +1546,7 @@ void PackMachBase<T>::unpack(OutputFile *fo)
                 "bad packed Mach load_command @%#x", ptr_udiff_bytes(ptr, mhdr));
             throwCantUnpack(msg);
         }
-        memcpy(&msegcmd[j], ptr, umin(sizeof(Mach_segment_command), cmdsize));
+        memcpy(&msegcmd[j], ptr, upx::umin(usizeof(Mach_segment_command), cmdsize));
         headway -= cmdsize;
         ptr     += cmdsize;
     }
@@ -1681,6 +1678,12 @@ tribool PackMachBase<T>::canUnpack()
     Mach_command const *ptr = (Mach_command const *)rawmseg;
     for (unsigned j= 0; j < ncmds;
             ptr = (Mach_command const *)(ptr->cmdsize + (char const *)ptr), ++j) {
+        if (headway < (int)sizeof(Mach_command)) {
+            char buf[200]; snprintf(buf, sizeof(buf),
+                "bad Mach_command[%u]{@0x%zx,+0x%x}",
+                    j, (sizeof(mhdri) + ((char const *)ptr - (char const *)rawmseg)), headway);
+            throwCantPack(buf);
+        }
         unsigned const cmd = ptr->cmd;
         unsigned const cmdsize = ptr->cmdsize;
         if (is_bad_linker_command(cmd, cmdsize, headway, lc_seg, sizeof(Addr))) {
@@ -1760,6 +1763,10 @@ tribool PackMachBase<T>::canUnpack()
         else { // PackHeader follows loader at __LINKEDIT
             if ((off_t)bufsize > (fi->st_size() - offLINK)) {
                 bufsize = fi->st_size() - offLINK;
+                if (bufsize < sizeof(struct b_info)) {
+                    throwCantUnpack("bad offLINK %p %p",
+                        (void *)offLINK, (void *)file_size);
+                }
             }
             fi->seek(offLINK, SEEK_SET);
         }
@@ -1768,7 +1775,8 @@ tribool PackMachBase<T>::canUnpack()
         fi->seek(offLINK - bufsize, SEEK_SET);
     }
     MemBuffer buf(bufsize);
-    MemBuffer buf3(bufsize);
+    MemBuffer buf3(upx::max(bufsize, 0x1008u));
+    buf3.clear();
 
     fi->readx(buf, bufsize);
     // Do not overwrite buf[]; For scratch space, then use buf3 instead.
@@ -1881,9 +1889,13 @@ tribool PackMachBase<T>::canUnpack()
             unsigned const *p;
             for (p = (unsigned const *)&buf3[0x1000]; p > lo; ) if (*--p) {
                 overlay_offset  = *(TE32 const *)p;
+                if ((unsigned)file_size < (overlay_offset + sizeof(PackHeader) + sizeof(overlay_offset)))
+                    throwCantUnpack("file corrupted");
                 if ((off_t)overlay_offset < offLINK) {
                     overlay_offset = ((char const *)p - (char const *)lo) +
                         (offLINK - 0x1000) - overlay_offset + sizeof(l_info);
+                    if ((unsigned)file_size < (overlay_offset + sizeof(PackHeader) + sizeof(overlay_offset)))
+                        throwCantUnpack("file corrupted");
                     fi->seek(overlay_offset, SEEK_SET);
                     fi->readx(buf3, bufsize);
                     if (b_ptr->sz_unc < 0x4000
@@ -1903,7 +1915,7 @@ tribool PackMachBase<T>::canUnpack()
     if (       overlay_offset < sz_mach_headers
     ||  (off_t)overlay_offset >= file_size) {
         infoWarning("file corrupted: %s", fi->getName());
-        MemBuffer buf2(umin(1<<14, file_size));
+        MemBuffer buf2(upx::umin(1u<<14, file_size_u32));
         fi->seek(sz_mach_headers, SEEK_SET);
         fi->readx(buf2, buf2.getSize());
         unsigned const *p = (unsigned const *)&buf2[0];
@@ -1966,7 +1978,7 @@ tribool PackMachBase<T>::canPack()
         throwCantPack("%d < Mach_header.ncmds", MAX_N_CMDS);
     }
     unsigned const sz_mhcmds = (unsigned)mhdri.sizeofcmds;
-    unsigned headway = umin(sz_mhcmds, file_size - sizeof(mhdri));
+    unsigned headway = upx::umin(sz_mhcmds, file_size_u32 - usizeof(mhdri));
     if (headway < sz_mhcmds) {
         char buf[32]; snprintf(buf, sizeof(buf), "bad sizeofcmds %d", sz_mhcmds);
         throwCantPack(buf);
@@ -1984,6 +1996,12 @@ tribool PackMachBase<T>::canPack()
     unsigned char const *ptr = (unsigned char const *)rawmseg;
     for (unsigned j= 0; j < ncmds; ++j) {
         Mach_segment_command const *segptr = (Mach_segment_command const *)ptr;
+        if (headway < sizeof(Mach_command)) {
+            char buf[200]; snprintf(buf, sizeof(buf),
+                "bad Mach_command[%u]{@0x%zx,+0x%x}",
+                    j, (sizeof(mhdri) + ((char const *)segptr - (char const *)rawmseg)), headway);
+            throwCantPack(buf);
+        }
         unsigned const cmd     = segptr->cmd &~ LC_REQ_DYLD;
         unsigned const cmdsize = segptr->cmdsize;
         if (is_bad_linker_command(cmd, cmdsize, headway, lc_seg, sizeof(Addr))) {

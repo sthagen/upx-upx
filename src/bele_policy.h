@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2024 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2024 Laszlo Molnar
+   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2025 Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -33,7 +33,7 @@
 
 #if defined(BELE_CTP)
 // CTP - Compile-Time Polymorphism (templates)
-#define V  static inline
+#define V  static inline bele_constexpr
 #define VV static forceinline_constexpr
 #define S  static int __acc_cdecl_qsort
 #define C  noexcept
@@ -49,7 +49,7 @@
 
 #if defined(BELE_RTP)
 struct AbstractPolicy {
-    explicit inline AbstractPolicy() noexcept {}
+    explicit inline AbstractPolicy() noexcept = default;
     virtual inline ~AbstractPolicy() noexcept {}
     V bool isBE() C = 0;
     V bool isLE() C = 0;
@@ -97,7 +97,7 @@ struct BEPolicy final
     : public AbstractPolicy
 #endif
 {
-    explicit inline BEPolicy() noexcept {}
+    explicit inline BEPolicy() noexcept = default;
 #if defined(BELE_CTP)
     typedef N_BELE_RTP::BEPolicy RTP_Policy;
 #elif defined(BELE_RTP)
@@ -156,7 +156,7 @@ struct LEPolicy final
     : public AbstractPolicy
 #endif
 {
-    explicit inline LEPolicy() noexcept {}
+    explicit inline LEPolicy() noexcept = default;
 #if defined(BELE_CTP)
     typedef N_BELE_RTP::LEPolicy RTP_Policy;
 #elif defined(BELE_RTP)

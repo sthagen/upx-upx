@@ -2,7 +2,7 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2024 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -37,7 +37,7 @@
 template <class T>
 inline
     typename std::enable_if<std::is_pointer<T>::value && !upx::is_bounded_array<T>::value, T>::type
-    raw_bytes(T ptr, size_t size_in_bytes) {
+    raw_bytes(T ptr, size_t size_in_bytes) may_throw {
     if (size_in_bytes > 0) {
         if very_unlikely (ptr == nullptr)
             throwCantPack("raw_bytes unexpected NULL ptr");
@@ -53,7 +53,7 @@ template <class T>
 inline typename std::enable_if<std::is_pointer<T>::value && !upx::is_bounded_array<T>::value &&
                                    !std::is_void<typename std::remove_pointer<T>::type>::value,
                                T>::type
-raw_index_bytes(T ptr, size_t index, size_t size_in_bytes) {
+raw_index_bytes(T ptr, size_t index, size_t size_in_bytes) may_throw {
     typedef typename std::remove_pointer<T>::type element_type;
     if very_unlikely (ptr == nullptr)
         throwCantPack("raw_index_bytes unexpected NULL ptr");
@@ -66,7 +66,7 @@ raw_index_bytes(T ptr, size_t index, size_t size_in_bytes) {
 
 // same for bounded arrays
 template <class T, size_t N>
-inline T *raw_bytes(T (&array)[N], size_t size_in_bytes) {
+inline T *raw_bytes(T (&array)[N], size_t size_in_bytes) may_throw {
     typedef T element_type;
     if very_unlikely (size_in_bytes > mem_size(sizeof(element_type), N))
         throwCantPack("raw_bytes out of range");
@@ -74,7 +74,7 @@ inline T *raw_bytes(T (&array)[N], size_t size_in_bytes) {
 }
 
 template <class T, size_t N>
-inline T *raw_index_bytes(T (&array)[N], size_t index, size_t size_in_bytes) {
+inline T *raw_index_bytes(T (&array)[N], size_t index, size_t size_in_bytes) may_throw {
     typedef T element_type;
     return raw_bytes(array, mem_size(sizeof(element_type), index, size_in_bytes)) + index;
 }

@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2024 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2024 Laszlo Molnar
+   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2025 Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -114,13 +114,15 @@ struct PackerNames final {
         unsigned methods[PackerBase::MAX_METHODS];
         unsigned filters[PackerBase::MAX_FILTERS];
     };
-    Entry names[MAX_NAMES];
+    Entry names_array[MAX_NAMES];
+    Entry *names[MAX_NAMES];
     unsigned names_count = 0;
     const Options *o = nullptr;
 
     void add(const PackerBase *pb) {
         assert_noexcept(names_count < MAX_NAMES);
-        Entry &e = names[names_count++];
+        Entry &e = names_array[names_count];
+        names[names_count++] = &e;
         e.fname = pb->getFullName(o);
         e.sname = pb->getName();
         e.methods_count = e.filters_count = 0;
@@ -147,11 +149,10 @@ struct PackerNames final {
         self->add(pb);
         return false;
     }
-    static int __acc_cdecl_qsort compare_fname(const void *a, const void *b) {
-        return strcmp(((const Entry *) a)->fname, ((const Entry *) b)->fname);
-    }
-    static int __acc_cdecl_qsort compare_sname(const void *a, const void *b) {
-        return strcmp(((const Entry *) a)->sname, ((const Entry *) b)->sname);
+    static int __acc_cdecl_qsort compare_fname(const void *aa, const void *bb) {
+        const Entry *a = *(const Entry *const *) aa;
+        const Entry *b = *(const Entry *const *) bb;
+        return strcmp(a->fname, b->fname);
     }
 };
 } // namespace
@@ -162,10 +163,11 @@ static noinline void list_all_packers(FILE *f, int verbose) {
     PackerNames pn;
     pn.o = &o;
     (void) PackMaster::visitAllPackers(PackerNames::visit, nullptr, &o, &pn);
-    upx_gnomesort(pn.names, pn.names_count, sizeof(PackerNames::Entry), PackerNames::compare_fname);
+    // NOLINTNEXTLINE(bugprone-multi-level-implicit-pointer-conversion)
+    upx_gnomesort(pn.names, pn.names_count, sizeof(pn.names[0]), PackerNames::compare_fname);
     size_t pos = 0;
     for (size_t i = 0; i < pn.names_count; i++) {
-        const PackerNames::Entry &e = pn.names[i];
+        const PackerNames::Entry &e = *pn.names[i];
         const char *const fn = e.fname;
         const char *const sn = e.sname;
         if (verbose >= 3) {
@@ -463,15 +465,15 @@ void show_version(bool one_line) {
     fprintf(f, "doctest C++ testing framework version %s\n", DOCTEST_VERSION_STR);
 #endif
     // clang-format off
-    fprintf(f, "Copyright (C) 1996-2024 Markus Franz Xaver Johannes Oberhumer\n");
-    fprintf(f, "Copyright (C) 1996-2024 Laszlo Molnar\n");
-    fprintf(f, "Copyright (C) 2000-2024 John F. Reiser\n");
+    fprintf(f, "Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer\n");
+    fprintf(f, "Copyright (C) 1996-2025 Laszlo Molnar\n");
+    fprintf(f, "Copyright (C) 2000-2025 John F. Reiser\n");
 #if (WITH_ZLIB)
     // see vendor/zlib/LICENSE
     fprintf(f, "Copyright (C) 1995" "-2024 Jean-loup Gailly and Mark Adler\n");
 #endif
 #if (WITH_LZMA)
-    // see vendor/lzma-sdk/lzma.txt
+    // see vendor/lzma-sdk
     fprintf(f, "Copyright (C) 1999" "-2006 Igor Pavlov\n");
 #endif
 #if (WITH_ZSTD)
@@ -521,11 +523,16 @@ void show_sysinfo(const char *options_var) {
             con_fprintf(f, fmt, v);
             con_fprintf(f, "\n");
         };
+
         // language
         cf_print("__cplusplus", "%lld", __cplusplus + 0, 3);
 #if defined(_MSVC_LANG)
         cf_print("_MSVC_LANG", "%lld", _MSVC_LANG + 0, 3);
 #endif
+#if defined(upx_is_constant_evaluated)
+        cf_print("upx_is_constant_evaluated", "%lld", 1, 3);
+#endif
+
         // compiler
 #if defined(ACC_CC_CLANG)
         cf_print("ACC_CC_CLANG", "0x%06llx", ACC_CC_CLANG + 0, 3);
@@ -563,6 +570,30 @@ void show_sysinfo(const char *options_var) {
 #if defined(_MSC_FULL_VER)
         cf_print("_MSC_FULL_VER", "%lld", _MSC_FULL_VER + 0);
 #endif
+
+        // architecture
+#if defined(__CHERI__)
+        cf_print("__CHERI__", "%lld", __CHERI__ + 0, 3);
+#endif
+#if defined(__CHERI_PURE_CAPABILITY__)
+        cf_print("__CHERI_PURE_CAPABILITY__", "%lld", __CHERI_PURE_CAPABILITY__ + 0, 3);
+#endif
+#if defined(__mips_hard_float)
+        cf_print("__mips_hard_float", "%lld", __mips_hard_float + 0);
+#endif
+#if defined(__mips_soft_float)
+        cf_print("__mips_soft_float", "%lld", __mips_soft_float + 0);
+#endif
+#if defined(__wasm__)
+        cf_print("__wasm__", "%lld", __wasm__ + 0);
+#endif
+#if defined(__wasm32__)
+        cf_print("__wasm32__", "%lld", __wasm32__ + 0);
+#endif
+#if defined(__wasm64__)
+        cf_print("__wasm64__", "%lld", __wasm64__ + 0);
+#endif
+
         // OS and libc
 #if defined(WINVER)
         cf_print("WINVER", "0x%04llx", WINVER + 0);
@@ -590,7 +621,30 @@ void show_sysinfo(const char *options_var) {
 #if defined(__GLIBC_MINOR__)
         cf_print("__GLIBC_MINOR__", "%lld", __GLIBC_MINOR__ + 0);
 #endif
+#if defined(__wasi__)
+        cf_print("__wasi__", "%lld", __wasi__ + 0);
+#endif
+
         // misc compilation options
+#if defined(__PIC__)
+        cf_print("__PIC__", "%lld", __PIC__ + 0, 3);
+#elif defined(__pic__)
+        cf_print("__pic__", "%lld", __pic__ + 0, 3);
+#endif
+#if defined(__PIE__)
+        cf_print("__PIE__", "%lld", __PIE__ + 0, 3);
+#elif defined(__pie__)
+        cf_print("__pie__", "%lld", __pie__ + 0, 3);
+#endif
+#if defined(__SIZEOF_INT128__)
+        cf_print("__SIZEOF_INT128__", "%lld", __SIZEOF_INT128__ + 0, 3);
+#endif
+#if defined(__SIZEOF_LONG_LONG__) && (__SIZEOF_LONG_LONG__ + 0 > 8)
+        cf_print("__SIZEOF_LONG_LONG__", "%lld", __SIZEOF_LONG_LONG__ + 0, 3);
+#endif
+#if defined(__SIZEOF_POINTER__) && (__SIZEOF_POINTER__ + 0 > 8)
+        cf_print("__SIZEOF_POINTER__", "%lld", __SIZEOF_POINTER__ + 0, 3);
+#endif
 #if defined(UPX_CONFIG_DISABLE_WSTRICT)
         cf_print("UPX_CONFIG_DISABLE_WSTRICT", "%lld", UPX_CONFIG_DISABLE_WSTRICT + 0, 3);
 #endif
@@ -600,12 +654,13 @@ void show_sysinfo(const char *options_var) {
 #if defined(WITH_THREADS)
         cf_print("WITH_THREADS", "%lld", WITH_THREADS + 0);
 #endif
+
         UNUSED(cf_count);
         UNUSED(cf_print);
         UNUSED(initial_win32_winnt);
     }
 
-    // run-time
+    // run-time settings
 #if defined(HAVE_LOCALTIME) && defined(HAVE_GMTIME)
     {
         auto tm2str = [](char *s, size_t size, const struct tm *tmp) noexcept {
@@ -624,6 +679,7 @@ void show_sysinfo(const char *options_var) {
     }
 #endif
 
+    // environment
     if (options_var && options_var[0]) {
         const char *e = upx_getenv(options_var);
         con_fprintf(f, "\n");

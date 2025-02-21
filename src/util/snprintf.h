@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2024 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2024 Laszlo Molnar
+   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2025 Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -31,25 +31,25 @@
 // UPX version of string functions, with assertions and sane limits
 **************************************************************************/
 
+upx_rsize_t upx_safe_strlen(const char *) may_throw;
+
 // info: snprintf() returns length and NOT size, but max_size is indeed size (incl NUL)
 
-int upx_safe_vsnprintf(char *str, upx_rsize_t max_size, const char *format, va_list ap);
+int upx_safe_vsnprintf(char *str, upx_rsize_t max_size, const char *format, va_list ap) may_throw;
 int upx_safe_snprintf(char *str, upx_rsize_t max_size, const char *format, ...)
-    attribute_format(3, 4);
+    may_throw attribute_format(3, 4);
 
 // malloc's *ptr
-int upx_safe_vasprintf(char **ptr, const char *format, va_list ap);
-int upx_safe_asprintf(char **ptr, const char *format, ...) attribute_format(2, 3);
+int upx_safe_vasprintf(char **ptr, const char *format, va_list ap) may_throw;
+int upx_safe_asprintf(char **ptr, const char *format, ...) may_throw attribute_format(2, 3);
 
 // returns a malloc'd pointer
-char *upx_safe_xprintf(const char *format, ...) attribute_format(1, 2);
-
-upx_rsize_t upx_safe_strlen(const char *);
+char *upx_safe_xprintf(const char *format, ...) may_throw attribute_format(1, 2);
 
 // noexcept variants (these use "assert_noexcept")
+upx_rsize_t upx_safe_strlen_noexcept(const char *) noexcept;
 int upx_safe_vsnprintf_noexcept(char *str, upx_rsize_t max_size, const char *format,
                                 va_list ap) noexcept;
-upx_rsize_t upx_safe_strlen_noexcept(const char *) noexcept;
 
 // globally redirect some functions
 #undef strlen
@@ -66,28 +66,32 @@ upx_rsize_t upx_safe_strlen_noexcept(const char *) noexcept;
 // some uchar string support functions to avoid casts
 **************************************************************************/
 
-forceinline uchar *strcpy(uchar *s1, const uchar *s2) {
+forceinline upx_rsize_t upx_safe_strlen(const uchar *s) may_throw {
+    return upx_safe_strlen((const char *) s);
+}
+
+forceinline uchar *strcpy(uchar *s1, const uchar *s2) noexcept {
     return (uchar *) strcpy((char *) s1, (const char *) s2);
 }
 
-forceinline int strcmp(const uchar *s1, const char *s2) { return strcmp((const char *) s1, s2); }
-forceinline int strcmp(const char *s1, const uchar *s2) { return strcmp(s1, (const char *) s2); }
-forceinline int strcmp(const uchar *s1, const uchar *s2) {
+forceinline int strcmp(const uchar *s1, const char *s2) noexcept {
+    return strcmp((const char *) s1, s2);
+}
+forceinline int strcmp(const char *s1, const uchar *s2) noexcept {
+    return strcmp(s1, (const char *) s2);
+}
+forceinline int strcmp(const uchar *s1, const uchar *s2) noexcept {
     return strcmp((const char *) s1, (const char *) s2);
 }
 
-forceinline int strcasecmp(const uchar *s1, const char *s2) {
+forceinline int strcasecmp(const uchar *s1, const char *s2) noexcept {
     return strcasecmp((const char *) s1, s2);
 }
-forceinline int strcasecmp(const char *s1, const uchar *s2) {
+forceinline int strcasecmp(const char *s1, const uchar *s2) noexcept {
     return strcasecmp(s1, (const char *) s2);
 }
-forceinline int strcasecmp(const uchar *s1, const uchar *s2) {
+forceinline int strcasecmp(const uchar *s1, const uchar *s2) noexcept {
     return strcasecmp((const char *) s1, (const char *) s2);
-}
-
-forceinline upx_rsize_t upx_safe_strlen(const uchar *s) {
-    return upx_safe_strlen((const char *) s);
 }
 
 /* vim:set ts=4 sw=4 et: */

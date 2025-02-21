@@ -2,7 +2,7 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2024 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -25,13 +25,6 @@
  */
 
 #include "../conf.h"
-#include "compress.h"
-#include "../util/membuffer.h"
-// NOLINTBEGIN(clang-analyzer-optin.performance.Padding)
-#define ZLIB_CONST 1
-#include <zlib/zlib.h>
-#include <zlib/deflate.h>
-// NOLINTEND(clang-analyzer-optin.performance.Padding)
 
 void zlib_compress_config_t::reset() noexcept {
     mem_clear(this);
@@ -39,6 +32,15 @@ void zlib_compress_config_t::reset() noexcept {
     window_bits.reset();
     strategy.reset();
 }
+
+#if WITH_ZLIB
+#include "compress.h"
+#include "../util/membuffer.h"
+// NOLINTBEGIN(clang-analyzer-optin.performance.Padding)
+#define ZLIB_CONST 1
+#include <zlib/zlib.h>
+#include <zlib/deflate.h>
+// NOLINTEND(clang-analyzer-optin.performance.Padding)
 
 static int convert_errno_from_zlib(int zr) {
     switch (zr) {
@@ -95,9 +97,9 @@ int upx_zlib_compress(const upx_bytep src, unsigned src_len, upx_bytep dst, unsi
     zlib_compress_config_t::strategy_t strategy;
     // cconf overrides
     if (lcconf) {
-        oassign(mem_level, lcconf->mem_level);
-        oassign(window_bits, lcconf->window_bits);
-        oassign(strategy, lcconf->strategy);
+        upx::oassign(mem_level, lcconf->mem_level);
+        upx::oassign(window_bits, lcconf->window_bits);
+        upx::oassign(strategy, lcconf->strategy);
     }
 
     z_stream s;
@@ -306,5 +308,7 @@ TEST_CASE("upx_zlib_decompress") {
     CHECK(r == UPX_E_OUTPUT_OVERRUN);
     UNUSED(r);
 }
+
+#endif // WITH_ZLIB
 
 /* vim:set ts=4 sw=4 et: */

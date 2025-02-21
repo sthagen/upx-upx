@@ -2,7 +2,7 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2024 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -25,7 +25,7 @@
  */
 
 // doctest checks, and various tests to catch toolchain/qemu/sanitizer/valgrind/wine/etc
-// problems; grown historically
+// problems; grown historically; modern compilers will optimize away much of this code
 
 #include "../util/system_headers.h"
 #include <cmath> // std::isinf std::isnan
@@ -93,67 +93,247 @@ int upx_doctest_check(int argc, char **argv) {
 int upx_doctest_check() { return upx_doctest_check(0, nullptr); }
 
 /*************************************************************************
+// check fundamental types
+**************************************************************************/
+
+static_assert(std::is_integral<ptrdiff_t>::value, "");
+static_assert(std::is_integral<size_t>::value, "");
+static_assert(std::is_integral<intptr_t>::value, "");
+static_assert(std::is_integral<uintptr_t>::value, "");
+
+static_assert(std::is_signed<ptrdiff_t>::value, "");
+static_assert(!std::is_signed<size_t>::value, "");
+static_assert(std::is_signed<intptr_t>::value, "");
+static_assert(!std::is_signed<uintptr_t>::value, "");
+
+static_assert(!std::is_unsigned<ptrdiff_t>::value, "");
+static_assert(std::is_unsigned<size_t>::value, "");
+static_assert(!std::is_unsigned<intptr_t>::value, "");
+static_assert(std::is_unsigned<uintptr_t>::value, "");
+
+#if defined(__SIZEOF_SHORT__)
+static_assert(sizeof(short) == __SIZEOF_SHORT__, "");
+#endif
+#if defined(__SIZEOF_INT__)
+static_assert(sizeof(int) == __SIZEOF_INT__, "");
+#endif
+#if defined(__SIZEOF_LONG__)
+static_assert(sizeof(long) == __SIZEOF_LONG__, "");
+#endif
+#if defined(__SIZEOF_LONG_LONG__)
+static_assert(sizeof(long long) == __SIZEOF_LONG_LONG__, "");
+#endif
+#if defined(__SIZEOF_INT128__)
+static_assert(16 == __SIZEOF_INT128__, "");
+static_assert(sizeof(__int128) == __SIZEOF_INT128__, "");
+static_assert(sizeof(unsigned __int128) == __SIZEOF_INT128__, "");
+static_assert(sizeof(upx_int128_t) == __SIZEOF_INT128__, "");
+static_assert(sizeof(upx_uint128_t) == __SIZEOF_INT128__, "");
+#endif
+#if defined(__SIZEOF_PTRDIFF_T__)
+static_assert(sizeof(ptrdiff_t) == __SIZEOF_PTRDIFF_T__, "");
+#endif
+#if defined(__SIZEOF_SIZE_T__)
+static_assert(sizeof(size_t) == __SIZEOF_SIZE_T__, "");
+#endif
+#if defined(__SIZEOF_POINTER__)
+static_assert(sizeof(void *) == __SIZEOF_POINTER__, "");
+static_assert(sizeof(intptr_t) == __SIZEOF_POINTER__, "");
+static_assert(sizeof(uintptr_t) == __SIZEOF_POINTER__, "");
+#endif
+#if defined(__SIZEOF_PTRADDR_T__)
+static_assert(sizeof(__PTRADDR_TYPE__) == __SIZEOF_PTRADDR_T__, "");
+static_assert(sizeof(upx_ptraddr_t) == __SIZEOF_PTRADDR_T__, "");
+#endif
+
+#if defined(__SCHAR_WIDTH__)
+static_assert(8 * sizeof(signed char) == __SCHAR_WIDTH__, "");
+#endif
+#if defined(__SHRT_WIDTH__)
+static_assert(8 * sizeof(short) == __SHRT_WIDTH__, "");
+#endif
+#if defined(__INT_WIDTH__)
+static_assert(8 * sizeof(int) == __INT_WIDTH__, "");
+#endif
+#if defined(__LONG_WIDTH__)
+static_assert(8 * sizeof(long) == __LONG_WIDTH__, "");
+#endif
+#if defined(__LONG_LONG_WIDTH__)
+static_assert(8 * sizeof(long long) == __LONG_LONG_WIDTH__, "");
+#endif
+#if defined(__INTMAX_WIDTH__)
+static_assert(8 * sizeof(intmax_t) == __INTMAX_WIDTH__, "");
+static_assert(8 * sizeof(uintmax_t) == __INTMAX_WIDTH__, "");
+#endif
+#if defined(__PTRDIFF_WIDTH__)
+static_assert(8 * sizeof(ptrdiff_t) == __PTRDIFF_WIDTH__, "");
+#endif
+#if defined(__SIZE_WIDTH__)
+static_assert(8 * sizeof(size_t) == __SIZE_WIDTH__, "");
+#endif
+#if defined(__INTPTR_WIDTH__)
+static_assert(8 * sizeof(intptr_t) == __INTPTR_WIDTH__, "");
+static_assert(8 * sizeof(uintptr_t) == __INTPTR_WIDTH__, "");
+#endif
+#if defined(__UINTPTR_WIDTH__)
+static_assert(8 * sizeof(intptr_t) == __UINTPTR_WIDTH__, "");
+static_assert(8 * sizeof(uintptr_t) == __UINTPTR_WIDTH__, "");
+#endif
+#if defined(__PTRADDR_WIDTH__)
+static_assert(8 * sizeof(__PTRADDR_TYPE__) == __PTRADDR_WIDTH__, "");
+static_assert(8 * sizeof(upx_ptraddr_t) == __PTRADDR_WIDTH__, "");
+#endif
+
+// true types from compiler
+typedef decltype((const char *) nullptr - (const char *) nullptr) true_ptrdiff_t;
+typedef decltype(sizeof(0)) true_size_t;
+
+// expected types from pre-defined macros
+#if defined(__PTRDIFF_TYPE__)
+typedef __PTRDIFF_TYPE__ expected_ptrdiff_t;
+#endif
+#if defined(__SIZE_TYPE__)
+typedef __SIZE_TYPE__ expected_size_t;
+#endif
+#if defined(__INTPTR_TYPE__)
+typedef __INTPTR_TYPE__ expected_intptr_t;
+#endif
+#if defined(__UINTPTR_TYPE__)
+typedef __UINTPTR_TYPE__ expected_uintptr_t;
+#endif
+#if defined(__PTRADDR_TYPE__)
+typedef __PTRADDR_TYPE__ expected_ptraddr_t;
+#endif
+
+#define ASSERT_COMPATIBLE_TYPE(A, B)                                                               \
+    static_assert(std::is_integral<A>::value, "");                                                 \
+    static_assert(std::is_integral<B>::value, "");                                                 \
+    static_assert(std::is_signed<A>::value == std::is_signed<B>::value, "");                       \
+    static_assert(std::is_unsigned<A>::value == std::is_unsigned<B>::value, "");                   \
+    static_assert(std::is_signed<A>::value == !std::is_unsigned<A>::value, "");                    \
+    static_assert(std::is_signed<B>::value == !std::is_unsigned<B>::value, "");                    \
+    static_assert(sizeof(A) == sizeof(B), "");                                                     \
+    static_assert(alignof(A) == alignof(B), "")
+
+#define ASSERT_SAME_TYPE(A, B)                                                                     \
+    ASSERT_COMPATIBLE_TYPE(A, B);                                                                  \
+    static_assert(std::is_same<A, B>::value, "")
+
+// C vs C++ headers
+ASSERT_SAME_TYPE(ptrdiff_t, std::ptrdiff_t);
+ASSERT_SAME_TYPE(size_t, std::size_t);
+ASSERT_SAME_TYPE(intptr_t, std::intptr_t);
+ASSERT_SAME_TYPE(uintptr_t, std::uintptr_t);
+
+// true types
+ASSERT_SAME_TYPE(ptrdiff_t, true_ptrdiff_t);
+ASSERT_SAME_TYPE(size_t, true_size_t);
+#if __cplusplus >= 201103L
+typedef decltype(nullptr) true_nullptr_t;
+static_assert(std::is_same<std::nullptr_t, true_nullptr_t>::value, "");
+#endif
+
+// expected types
+#if defined(__PTRDIFF_TYPE__)
+static_assert(std::is_signed<expected_ptrdiff_t>::value, "");
+ASSERT_SAME_TYPE(ptrdiff_t, expected_ptrdiff_t);
+#endif
+#if defined(__SIZE_TYPE__)
+static_assert(std::is_unsigned<expected_size_t>::value, "");
+ASSERT_SAME_TYPE(size_t, expected_size_t);
+#endif
+#if defined(__INTPTR_TYPE__)
+static_assert(std::is_signed<expected_intptr_t>::value, "");
+ASSERT_COMPATIBLE_TYPE(intptr_t, expected_intptr_t); // some toolchains are buggy
+#endif
+#if defined(__UINTPTR_TYPE__)
+static_assert(std::is_unsigned<expected_uintptr_t>::value, "");
+ASSERT_COMPATIBLE_TYPE(uintptr_t, expected_uintptr_t); // some toolchains are buggy
+#endif
+#if defined(__PTRADDR_TYPE__)
+static_assert(std::is_unsigned<expected_ptraddr_t>::value, "");
+ASSERT_SAME_TYPE(upx_ptraddr_t, expected_ptraddr_t);
+#endif
+
+#if defined(__INTPTR_TYPE__) && defined(__UINTPTR_TYPE__)
+#if defined(__m68k__) && defined(__atarist__) && defined(__GNUC__)
+// BUG: compiler/mintlib mismatch: int vs long
+#elif (defined(__arm__) || defined(__mips__)) && defined(__linux__) && defined(__clang__) &&       \
+    (__SIZEOF_LONG__ == 4)
+// BUG: compiler/libc mismatch: int vs long
+// TODO later: check zig and clang for possible misconfiguration under 32-bit arm & mips
+#else
+ASSERT_SAME_TYPE(intptr_t, expected_intptr_t);
+ASSERT_SAME_TYPE(uintptr_t, expected_uintptr_t);
+#endif // BUG
+#endif
+
+// UPX types
+ASSERT_SAME_TYPE(signed char, upx_int8_t);
+ASSERT_SAME_TYPE(unsigned char, upx_uint8_t);
+ASSERT_SAME_TYPE(short, upx_int16_t);
+ASSERT_SAME_TYPE(unsigned short, upx_uint16_t);
+ASSERT_SAME_TYPE(int, upx_int32_t);
+ASSERT_SAME_TYPE(unsigned, upx_uint32_t);
+#if (__SIZEOF_LONG_LONG__ + 0 < 128)
+ASSERT_SAME_TYPE(long long, upx_int64_t);
+ASSERT_SAME_TYPE(unsigned long long, upx_uint64_t);
+#endif
+
+/*************************************************************************
 // compile-time checks
 **************************************************************************/
 
-// need extra parenthesis because the C preprocessor does not understand C++ templates
-ACC_COMPILE_TIME_ASSERT_HEADER((std::is_same<short, upx_int16_t>::value))
-ACC_COMPILE_TIME_ASSERT_HEADER((std::is_same<unsigned short, upx_uint16_t>::value))
-ACC_COMPILE_TIME_ASSERT_HEADER((std::is_same<int, upx_int32_t>::value))
-ACC_COMPILE_TIME_ASSERT_HEADER((std::is_same<unsigned, upx_uint32_t>::value))
-ACC_COMPILE_TIME_ASSERT_HEADER((std::is_same<long long, upx_int64_t>::value))
-ACC_COMPILE_TIME_ASSERT_HEADER((std::is_same<unsigned long long, upx_uint64_t>::value))
-
-ACC_COMPILE_TIME_ASSERT_HEADER(no_bswap16(0x04030201) == 0x0201)
-ACC_COMPILE_TIME_ASSERT_HEADER(no_bswap32(0x04030201) == 0x04030201)
-ACC_COMPILE_TIME_ASSERT_HEADER(no_bswap64(0x0807060504030201ull) == 0x0807060504030201ull)
-#if !(ACC_CC_MSC) // unfortunately *not* constexpr with current MSVC
-ACC_COMPILE_TIME_ASSERT_HEADER(bswap16(0x04030201) == 0x0102)
-ACC_COMPILE_TIME_ASSERT_HEADER(bswap32(0x04030201) == 0x01020304)
-ACC_COMPILE_TIME_ASSERT_HEADER(bswap64(0x0807060504030201ull) == 0x0102030405060708ull)
-ACC_COMPILE_TIME_ASSERT_HEADER(bswap16(bswap16(0xf4f3f2f1)) == no_bswap16(0xf4f3f2f1))
-ACC_COMPILE_TIME_ASSERT_HEADER(bswap32(bswap32(0xf4f3f2f1)) == no_bswap32(0xf4f3f2f1))
-ACC_COMPILE_TIME_ASSERT_HEADER(bswap64(bswap64(0xf8f7f6f5f4f3f2f1ull)) ==
-                               no_bswap64(0xf8f7f6f5f4f3f2f1ull))
+static_assert(no_bswap16(0x04030201) == 0x0201);
+static_assert(no_bswap32(0x04030201) == 0x04030201);
+static_assert(no_bswap64(0x0807060504030201ull) == 0x0807060504030201ull);
+#if !(ACC_CC_MSC) || defined(upx_is_constant_evaluated)
+static_assert(bswap16(0x04030201) == 0x0102);
+static_assert(bswap32(0x04030201) == 0x01020304);
+static_assert(bswap64(0x0807060504030201ull) == 0x0102030405060708ull);
+static_assert(bswap16(bswap16(0xf4f3f2f1)) == no_bswap16(0xf4f3f2f1));
+static_assert(bswap32(bswap32(0xf4f3f2f1)) == no_bswap32(0xf4f3f2f1));
+static_assert(bswap64(bswap64(0xf8f7f6f5f4f3f2f1ull)) == no_bswap64(0xf8f7f6f5f4f3f2f1ull));
 #endif
 
-ACC_COMPILE_TIME_ASSERT_HEADER(sign_extend(0u + 0, 8) == 0)
-ACC_COMPILE_TIME_ASSERT_HEADER(sign_extend(0u + 1, 8) == 1)
-ACC_COMPILE_TIME_ASSERT_HEADER(sign_extend(0u + 127, 8) == 127)
-ACC_COMPILE_TIME_ASSERT_HEADER(sign_extend(0u + 128, 8) == -128)
-ACC_COMPILE_TIME_ASSERT_HEADER(sign_extend(0u - 1, 8) == -1)
-ACC_COMPILE_TIME_ASSERT_HEADER(sign_extend(0u + 256, 8) == 0)
-ACC_COMPILE_TIME_ASSERT_HEADER(sign_extend(0u + 257, 8) == 1)
-ACC_COMPILE_TIME_ASSERT_HEADER(sign_extend(0u + 383, 8) == 127)
-ACC_COMPILE_TIME_ASSERT_HEADER(sign_extend(0u + 384, 8) == -128)
-ACC_COMPILE_TIME_ASSERT_HEADER(sign_extend(0u + 511, 8) == -1)
-ACC_COMPILE_TIME_ASSERT_HEADER(sign_extend(0ull + 0, 1) == 0)
-ACC_COMPILE_TIME_ASSERT_HEADER(sign_extend(0ull + 1, 1) == -1)
+static_assert(sign_extend(0u + 0, 8) == 0);
+static_assert(sign_extend(0u + 1, 8) == 1);
+static_assert(sign_extend(0u + 127, 8) == 127);
+static_assert(sign_extend(0u + 128, 8) == -128);
+static_assert(sign_extend(0u - 1, 8) == -1);
+static_assert(sign_extend(0u + 256, 8) == 0);
+static_assert(sign_extend(0u + 257, 8) == 1);
+static_assert(sign_extend(0u + 383, 8) == 127);
+static_assert(sign_extend(0u + 384, 8) == -128);
+static_assert(sign_extend(0u + 511, 8) == -1);
+static_assert(sign_extend(upx_uint64_t(0) + 0, 1) == 0);
+static_assert(sign_extend(upx_uint64_t(0) + 1, 1) == -1);
 
-ACC_COMPILE_TIME_ASSERT_HEADER(CHAR_BIT == 8)
+static_assert(CHAR_BIT == 8);
 #if 0 // does not work with MSVC
 #if '\0' - 1 < 0
-ACC_COMPILE_TIME_ASSERT_HEADER(CHAR_MAX == 127)
+static_assert(CHAR_MAX == 127);
 #else
-ACC_COMPILE_TIME_ASSERT_HEADER(CHAR_MAX == 255)
+static_assert(CHAR_MAX == 255);
 #endif
 #if L'\0' - 1 < 0
-ACC_COMPILE_TIME_ASSERT_HEADER((wchar_t) -1 < 0)
+static_assert((wchar_t) -1 < 0);
 #else
-ACC_COMPILE_TIME_ASSERT_HEADER((wchar_t) -1 > 0)
+static_assert((wchar_t) -1 > 0);
 #endif
 #endif
 
 /*************************************************************************
 // upx_compiler_sanity_check()
 // assert a sane architecture and compiler
-// (modern compilers will optimize away most of this code)
 **************************************************************************/
 
 namespace {
 
 template <class T>
 struct CheckIntegral {
+    static_assert(upx_is_integral<T>::value);
+    static_assert(upx_is_integral_v<T>);
     struct TestT {
         T a;
         T x[2];
@@ -182,6 +362,10 @@ struct CheckIntegral {
             assert_noexcept(x[0] == 0 && x[1] == 0);
             assert_noexcept(y[0] == 0 && y[1] == 0);
             assert_noexcept(z[0] == 0 && z[1] == 0);
+#if defined(upx_is_constant_evaluated)
+            static_assert(c == 0);
+            static_assert(z[0] == 0 && z[1] == 0);
+#endif
         }
         {
             TestU<U> t;
@@ -193,20 +377,20 @@ struct CheckIntegral {
             assert_noexcept(t.z[0] == 0 && t.z[1] == 0);
         }
 #if __cplusplus <= 201703L
-        COMPILE_TIME_ASSERT(std::is_pod<U>::value) // std::is_pod is deprecated in C++20
+        static_assert(std::is_pod<U>::value); // std::is_pod is deprecated in C++20
 #endif
-        COMPILE_TIME_ASSERT(std::is_standard_layout<U>::value)
-        COMPILE_TIME_ASSERT(std::is_trivial<U>::value)
+        static_assert(std::is_standard_layout<U>::value);
+        static_assert(std::is_trivial<U>::value);
         // more checks, these are probably implied by std::is_trivial
-        COMPILE_TIME_ASSERT(std::is_nothrow_default_constructible<U>::value)
-        COMPILE_TIME_ASSERT(std::is_nothrow_destructible<U>::value)
-        COMPILE_TIME_ASSERT(std::is_trivially_copyable<U>::value)
-        COMPILE_TIME_ASSERT(std::is_trivially_default_constructible<U>::value)
+        static_assert(std::is_nothrow_default_constructible<U>::value);
+        static_assert(std::is_nothrow_destructible<U>::value);
+        static_assert(std::is_trivially_copyable<U>::value);
+        static_assert(std::is_trivially_default_constructible<U>::value);
         // UPX extras
-        COMPILE_TIME_ASSERT(upx_is_integral<U>::value)
-        COMPILE_TIME_ASSERT(upx_is_integral_v<U>)
+        static_assert(upx_is_integral<U>::value);
+        static_assert(upx_is_integral_v<U>);
     }
-    static void check(void) noexcept {
+    static void check_core(void) noexcept {
         {
             TestT t = {};
             assert_noexcept(t.a == 0);
@@ -230,8 +414,61 @@ struct CheckIntegral {
         }
         checkU<T>();
         checkU<typename std::add_const<T>::type>();
+        {
+            T zero, one, three, four;
+            zero = 0;
+            one = 1;
+            three = 3;
+            four = 4;
+            assert_noexcept(zero == 0);
+            assert_noexcept(one == 1);
+            assert_noexcept(three == 3);
+            assert_noexcept(four == 4);
+            // min / max
+            assert_noexcept(upx::min(one, four) == 1);
+            assert_noexcept(upx::min(one, four) == one);
+            assert_noexcept(upx::max(one, four) == 4);
+            assert_noexcept(upx::max(one, four) == four);
+        }
+    }
+    static void check(void) noexcept {
+        check_core();
+        {
+            T zero, one, three, four;
+            zero = 0;
+            one = 1;
+            three = 3;
+            four = 4;
+            // align - needs binary expressions which do not work
+            // on CHERI uintptr_t because of pointer provenance
+            assert_noexcept(upx::align_down(zero, four) == 0);
+            assert_noexcept(upx::align_down(zero, four) == zero);
+            assert_noexcept(upx::align_down(one, four) == 0);
+            assert_noexcept(upx::align_down(one, four) == zero);
+            assert_noexcept(upx::align_down(three, four) == 0);
+            assert_noexcept(upx::align_down(three, four) == zero);
+            assert_noexcept(upx::align_down(four, four) == 4);
+            assert_noexcept(upx::align_down(four, four) == four);
+            assert_noexcept(upx::align_up(zero, four) == 0);
+            assert_noexcept(upx::align_up(zero, four) == zero);
+            assert_noexcept(upx::align_up(one, four) == 4);
+            assert_noexcept(upx::align_up(one, four) == four);
+            assert_noexcept(upx::align_up(three, four) == 4);
+            assert_noexcept(upx::align_up(three, four) == four);
+            assert_noexcept(upx::align_up(four, four) == 4);
+            assert_noexcept(upx::align_up(four, four) == four);
+            assert_noexcept(upx::align_up_gap(zero, four) == 0);
+            assert_noexcept(upx::align_up_gap(zero, four) == zero);
+            assert_noexcept(upx::align_up_gap(one, four) == 3);
+            assert_noexcept(upx::align_up_gap(one, four) == three);
+            assert_noexcept(upx::align_up_gap(three, four) == 1);
+            assert_noexcept(upx::align_up_gap(three, four) == one);
+            assert_noexcept(upx::align_up_gap(four, four) == 0);
+            assert_noexcept(upx::align_up_gap(four, four) == zero);
+        }
     }
 };
+
 template <class T>
 struct CheckAlignment {
     static void check(void) noexcept {
@@ -248,65 +485,237 @@ struct CheckAlignment {
         COMPILE_TIME_ASSERT_ALIGNED1(Test2)
         Test1 t1[7];
         Test2 t2[7];
-        COMPILE_TIME_ASSERT(sizeof(Test1) == 1 + sizeof(T))
-        COMPILE_TIME_ASSERT(sizeof(t1) == 7 + 7 * sizeof(T))
-        COMPILE_TIME_ASSERT(sizeof(Test2) == 1 + 3 * sizeof(T))
-        COMPILE_TIME_ASSERT(sizeof(t2) == 7 + 21 * sizeof(T))
+        static_assert(sizeof(Test1) == 1 + sizeof(T));
+        static_assert(sizeof(t1) == 7 + 7 * sizeof(T));
+        static_assert(sizeof(Test2) == 1 + 3 * sizeof(T));
+        static_assert(sizeof(t2) == 7 + 21 * sizeof(T));
         UNUSED(t1);
         UNUSED(t2);
     }
 };
+
 template <class T>
 struct TestBELE {
     static noinline bool test(void) noexcept {
+        static_assert(upx::is_same_any_v<T, BE16, BE32, BE64, LE16, LE32, LE64>);
+        static_assert(
+            upx::is_same_any_v<typename T::integral_conversion_type, upx_uint32_t, upx_uint64_t>);
         CheckIntegral<T>::check();
         CheckAlignment<T>::check();
         // arithmetic checks
-        T allbits = {};
-        assert_noexcept(allbits == 0);
-        allbits += 1;
-        allbits -= 2;
-        T v1;
-        v1 = 1;
-        v1 *= 4;
-        v1 /= 2;
-        v1 -= 1;
-        T v2;
-        v2 = 1;
-        assert_noexcept((v1 == v2));
-        assert_noexcept(!(v1 != v2));
-        assert_noexcept((v1 <= v2));
-        assert_noexcept((v1 >= v2));
-        assert_noexcept(!(v1 < v2));
-        assert_noexcept(!(v1 > v2));
-        v2 ^= allbits;
-        assert_noexcept(!(v1 == v2));
-        assert_noexcept((v1 != v2));
-        assert_noexcept((v1 <= v2));
-        assert_noexcept(!(v1 >= v2));
-        assert_noexcept((v1 < v2));
-        assert_noexcept(!(v1 > v2));
-        v2 += 2;
-        assert_noexcept(v1 == 1);
-        assert_noexcept(v2 == 0);
-        v1 <<= 1;
-        v1 |= v2;
-        v1 >>= 1;
-        v2 &= v1;
-        v2 /= v1;
-        v2 *= v1;
-        v1 += v2;
-        v1 -= v2;
-        assert_noexcept(v1 == 1);
-        assert_noexcept(v2 == 0);
-        if ((v1 ^ v2) != 1)
-            return false;
+        {
+            T all_bits = {}; // == zero
+            assert_noexcept(all_bits == 0);
+            assert_noexcept(!upx::has_single_bit(all_bits));
+            all_bits += 1;
+            assert_noexcept(upx::has_single_bit(all_bits));
+            all_bits -= 2;
+            assert_noexcept(!upx::has_single_bit(all_bits));
+            T v1;
+            v1 = 1;
+            v1 *= 4;
+            v1 /= 2;
+            v1 -= 1;
+            T v2;
+            v2 = 1;
+            assert_noexcept((v1 == v2));
+            assert_noexcept(!(v1 != v2));
+            assert_noexcept((v1 <= v2));
+            assert_noexcept((v1 >= v2));
+            assert_noexcept(!(v1 < v2));
+            assert_noexcept(!(v1 > v2));
+            v2 ^= all_bits;
+            assert_noexcept(!(v1 == v2));
+            assert_noexcept((v1 != v2));
+            assert_noexcept((v1 <= v2));
+            assert_noexcept(!(v1 >= v2));
+            assert_noexcept((v1 < v2));
+            assert_noexcept(!(v1 > v2));
+            v2 += 2;
+            assert_noexcept(v1 == 1);
+            assert_noexcept(v2 == 0);
+            v1 <<= 1;
+            v1 |= v2;
+            v1 >>= 1;
+            v2 &= v1;
+            v2 /= v1;
+            v2 *= v1;
+            v1 += v2;
+            v1 -= v2;
+            assert_noexcept(v1 == 1);
+            assert_noexcept(v2 == 0);
+            if ((v1 ^ v2) != 1)
+                return false;
+        }
+        // min/max
+        {
+            constexpr T a = {}; // == zero
+            typedef typename T::integral_conversion_type U;
+            constexpr U b = 1;
+            assert_noexcept(upx::min(a, a) == 0);
+            assert_noexcept(upx::min(a, a) == a);
+            assert_noexcept(upx::min(a, b) == 0);
+            assert_noexcept(upx::min(a, b) == a);
+            assert_noexcept(upx::min(b, a) == 0);
+            assert_noexcept(upx::min(b, a) == a);
+            assert_noexcept(upx::min(b, b) == 1);
+            assert_noexcept(upx::min(b, b) == b);
+            assert_noexcept(upx::max(a, a) == 0);
+            assert_noexcept(upx::max(a, a) == a);
+            assert_noexcept(upx::max(a, b) == 1);
+            assert_noexcept(upx::max(a, b) == b);
+            assert_noexcept(upx::max(b, a) == 1);
+            assert_noexcept(upx::max(b, a) == b);
+            assert_noexcept(upx::max(b, b) == 1);
+            assert_noexcept(upx::max(b, b) == b);
+            T minus_one_t = {}, minus_two_t = {};
+            minus_one_t -= 1;
+            minus_two_t -= 2;
+            const U minus_one_u = minus_one_t;
+            const U minus_two_u = minus_two_t;
+            assert_noexcept(upx::min(minus_one_t, minus_one_t) == minus_one_t);
+            assert_noexcept(upx::min(minus_one_t, minus_one_t) == minus_one_u);
+            assert_noexcept(upx::min(minus_one_u, minus_one_t) == minus_one_t);
+            assert_noexcept(upx::min(minus_one_u, minus_one_t) == minus_one_u);
+            assert_noexcept(upx::min(minus_one_t, minus_one_u) == minus_one_t);
+            assert_noexcept(upx::min(minus_one_t, minus_one_u) == minus_one_u);
+            assert_noexcept(upx::min(minus_two_t, minus_one_t) == minus_two_t);
+            assert_noexcept(upx::min(minus_two_t, minus_one_t) == minus_two_u);
+            assert_noexcept(upx::min(minus_two_u, minus_one_t) == minus_two_t);
+            assert_noexcept(upx::min(minus_two_u, minus_one_t) == minus_two_u);
+            assert_noexcept(upx::min(minus_two_t, minus_one_u) == minus_two_t);
+            assert_noexcept(upx::min(minus_two_t, minus_one_u) == minus_two_u);
+            assert_noexcept(upx::min(minus_one_t, minus_two_t) == minus_two_t);
+            assert_noexcept(upx::min(minus_one_t, minus_two_t) == minus_two_u);
+            assert_noexcept(upx::min(minus_one_u, minus_two_t) == minus_two_t);
+            assert_noexcept(upx::min(minus_one_u, minus_two_t) == minus_two_u);
+            assert_noexcept(upx::min(minus_one_t, minus_two_u) == minus_two_t);
+            assert_noexcept(upx::min(minus_one_t, minus_two_u) == minus_two_u);
+            assert_noexcept(upx::max(minus_one_t, minus_one_t) == minus_one_t);
+            assert_noexcept(upx::max(minus_one_t, minus_one_t) == minus_one_u);
+            assert_noexcept(upx::max(minus_one_u, minus_one_t) == minus_one_t);
+            assert_noexcept(upx::max(minus_one_u, minus_one_t) == minus_one_u);
+            assert_noexcept(upx::max(minus_one_t, minus_one_u) == minus_one_t);
+            assert_noexcept(upx::max(minus_one_t, minus_one_u) == minus_one_u);
+            assert_noexcept(upx::max(minus_two_t, minus_one_t) == minus_one_t);
+            assert_noexcept(upx::max(minus_two_t, minus_one_t) == minus_one_u);
+            assert_noexcept(upx::max(minus_two_u, minus_one_t) == minus_one_t);
+            assert_noexcept(upx::max(minus_two_u, minus_one_t) == minus_one_u);
+            assert_noexcept(upx::max(minus_two_t, minus_one_u) == minus_one_t);
+            assert_noexcept(upx::max(minus_two_t, minus_one_u) == minus_one_u);
+            assert_noexcept(upx::max(minus_one_t, minus_two_t) == minus_one_t);
+            assert_noexcept(upx::max(minus_one_t, minus_two_t) == minus_one_u);
+            assert_noexcept(upx::max(minus_one_u, minus_two_t) == minus_one_t);
+            assert_noexcept(upx::max(minus_one_u, minus_two_t) == minus_one_u);
+            assert_noexcept(upx::max(minus_one_t, minus_two_u) == minus_one_t);
+            assert_noexcept(upx::max(minus_one_t, minus_two_u) == minus_one_u);
+        }
+        // constexpr
+        {
+            constexpr T zero = {};
+            constexpr T zero_copy = T::make(zero);
+            assert_noexcept(zero_copy == 0);
+            assert_noexcept(!upx::has_single_bit(zero));
+#if defined(upx_is_constant_evaluated)
+            static_assert(zero_copy == 0);
+            static_assert(zero_copy == zero);
+            static_assert(!upx::has_single_bit(zero));
+            static_assert(!upx::has_single_bit(zero_copy));
+#endif
+        }
+#if defined(upx_is_constant_evaluated)
+        {
+            typedef typename T::integral_conversion_type U;
+            constexpr T one = T::make(1);
+            static_assert(one == 1);
+            static_assert(upx::has_single_bit(one));
+            constexpr T four = T::make(one + 3);
+            static_assert(four == 4);
+            static_assert(upx::has_single_bit(four));
+            constexpr U all_bits_u = (U) T::make(U(0) - U(1));
+            constexpr T all_bits = T::make(all_bits_u);
+            static_assert(all_bits == all_bits_u);
+            static_assert(all_bits == T::make(one - 2));
+            static_assert(!upx::has_single_bit(all_bits));
+            static_assert(one == one);
+            static_assert(!(one == four));
+            static_assert(!(one == all_bits));
+            static_assert(one < four);
+            static_assert(one < all_bits);
+            static_assert(upx::min(one, four) == 1);
+            static_assert(upx::min(one, four) == one);
+            static_assert(upx::min(U(1), four) == 1);
+            static_assert(upx::min(one, U(4)) == 1);
+            static_assert(upx::max(one, four) == 4);
+            static_assert(upx::max(one, four) == four);
+            static_assert(upx::max(U(1), four) == 4);
+            static_assert(upx::max(one, U(4)) == 4);
+            static_assert(upx::align_down(one, four) == 0);
+            static_assert(upx::align_up(one, four) == 4);
+            static_assert(upx::align_up(one, four) == four);
+            static_assert(upx::align_up_gap(one, four) == 3);
+            static_assert(upx::align_up_gap(one, four) == T::make(four - 1));
+            static_assert(upx::align_up_gap(one, four) == T::make(four - one));
+            static_assert(upx::align_up_gap(one, four) == T::make(four + one - one - one));
+            static_assert(upx::align_up_gap(one, four) == T::make(four + one - 2 * one));
+            static_assert(upx::align_down_gap(T::make(4), four) == 0);
+            static_assert(upx::align_down_gap(T::make(5), four) == 1);
+            static_assert(upx::align_down_gap(T::make(6), four) == 2);
+            static_assert(upx::align_down_gap(T::make(7), four) == 3);
+            static_assert(upx::align_down_gap(T::make(8), four) == 0);
+            constexpr T one_copy = T::make(one);
+            static_assert(one_copy == one);
+            static_assert(one_copy == 1);
+        }
+#endif
         return true;
     }
 };
 
+template <class T, bool T_is_signed>
+struct CheckSignedness {
+    static_assert(std::is_integral_v<T>);
+    static_assert(std::is_signed_v<T> == T_is_signed);
+    static_assert(std::is_unsigned_v<T> == !T_is_signed);
+    template <class U, bool U_is_signed>
+    static inline void checkU(void) noexcept {
+        static_assert(std::is_integral_v<U>);
+        static_assert(std::is_signed_v<U> == U_is_signed);
+        static_assert(std::is_unsigned_v<U> == !U_is_signed);
+        static_assert(sizeof(U) == sizeof(T));
+        static_assert(alignof(U) == alignof(T));
+        constexpr U all_bits = U(U(0) - U(1));
+        static_assert(all_bits == U(~U(0)));
+        static_assert(U_is_signed ? (all_bits < 0) : (all_bits > 0));
+    }
+    static void check(void) noexcept {
+        checkU<T, T_is_signed>();
+        using signed_type = std::make_signed_t<T>;
+        checkU<signed_type, true>();
+        using unsigned_type = std::make_unsigned_t<T>;
+        checkU<unsigned_type, false>();
+    }
+};
+
 template <class A, class B>
-struct TestNoAliasingStruct {
+struct CheckTypePair {
+    static_assert(std::is_integral_v<A>);
+    static_assert(std::is_integral_v<B>);
+    static_assert(std::is_signed_v<A>);
+    static_assert(!std::is_unsigned_v<A>);
+    static_assert(std::is_unsigned_v<B>);
+    static_assert(!std::is_signed_v<B>);
+    static_assert(std::is_same_v<A, std::make_signed_t<A> >);
+    static_assert(std::is_same_v<A, std::make_signed_t<B> >);
+    static_assert(std::is_same_v<B, std::make_unsigned_t<A> >);
+    static_assert(std::is_same_v<B, std::make_unsigned_t<B> >);
+    static_assert(sizeof(A) == sizeof(B));
+    static_assert(alignof(A) == alignof(B));
+    static inline void check(void) noexcept {}
+};
+
+template <class A, class B>
+struct TestNoAliasingStruct { // check working -fno-strict-aliasing
     static noinline bool test(A *a, B *b) noexcept {
         *a = 0;
         *b = 0;
@@ -319,10 +728,10 @@ static forceinline bool testNoAliasing(A *a, B *b) noexcept {
     return TestNoAliasingStruct<A, B>::test(a, b);
 }
 template <class T>
-struct TestIntegerWrap {
+struct TestIntegerWrap { // check working -fno-strict-overflow
     static inline bool inc_gt(const T x) noexcept { return x + 1 > x; }
     static inline bool dec_lt(const T x) noexcept { return x - 1 < x; }
-    static inline bool neg_eq(const T x) noexcept { return T(0) - x == x; }
+    static inline bool neg_eq(const T x) noexcept { return T(T(0) - x) == x; }
 };
 
 //
@@ -454,9 +863,9 @@ void upx_compiler_sanity_check(void) noexcept {
         auto a = +0;
         constexpr auto b = -0;
         const auto &c = -1;
-        COMPILE_TIME_ASSERT((std::is_same<int, decltype(a)>::value))
-        COMPILE_TIME_ASSERT((std::is_same<const int, decltype(b)>::value))
-        COMPILE_TIME_ASSERT((std::is_same<const int &, decltype(c)>::value))
+        static_assert((std::is_same<int, decltype(a)>::value));
+        static_assert((std::is_same<const int, decltype(b)>::value));
+        static_assert((std::is_same<const int &, decltype(c)>::value));
         UNUSED(a);
         UNUSED(b);
         UNUSED(c);
@@ -468,18 +877,33 @@ void upx_compiler_sanity_check(void) noexcept {
 #include "../util/miniacc.h"
 #undef ACCCHK_ASSERT
 
-    COMPILE_TIME_ASSERT(sizeof(char) == 1)
-    COMPILE_TIME_ASSERT(sizeof(short) == 2)
-    COMPILE_TIME_ASSERT(sizeof(int) == 4)
-    COMPILE_TIME_ASSERT(sizeof(long) >= 4)
-    COMPILE_TIME_ASSERT(sizeof(void *) >= 4)
+    static_assert(sizeof(char) == 1);
+    static_assert(sizeof(short) == 2);
+    static_assert(sizeof(int) == 4);
+    static_assert(sizeof(long) >= 4);
+    static_assert(sizeof(long long) >= 8);
+    static_assert(sizeof(void *) >= 4);
+    static_assert(sizeof(upx_off_t) >= 8);
+    static_assert(sizeof(upx_off_t) >= sizeof(long long));
 
-    COMPILE_TIME_ASSERT(sizeof(BE16) == 2)
-    COMPILE_TIME_ASSERT(sizeof(BE32) == 4)
-    COMPILE_TIME_ASSERT(sizeof(BE64) == 8)
-    COMPILE_TIME_ASSERT(sizeof(LE16) == 2)
-    COMPILE_TIME_ASSERT(sizeof(LE32) == 4)
-    COMPILE_TIME_ASSERT(sizeof(LE64) == 8)
+// __int64
+#if defined(_MSC_VER)
+    {
+        ASSERT_SAME_TYPE(long long, __int64);
+        ASSERT_SAME_TYPE(unsigned long long, unsigned __int64);
+        typedef __int64 my_int64;
+        typedef unsigned __int64 my_uint64;
+        ASSERT_SAME_TYPE(long long, my_int64);
+        ASSERT_SAME_TYPE(unsigned long long, my_uint64);
+    }
+#endif
+
+    static_assert(sizeof(BE16) == 2);
+    static_assert(sizeof(BE32) == 4);
+    static_assert(sizeof(BE64) == 8);
+    static_assert(sizeof(LE16) == 2);
+    static_assert(sizeof(LE32) == 4);
+    static_assert(sizeof(LE64) == 8);
 
     COMPILE_TIME_ASSERT_ALIGNED1(BE16)
     COMPILE_TIME_ASSERT_ALIGNED1(BE32)
@@ -488,21 +912,166 @@ void upx_compiler_sanity_check(void) noexcept {
     COMPILE_TIME_ASSERT_ALIGNED1(LE32)
     COMPILE_TIME_ASSERT_ALIGNED1(LE64)
 
+    // check that these types are not some multi-word macro
+#define CHECK_TYPE(T) (void) (T())
+    CHECK_TYPE(int8_t);
+    CHECK_TYPE(uint8_t);
+    CHECK_TYPE(int16_t);
+    CHECK_TYPE(uint16_t);
+    CHECK_TYPE(int32_t);
+    CHECK_TYPE(uint32_t);
+    CHECK_TYPE(int64_t);
+    CHECK_TYPE(uint64_t);
+    CHECK_TYPE(intmax_t);
+    CHECK_TYPE(uintmax_t);
+    CHECK_TYPE(ptrdiff_t);
+    CHECK_TYPE(size_t);
+    CHECK_TYPE(intptr_t);
+    CHECK_TYPE(uintptr_t);
+#if 0
+    CHECK_TYPE(acc_int8_t);
+    CHECK_TYPE(acc_uint8_t);
+    CHECK_TYPE(acc_int16_t);
+    CHECK_TYPE(acc_uint16_t);
+    CHECK_TYPE(acc_int32_t);
+    CHECK_TYPE(acc_uint32_t);
+    CHECK_TYPE(acc_int64_t);
+    CHECK_TYPE(acc_uint64_t);
+    CHECK_TYPE(acc_intptr_t);
+    CHECK_TYPE(acc_uintptr_t);
+#endif
+    CHECK_TYPE(upx_int8_t);
+    CHECK_TYPE(upx_uint8_t);
+    CHECK_TYPE(upx_int16_t);
+    CHECK_TYPE(upx_uint16_t);
+    CHECK_TYPE(upx_int32_t);
+    CHECK_TYPE(upx_uint32_t);
+    CHECK_TYPE(upx_int64_t);
+    CHECK_TYPE(upx_uint64_t);
+#if (__SIZEOF_INT128__ == 16)
+    CHECK_TYPE(upx_int128_t);
+    CHECK_TYPE(upx_uint128_t);
+#endif
+    CHECK_TYPE(upx_ptraddr_t);
+    CHECK_TYPE(upx_uintptr_t);
+    CHECK_TYPE(upx_uptrdiff_t);
+    CHECK_TYPE(upx_ssize_t);
+#undef CHECK_TYPE
+
     CheckIntegral<char>::check();
     CheckIntegral<signed char>::check();
     CheckIntegral<unsigned char>::check();
     CheckIntegral<short>::check();
+    CheckIntegral<unsigned short>::check();
     CheckIntegral<int>::check();
+    CheckIntegral<unsigned>::check();
     CheckIntegral<long>::check();
+    CheckIntegral<unsigned long>::check();
     CheckIntegral<long long>::check();
+    CheckIntegral<unsigned long long>::check();
+    CheckIntegral<intmax_t>::check();
+    CheckIntegral<uintmax_t>::check();
+    CheckIntegral<upx_int8_t>::check();
+    CheckIntegral<upx_uint8_t>::check();
+    CheckIntegral<upx_int16_t>::check();
+    CheckIntegral<upx_uint16_t>::check();
+    CheckIntegral<upx_int32_t>::check();
+    CheckIntegral<upx_uint32_t>::check();
+    CheckIntegral<upx_int64_t>::check();
+    CheckIntegral<upx_uint64_t>::check();
+    CheckIntegral<upx_off_t>::check();
     CheckIntegral<ptrdiff_t>::check();
     CheckIntegral<size_t>::check();
-    CheckIntegral<upx_off_t>::check();
+    CheckIntegral<upx_ptraddr_t>::check();
+#if defined(__CHERI__) && defined(__CHERI_PURE_CAPABILITY__)
+    static_assert(sizeof(upx_ptraddr_t) == 8);
+    static_assert(alignof(upx_ptraddr_t) == 8);
+    static_assert(sizeof(void *) == 16);
+    static_assert(alignof(void *) == 16);
+    static_assert(sizeof(uintptr_t) == 16);
+    static_assert(alignof(uintptr_t) == 16);
+    // warning: binary expression on capability types 'unsigned __intcap' and 'unsigned __intcap'
+    CheckIntegral<intptr_t>::check_core();
+    CheckIntegral<uintptr_t>::check_core();
+    CheckIntegral<upx_uintptr_t>::check_core();
+#else
+    CheckIntegral<intptr_t>::check();
+    CheckIntegral<uintptr_t>::check();
     CheckIntegral<upx_uintptr_t>::check();
+#endif
+#if (__SIZEOF_INT128__ == 16)
+#if defined(_CPP_VER) || defined(_WIN32) // int128 is not fully supported by MSVC libstdc++ yet
+#else
+    CheckIntegral<upx_int128_t>::check();
+    CheckIntegral<upx_uint128_t>::check();
+#endif
+#endif
 
-    COMPILE_TIME_ASSERT(sizeof(upx_charptr_unit_type) == 1)
+    CheckSignedness<char, false>::check(); // -funsigned-char
+    CheckSignedness<signed char, true>::check();
+    CheckSignedness<unsigned char, false>::check();
+    CheckSignedness<short, true>::check();
+    CheckSignedness<unsigned short, false>::check();
+    CheckSignedness<int, true>::check();
+    CheckSignedness<unsigned, false>::check();
+    CheckSignedness<long, true>::check();
+    CheckSignedness<unsigned long, false>::check();
+    CheckSignedness<long long, true>::check();
+    CheckSignedness<unsigned long long, false>::check();
+    CheckSignedness<intmax_t, true>::check();
+    CheckSignedness<uintmax_t, false>::check();
+    CheckSignedness<upx_int8_t, true>::check();
+    CheckSignedness<upx_uint8_t, false>::check();
+    CheckSignedness<upx_int16_t, true>::check();
+    CheckSignedness<upx_uint16_t, false>::check();
+    CheckSignedness<upx_int32_t, true>::check();
+    CheckSignedness<upx_uint32_t, false>::check();
+    CheckSignedness<upx_int64_t, true>::check();
+    CheckSignedness<upx_uint64_t, false>::check();
+#if (__SIZEOF_INT128__ == 16)
+#if defined(_CPP_VER) || defined(_WIN32) // int128 is not fully supported by MSVC libstdc++ yet
+#else
+    CheckSignedness<upx_int128_t, true>::check();
+    CheckSignedness<upx_uint128_t, false>::check();
+#endif
+#endif
+    CheckSignedness<upx_off_t, true>::check();
+    CheckSignedness<ptrdiff_t, true>::check();
+    CheckSignedness<size_t, false>::check();
+    CheckSignedness<upx_ptraddr_t, false>::check();
+    CheckSignedness<intptr_t, true>::check();
+    CheckSignedness<uintptr_t, false>::check();
+    CheckSignedness<upx_uintptr_t, false>::check();
+
+#define CHECK_TYPE_PAIR(A, B)                                                                      \
+    CheckTypePair<A, B>::check();                                                                  \
+    static_assert(alignof(A) == alignof(B))
+    CHECK_TYPE_PAIR(signed char, unsigned char);
+    CHECK_TYPE_PAIR(short, unsigned short);
+    CHECK_TYPE_PAIR(int, unsigned);
+    CHECK_TYPE_PAIR(long, unsigned long);
+    CHECK_TYPE_PAIR(long long, unsigned long long);
+    CHECK_TYPE_PAIR(intmax_t, uintmax_t);
+    CHECK_TYPE_PAIR(upx_int8_t, upx_uint8_t);
+    CHECK_TYPE_PAIR(upx_int16_t, upx_uint16_t);
+    CHECK_TYPE_PAIR(upx_int32_t, upx_uint32_t);
+    CHECK_TYPE_PAIR(upx_int64_t, upx_uint64_t);
+#if (__SIZEOF_INT128__ == 16)
+#if defined(_CPP_VER) || defined(_WIN32) // int128 is not fully supported by MSVC libstdc++ yet
+#else
+    CHECK_TYPE_PAIR(upx_int128_t, upx_uint128_t);
+#endif
+#endif
+    CHECK_TYPE_PAIR(ptrdiff_t, upx_uptrdiff_t);
+    CHECK_TYPE_PAIR(upx_ssize_t, size_t);
+    CHECK_TYPE_PAIR(upx_sptraddr_t, upx_ptraddr_t);
+    CHECK_TYPE_PAIR(intptr_t, uintptr_t);
+    CHECK_TYPE_PAIR(acc_intptr_t, acc_uintptr_t);
+#undef CHECK_TYPE_PAIR
+
+    static_assert(sizeof(upx_charptr_unit_type) == 1);
     COMPILE_TIME_ASSERT_ALIGNED1(upx_charptr_unit_type)
-    COMPILE_TIME_ASSERT(sizeof(*((charptr) nullptr)) == 1)
+    static_assert(sizeof(*((charptr) nullptr)) == 1);
 
     // check UPX_VERSION_xxx
     {
@@ -544,12 +1113,23 @@ void upx_compiler_sanity_check(void) noexcept {
     assert_noexcept(TestBELE<BE32>::test());
     assert_noexcept(TestBELE<BE64>::test());
     {
-        alignas(16) static const byte dd[32] = {
+        alignas(16) static constexpr byte dd[32] = {
             0, 0, 0, 0,    0,    0,    0,    0xff, 0xfe, 0xfd, 0xfc, 0xfb, 0xfa, 0xf9, 0xf8, 0,
             0, 0, 0, 0x7f, 0x7e, 0x7d, 0x7c, 0x7b, 0x7a, 0x79, 0x78, 0,    0,    0,    0,    0};
-        const byte *d;
+        constexpr const byte *d = dd + 7;
+#if !defined(upx_fake_alignas_16)
+        assert_noexcept(ptr_is_aligned<16>(dd));
+        assert_noexcept(ptr_is_aligned(dd, 16));
+#endif
+        static_assert(upx::compile_time::get_be16(d) == 0xfffe);
+        static_assert(upx::compile_time::get_be24(d) == 0xfffefd);
+        static_assert(upx::compile_time::get_be32(d) == 0xfffefdfc);
+        static_assert(upx::compile_time::get_be64(d) == 0xfffefdfcfbfaf9f8ULL);
+        static_assert(upx::compile_time::get_le16(d) == 0xfeff);
+        static_assert(upx::compile_time::get_le24(d) == 0xfdfeff);
+        static_assert(upx::compile_time::get_le32(d) == 0xfcfdfeff);
+        static_assert(upx::compile_time::get_le64(d) == 0xf8f9fafbfcfdfeffULL);
         const N_BELE_RTP::AbstractPolicy *bele;
-        d = dd + 7;
         assert_noexcept(upx_adler32(d, 4) == 0x09f003f7);
         assert_noexcept(upx_adler32(d, 4, 0) == 0x09ec03f6);
         assert_noexcept(upx_adler32(d, 4, 1) == 0x09f003f7);
@@ -563,6 +1143,8 @@ void upx_compiler_sanity_check(void) noexcept {
         assert_noexcept(get_be32(d) == 0xfffefdfc);
         assert_noexcept(bele->get32(d) == 0xfffefdfc);
         assert_noexcept(get_be32_signed(d) == -66052);
+        assert_noexcept(get_be64(d) == 0xfffefdfcfbfaf9f8ULL);
+        assert_noexcept(get_be64_signed(d) == -283686952306184LL);
         bele = &N_BELE_RTP::le_policy;
         assert_noexcept(get_le16(d) == 0xfeff);
         assert_noexcept(bele->get16(d) == 0xfeff);
@@ -573,17 +1155,68 @@ void upx_compiler_sanity_check(void) noexcept {
         assert_noexcept(get_le32(d) == 0xfcfdfeff);
         assert_noexcept(bele->get32(d) == 0xfcfdfeff);
         assert_noexcept(get_le32_signed(d) == -50462977);
+        assert_noexcept(get_le64(d) == 0xf8f9fafbfcfdfeffULL);
         assert_noexcept(get_le64_signed(d) == -506097522914230529LL);
+        static_assert(get_be24(d) == 0xfffefd);
+        static_assert(get_le24(d) == 0xfdfeff);
+#if defined(upx_is_constant_evaluated)
+        static_assert(get_be24_signed(d) == -259);
+        static_assert(get_le24_signed(d) == -131329);
+        static_assert(get_be16(d) == 0xfffe);
+        static_assert(get_be16_signed(d) == -2);
+        static_assert(get_be32(d) == 0xfffefdfc);
+        static_assert(get_be32_signed(d) == -66052);
+        static_assert(get_be64(d) == 0xfffefdfcfbfaf9f8ULL);
+        static_assert(get_be64_signed(d) == -283686952306184LL);
+        static_assert(get_le16(d) == 0xfeff);
+        static_assert(get_le16_signed(d) == -257);
+        static_assert(get_le32(d) == 0xfcfdfeff);
+        static_assert(get_le32_signed(d) == -50462977);
+        static_assert(get_le64(d) == 0xf8f9fafbfcfdfeffULL);
+        static_assert(get_le64_signed(d) == -506097522914230529LL);
+#endif
         assert_noexcept(find_be16(d, 2, 0xfffe) == 0);
         assert_noexcept(find_le16(d, 2, 0xfeff) == 0);
         assert_noexcept(find_be32(d, 4, 0xfffefdfc) == 0);
         assert_noexcept(find_le32(d, 4, 0xfcfdfeff) == 0);
-        d += 12;
-        assert_noexcept(get_be16_signed(d) == 32638);
-        assert_noexcept(get_be24_signed(d) == 8355453);
-        assert_noexcept(get_be32_signed(d) == 2138996092);
-        assert_noexcept(get_be64_signed(d) == 9186918263483431288LL);
+        constexpr const byte *e = d + 12;
+        assert_noexcept(get_be16_signed(e) == 32638);
+        assert_noexcept(get_be24_signed(e) == 8355453);
+        assert_noexcept(get_be32_signed(e) == 2138996092);
+        assert_noexcept(get_be64_signed(e) == 9186918263483431288LL);
+#if defined(upx_is_constant_evaluated)
+        static_assert(get_be16_signed(e) == 32638);
+        static_assert(get_be24_signed(e) == 8355453);
+        static_assert(get_be32_signed(e) == 2138996092);
+        static_assert(get_be64_signed(e) == 9186918263483431288LL);
+#endif
     }
+#if defined(upx_is_constant_evaluated)
+    {
+        constexpr upx_uint16_t v16 = 0x0201;
+        constexpr upx_uint32_t v32 = 0x04030201;
+        constexpr upx_uint64_t v64 = 0x0807060504030201ull;
+        constexpr BE16 be16 = BE16::make(v16);
+        constexpr BE32 be32 = BE32::make(v32);
+        constexpr BE64 be64 = BE64::make(v64);
+        constexpr LE16 le16 = LE16::make(v16);
+        constexpr LE32 le32 = LE32::make(v32);
+        constexpr LE64 le64 = LE64::make(v64);
+        using upx::compile_time::mem_eq;
+        static_assert(mem_eq(be16.d, "\x02\x01", 2));
+        static_assert(mem_eq(be32.d, "\x04\x03\x02\x01", 4));
+        static_assert(mem_eq(be64.d, "\x08\x07\x06\x05\x04\x03\x02\x01", 8));
+        static_assert(mem_eq(le16.d, "\x01\x02", 2));
+        static_assert(mem_eq(le32.d, "\x01\x02\x03\x04", 4));
+        static_assert(mem_eq(le64.d, "\x01\x02\x03\x04\x05\x06\x07\x08", 8));
+        constexpr NE16 ne16 = NE16::make(v16);
+        constexpr NE32 ne32 = NE32::make(v32);
+        constexpr NE64 ne64 = NE64::make(v64);
+        assert_noexcept(memcmp(&v16, ne16.d, 2) == 0);
+        assert_noexcept(memcmp(&v32, ne32.d, 4) == 0);
+        assert_noexcept(memcmp(&v64, ne64.d, 8) == 0);
+    }
+#endif
 #if DEBUG >= 1
     {
         for (int i = 0; i < 256; i++) {
@@ -611,7 +1244,7 @@ void upx_compiler_sanity_check(void) noexcept {
                 assert_noexcept(sign_extend(u, 7) == ((i & 64) ? -64 + (i & 63) : (i & 63)));
                 assert_noexcept(sign_extend(u, 8) == ((i & 128) ? -128 + (i & 127) : (i & 127)));
                 assert_noexcept(sign_extend(u, 64) == i);
-                assert_noexcept(sign_extend(0ull - u, 64) == -i);
+                assert_noexcept(sign_extend(upx_uint64_t(0) - u, 64) == -i);
             }
         }
     }
@@ -778,7 +1411,7 @@ TEST_CASE("libc snprintf") {
     // runtime check that Windows/MinGW <stdio.h> works as expected
     char buf[64];
     long long ll = acc_vget_int(-1, 0);
-    unsigned long long llu = (unsigned long long) ll;
+    unsigned long long llu = (upx_uint64_t) (upx_int64_t) ll;
     snprintf(buf, sizeof(buf), "%d.%ld.%lld.%u.%lu.%llu", -3, -2L, ll, 3U, 2LU, llu);
     CHECK_EQ(strcmp(buf, "-3.-2.-1.3.2.18446744073709551615"), 0);
     intmax_t im = ll;
@@ -815,7 +1448,7 @@ TEST_CASE("libc qsort") {
             const Elem *a = (const Elem *) aa;
             const Elem *b = (const Elem *) bb;
             assert_noexcept(a->id != b->id); // check not IDENTICAL
-            return a->value < b->value ? -1 : (a->value == b->value ? 0 : 1);
+            return a->value == b->value ? 0 : (a->value < b->value ? -1 : 1);
         }
         static noinline bool check_sort(upx_sort_func_t sort, Elem *e, size_t n, bool is_stable) {
             upx_uint32_t x = 5381 + (upx_rand() & 255);

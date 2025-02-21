@@ -2,7 +2,7 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2024 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -30,11 +30,9 @@
 
 #if (ACC_CC_CLANG)
 #pragma clang diagnostic ignored "-Wshadow"
-#endif
-#if (ACC_CC_GNUC >= 0x040200)
+#elif (ACC_CC_GNUC >= 0x040200)
 #pragma GCC diagnostic ignored "-Wshadow"
-#endif
-#if (ACC_CC_MSC)
+#elif (ACC_CC_MSC)
 #pragma warning(disable : 4456) // -Wno-shadow
 #endif
 
@@ -50,41 +48,15 @@ void lzma_compress_config_t::reset() noexcept {
     max_num_probs = 0;
 }
 
-// INFO: the LZMA SDK is covered by a permissive license which allows
-//   using unmodified LZMA source code in UPX and the UPX stubs.
-//   See SPECIAL EXCEPTION below.
+// INFO: LZMA SDK is placed in the public domain.
 //
-// Quoting from lzma-4.43/lzma.txt:
+// Anyone is free to copy, modify, publish, use, compile, sell, or
+// distribute the original LZMA SDK code, either in source code form
+// or as a compiled binary, for any purpose, commercial or non-commercial,
+// and by any means.
 //
-//   LICENSE
-//   -------
-//
-//   LZMA SDK is available under any of the following licenses:
-//
-//   1) GNU Lesser General Public License (GNU LGPL)
-//   2) Common Public License (CPL)
-//   3) Simplified license for unmodified code (read SPECIAL EXCEPTION)
-//   4) Proprietary license
-//
-//   It means that you can select one of these four options and follow rules
-//   of that license.
-//
-//   1,2) GNU LGPL and CPL licenses are pretty similar and both these
-//   licenses are classified as
-//    - "Free software licenses" at http://www.gnu.org/
-//    - "OSI-approved" at http://www.opensource.org/
-//
-//   3) SPECIAL EXCEPTION
-//
-//   Igor Pavlov, as the author of this code, expressly permits you
-//   to statically or dynamically link your code (or bind by name)
-//   to the files from LZMA SDK without subjecting your linked
-//   code to the terms of the CPL or GNU LGPL.
-//   Any modifications or additions to files from LZMA SDK, however,
-//   are subject to the GNU LGPL or CPL terms.
-//
-//   SPECIAL EXCEPTION allows you to use LZMA SDK in applications with closed code,
-//   while you keep LZMA SDK code unmodified.
+// https://www.7-zip.org/sdk.html
+// https://sourceforge.net/p/sevenzip/discussion/45797/thread/685169cf/
 
 /*************************************************************************
 // compress defaults
@@ -155,11 +127,11 @@ static bool prepare_result(lzma_compress_result_t *res, unsigned src_len, int me
 
     // cconf overrides
     if (lcconf) {
-        oassign(res->pos_bits, lcconf->pos_bits);
-        oassign(res->lit_pos_bits, lcconf->lit_pos_bits);
-        oassign(res->lit_context_bits, lcconf->lit_context_bits);
-        oassign(res->dict_size, lcconf->dict_size);
-        oassign(res->num_fast_bytes, lcconf->num_fast_bytes);
+        upx::oassign(res->pos_bits, lcconf->pos_bits);
+        upx::oassign(res->lit_pos_bits, lcconf->lit_pos_bits);
+        upx::oassign(res->lit_context_bits, lcconf->lit_context_bits);
+        upx::oassign(res->dict_size, lcconf->dict_size);
+        upx::oassign(res->num_fast_bytes, lcconf->num_fast_bytes);
     }
 
     // limit dictionary size

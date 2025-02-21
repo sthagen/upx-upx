@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2024 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2024 Laszlo Molnar
+   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2025 Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -93,6 +93,32 @@ T *NewArray(upx_uint64_t n) may_throw {
 // ptr util
 **************************************************************************/
 
+#if defined(__CHERI__) && defined(__CHERI_PURE_CAPABILITY__)
+forceinline upx_ptraddr_t ptr_get_address(const void *p) noexcept {
+    return __builtin_cheri_address_get(p);
+}
+forceinline upx_ptraddr_t ptr_get_address(upx_uintptr_t p) noexcept {
+    return __builtin_cheri_address_get(p);
+}
+#else
+forceinline upx_ptraddr_t ptr_get_address(const void *p) noexcept { return (upx_uintptr_t) p; }
+forceinline upx_ptraddr_t ptr_get_address(upx_uintptr_t p) noexcept { return p; }
+#endif
+
+forceinline upx_sptraddr_t ptraddr_diff(const void *a, const void *b) noexcept {
+    return ptr_get_address(a) - ptr_get_address(b);
+}
+
+template <size_t Alignment>
+forceinline bool ptr_is_aligned(const void *p) noexcept {
+    static_assert(upx::has_single_bit(Alignment));
+    return (ptr_get_address(p) & (Alignment - 1)) == 0;
+}
+forceinline bool ptr_is_aligned(const void *p, size_t alignment) noexcept {
+    assert_noexcept(upx::has_single_bit(alignment));
+    return (ptr_get_address(p) & (alignment - 1)) == 0;
+}
+
 // ptrdiff_t with nullptr checks and asserted size; will throw on failure
 // NOTE: returns size_in_bytes, not number of elements!
 int ptr_diff_bytes(const void *a, const void *b) may_throw;
@@ -112,19 +138,19 @@ ptr_udiff(const T *a, const U *b) may_throw {
 }
 
 // check that buffers do not overlap; will throw on error
-noinline void uintptr_check_no_overlap(upx_uintptr_t a, size_t a_size, upx_uintptr_t b,
+noinline void ptraddr_check_no_overlap(upx_ptraddr_t a, size_t a_size, upx_ptraddr_t b,
                                        size_t b_size) may_throw;
-noinline void uintptr_check_no_overlap(upx_uintptr_t a, size_t a_size, upx_uintptr_t b,
-                                       size_t b_size, upx_uintptr_t c, size_t c_size) may_throw;
+noinline void ptraddr_check_no_overlap(upx_ptraddr_t a, size_t a_size, upx_ptraddr_t b,
+                                       size_t b_size, upx_ptraddr_t c, size_t c_size) may_throw;
 
 forceinline void ptr_check_no_overlap(const void *a, size_t a_size, const void *b, size_t b_size)
     may_throw {
-    uintptr_check_no_overlap((upx_uintptr_t) a, a_size, (upx_uintptr_t) b, b_size);
+    ptraddr_check_no_overlap(ptr_get_address(a), a_size, ptr_get_address(b), b_size);
 }
 forceinline void ptr_check_no_overlap(const void *a, size_t a_size, const void *b, size_t b_size,
                                       const void *c, size_t c_size) may_throw {
-    uintptr_check_no_overlap((upx_uintptr_t) a, a_size, (upx_uintptr_t) b, b_size,
-                             (upx_uintptr_t) c, c_size);
+    ptraddr_check_no_overlap(ptr_get_address(a), a_size, ptr_get_address(b), b_size,
+                             ptr_get_address(c), c_size);
 }
 
 // invalidate and poison a pointer: point to a non-null invalid address
@@ -136,7 +162,13 @@ forceinline void ptr_check_no_overlap(const void *a, size_t a_size, const void *
 //   architectures may need a more advanced/costly implementation in the future
 template <class T>
 inline void ptr_invalidate_and_poison(T *(&ptr)) noexcept {
-    ptr = (T *) (void *) 251; // 0x000000fb // NOLINT(performance-no-int-to-ptr)
+#if defined(__CHERI__) && defined(__CHERI_PURE_CAPABILITY__)
+    // TODO later: examine __builtin_cheri_bounds_set()
+    ptr = upx::ptr_static_cast<T *>(&ptr); // FIXME: HACK: point to address of self
+#else
+    // pretend there is some memory-mapped I/O at address 0x00000200
+    ptr = (T *) (void *) 512; // NOLINT(performance-no-int-to-ptr)
+#endif
 }
 
 /*************************************************************************
@@ -147,7 +179,7 @@ noinline void *upx_calloc(size_t n, size_t element_size) may_throw;
 
 noinline const char *upx_getenv(const char *envvar) noexcept;
 
-void upx_memswap(void *a, void *b, size_t bytes) noexcept;
+noinline void upx_memswap(void *a, void *b, size_t bytes) noexcept;
 
 noinline void upx_rand_init(void) noexcept;
 noinline int upx_rand(void) noexcept;
@@ -169,7 +201,7 @@ void upx_std_stable_sort(void *array, size_t n, upx_compare_func_t compare);
 #define upx_qsort(a, n, element_size, compare)                                                     \
     upx_std_stable_sort<(element_size)>((a), (n), (compare))
 #else
-// use libc qsort(); good enough for our use cases
+                              // use libc qsort(); good enough for our use cases
 #define upx_qsort ::qsort
 #endif
 

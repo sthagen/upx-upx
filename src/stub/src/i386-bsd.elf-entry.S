@@ -3,9 +3,9 @@
 ;
 ;  This file is part of the UPX executable compressor.
 ;
-;  Copyright (C) 1996-2024 Markus Franz Xaver Johannes Oberhumer
-;  Copyright (C) 1996-2024 Laszlo Molnar
-;  Copyright (C) 2000-2024 John F. Reiser
+;  Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
+;  Copyright (C) 1996-2025 Laszlo Molnar
+;  Copyright (C) 2000-2025 John F. Reiser
 ;  All Rights Reserved.
 ;
 ;  UPX and the UCL library are free software; you can redistribute them
@@ -168,7 +168,7 @@ die:
 // Decompress the rest of this loader, and jump to it
 unfold:
         pop esi  // &{ .long O_BINFO; b_info:{sz_unc, sz_cpr, 4{byte}}, compressed_data...}
-        lodsd; push eax  // O_BINFO
+        lodsd; and eax,~3; push eax  // O_BINFO
 
         lea eax, [ebp - (4+ decompress - _start)]  // 4: sizeof(int)
         sub eax, [eax]  // %eax= &Elf32_Ehdr of this program

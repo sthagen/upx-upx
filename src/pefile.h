@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2024 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2024 Laszlo Molnar
+   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2025 Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -371,7 +371,7 @@ protected:
         IMAGE_REL_BASED_DIR64 = 10,
     };
 
-    class Interval final : private noncopyable {
+    class Interval final : private upx::noncopyable {
         SPAN_0(byte) base = nullptr;
         unsigned ivcapacity = 0; // for ivarr
     public:
@@ -397,7 +397,7 @@ protected:
         static int __acc_cdecl_qsort compare(const void *p1, const void *p2);
     };
 
-    class Reloc final : private noncopyable {
+    class Reloc final : private upx::noncopyable {
         // these are set in the constructor:
         byte *start = nullptr;
         unsigned start_size_in_bytes = 0;
@@ -433,7 +433,7 @@ protected:
         void finish(byte *(&result_ptr), unsigned &result_size); // => transfer ownership
     };
 
-    class Resource final : private noncopyable {
+    class Resource final : private upx::noncopyable {
         struct res_dir_entry;
         struct res_dir;
         struct res_data;
@@ -489,7 +489,7 @@ protected:
          */
     };
 
-    class Export final : private noncopyable {
+    class Export final : private upx::noncopyable {
         struct alignas(1) export_dir_t {
             byte _[12]; // flags, timedate, version
             LE32 name;

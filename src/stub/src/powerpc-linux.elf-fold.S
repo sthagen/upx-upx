@@ -2,9 +2,9 @@
 *
 *  This file is part of the UPX executable compressor.
 *
-*  Copyright (C) 1996-2024 Markus Franz Xaver Johannes Oberhumer
-*  Copyright (C) 1996-2024 Laszlo Molnar
-*  Copyright (C) 2000-2024 John F. Reiser
+*  Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
+*  Copyright (C) 1996-2025 Laszlo Molnar
+*  Copyright (C) 2000-2025 John F. Reiser
 *  All Rights Reserved.
 *
 *  UPX and the UCL library are free software; you can redistribute them
@@ -30,6 +30,7 @@
 */
 
 NBPW= 4  // Number of Bytes Per Word
+AL_STK= 0x10  // stack alignment
 #include "arch/powerpc/32/macros.S"
 #include "arch/powerpc/32/ppc_regs.h"
 
@@ -60,115 +61,164 @@ SZ_FRAME= SZ_LINKA
 
 // In:
 r_exp=   31  // f_exp == &decompress
-r_PMASK= 30  // PAGE_MASK
+  r_buf= 30
 r_ADRU=  29  // &base to unmap
 r_LENU=  28  // length to unmap
 r_fd=    27  // open fd of /proc/self/exe
 r_auxv=  26
-r_elf=   25  // original &Elf32_Ehdr of stub
+r_elfa=  25  // original &Elf32_Ehdr of stub
 r_ADRX=  24  // compressed input
 r_LENX=  23  // total size
+r_FLD=   22
 // Local:
-r_unf=   22  // f_unf == &unfilter()
-av_hi=   21
-av_len=  20
-cblk=    19
-r_buf=   18
+cblk=    21
+  r_90b=   r_FLD
+r_PMASK= 20  // (in) PAGE_MASK
+av_hi=   19
+av_len=  18
 
 page_mask:
         .int -0x1000  // default page mask (4KiB)
+        .int 0  // something else?
+        b fold_begin
+
         .balign 4
 get_page_mask: .globl get_page_mask
-        mflr t1  // retaddr
-        call L60  // for PC-relative addressing
-L60:
-        mflr r3  // L60
-        mtlr t1  // original retaddr
-        lwz r3,page_mask - L60(r3)
+        mflr r0  // retaddr
+        call 0f; 0: mflr a0
+        mtlr r0  // original retaddr
+        lwz a0,page_mask - 0b(a0)
         blr
-        nop  // pad to known 8-word block
+
+Pprotect: .globl Pprotect
+        mflr r0; bl 0f; 0: mflr r6; mtlr r0; lwz r0,page_mask - 0b(r6)
+        andc r0,a0,r0  // offset within page
+        sub a0,a0,r0
+        add a1,a1,r0
+        b mprotect
+
+Psync: .globl Psync
+        mflr r0; bl 0f; 0: mflr r6; mtlr r0; lwz r0,page_mask - 0b(r6)
+        andc r0,a0,r0  // offset within page
+        sub a0,a0,r0
+        add a1,a1,r0
+        b msync
+
+Pmap: .globl Pmap
+        mflr r0; bl 0f; 0: mflr r6; mtlr r0; lwz r0,page_mask - 0b(r6)
+        andc r0,a0,r0  // offset within page
+        sub a0,a0,r0
+        add a1,a1,r0
+        b mmap
+
+Punmap: .globl Punmap
+        mflr r0; bl 0f; 0: mflr r6; mtlr r0; lwz r0,page_mask - 0b(r6)
+        andc r0,a0,r0  // offset within page
+        sub a0,a0,r0
+        add a1,a1,r0
+        b munmap
 
 fold_begin:
+        mtctr r0  // # words before argc  FIXME: fragile
+        lwz r0,0(r_FLD)  // O_BINFO | is_ptinterp | unmap_all_pages
+        slwi r0,r0,3*4
+        mtcrf 0x8,r0  // cr4.eq = unmap_all_pages
         call L90
 L90b:
-#include "arch/powerpc/32/bxx.S"
-L90a:
-L_PFX= 4  // strlen("   =")
         .asciz "   =/proc/self/exe"
+L_PFX= 4  // strlen("   =")
         .balign 4
 L90:
-        mflr r_unf  // L90b = &ppcbxx: f_unfilter
+        mflr r_90b
 // slide {<<stuff>>,argc,argv,0,env,0,auxv} down with maximum room before strings
         la a1,-NBPW(sp)  // src ready for lwzu
-        la sp,-(-NBPW & (-1+ NBPW + (L_PFX + PATH_MAX)))(sp)
+    beq cr4,0f; la sp,-(-AL_STK & (-1+ AL_STK + (NBPW + L_PFX + PATH_MAX)))(sp); 0:
         la a0,-NBPW(sp)  // dst ready for stwu
-        la r_auxv,-NBPW(r_auxv)  // &end ready for lwzu
-0: // copy upto auxv
-        lwzu r0,NBPW(a1); cmplw cr7,a1,r_auxv
-        stwu r0,NBPW(a0); blt cr7,0b
-        la  r_auxv,2*NBPW(a0)  // new &auxv
-        stwu r0,NBPW(a0)  // new  env_terminator
+0: // copy stuff below argc (count in r0 at fold_begin)
+        lwzu r0,NBPW(a1)
+        stwu r0,NBPW(a0); bdnz 0b
+
+        lwzu r0,NBPW(a1)  // argc (could be zero!)
+        stwu r0,NBPW(a0)
+0: // copy argv
+        lwzu r0,NBPW(a1); cmplwi cr0,r0,0
+        stwu r0,NBPW(a0); bne cr0,0b
+0: // copy env
+        lwzu r0,NBPW(a1); cmplwi cr0,r0,0
+        stwu r0,NBPW(a0); bne cr0,0b
+
+        la r_auxv,NBPW(a0)
 0: // copy auxv
-        lwz  r0,NBPW(a1); cmplwi cr7,r0,AT_NULL
+        lwz  r0,NBPW(a1); cmplwi cr0,r0,AT_NULL
         stw  r0,NBPW(a0)
         lwzu r0,2*NBPW(a1)
-        stwu r0,2*NBPW(a0); bne cr7,0b
-        la av_hi,NBPW(a0)  // tmp end of auxv
-        subf av_len,r_auxv,av_hi  // length of auxv
+        stwu r0,2*NBPW(a0); bne cr0,0b
 
-        lwz  r0,L90a - L90b(r_unf)  // "    ="
+        La av_hi,NBPW(a0)  // tmp end of auxv
+
+    beq cr4,no_pse_env
+        subf av_len,r_auxv,av_hi  // length of auxv
+        lwz  r0,0(r_90b)  // "    ="
         la cblk,NBPW(a1)  // original &strings
         stwu r0,NBPW(a0)
         la  r_buf,L_PFX(a0)  // buffer
 // r_fd = open("/proc/self/exe", O_RDONLY)
         li a1,O_RDONLY
-        la a0,L_PFX+ L90a - L90b(r_unf)  //     "/proc/self/exe"
+        la a0,L_PFX(r_90b)  //     "/proc/self/exe"
         call open; mr r_fd,a0
 // readlink("/proc/self/exe", buffer, -1+ PATH_MAX)
         li a2,-1+ PATH_MAX
         movr a1,r_buf  // buffer
-        la a0,L_PFX+ L90a - L90b(r_unf)  //     "/proc/self/exe"
+        la a0,L_PFX(r_90b)  //     "/proc/self/exe"
         call readlink; la a2,-L_PFX(r_buf)  // a0= len; a2= buffer
         cmpwi a0,0; bgt 0f  // success
-        la a2,L90a - L90b(r_unf)  // "   =/proc/self/exe"
-        li a0,L90  - (NBPW+ L90a)  // round_up(NBPW, strlen("/proc/self/exe"))
+        la a2,0(r_90b)  // "   =/proc/self/exe"
+        li a0,L90  - (NBPW+ L90b)  // round_up(NBPW, strlen("/proc/self/exe"))
 0:
-        addi a0,a0,L_PFX  // len += strlen("   =");
-        add a1,a2,a0  // beyond end of path
-        mtctr a0
-        movr a0,cblk  // old &strings
-        li a2,0
-        stbu a2,-1(a0)  // NUL terminate
+        addi a0,a0,L_PFX
+        add a1,a2,a0  // beyond end of path and prefix
+        mtctr a0  // strlen(env_var)
+        mr a0,cblk  // old &strings
+        li r0,0; stbu r0,-1(a0)  // NUL terminator
 0: // slide path up
         lbzu r0,-1(a1)
         stbu r0,-1(a0); bdnz 0b
-        stw a0,-2*NBPW(r_auxv)  // &"   =<<path>>" for env
-
-        clrrwi a0,a0,2  // word align
-        xor r0,sp,a1  // parity of length
-        xor r0,r0,a0  // length vs destination
-        clrlwi r0,r0,-3+ 8*NBPW  // keep bottom 3 bits
+        mr cblk,a0  // new env_ptr
+        clrrwi a0,a0,4  // .balign AL_STK
+        la a1,NBPW(av_hi)
+        sub r0,a1,sp; neg r0,r0; clrlwi r0,r0,32-4
         sub a0,a0,r0
 
-// slide the rest of the stack up
-        movr a1,av_hi
-        sub r_auxv,a0,av_len
-0:
-        lwzu r0,-NBPW(a1); cmplw cr7,a1,sp
-        stwu r0,-NBPW(a0); bgt+ cr7,0b
-        movr sp,a0
+        mr a1,av_hi
+        srwi r0,av_len,2; mtctr r0
+0: // slide auxv up
+        lwzu r0,-NBPW(a1)
+        stwu r0,-NBPW(a0); bdnz 0b
+        mr r_auxv,a0
+// Add env_ptr
+        lwzu r0,-NBPW(a1)
+        stwu r0,-NBPW(a0)  // env terminator
+        stwu cblk,-NBPW(a0)  // added env_ptr
 
+        sub r0,a1,sp
+        srwi r0,r0,2; mtctr r0
+// slide env, argv, rest up
+0:
+        lwzu r0,-NBPW(a1)
+        stwu r0,-NBPW(a0); bdnz 0b
+
+        mr sp,a0
+
+no_pse_env:
         stwu sp,-(SZ_FRAME+OVERHEAD)(sp)  // allocate this frame
         mr a0,r_ADRX  // &b_info
         mr a1,r_LENX  // total_size
-        la a2,SZ_FRAME(sp)  // &Elf32_Ehdr temporary space
+        mr a2,r_elfa  // elfaddr
         mr a3,r_auxv  // &Elf32_auxv_t
-        mr a4,r_exp  // &decompress: f_expand
-        mr a5,r_unf  // &f_unf
-        mr a6,r_elf  // elfaddr
+        la a4,SZ_FRAME(sp)  // &Elf32_Ehdr temporary space
         call upx_main  // Out: a0= entry
 // entry= upx_main(b_info *a0, total_size a1, Elf32_Ehdr *a2, ELf32_auxv_t *a3,
-//      f_exp a4, f_unf a5, elfaddr a6)
+//      tmp_ehdr[])
 
         la  sp,SZ_FRAME+OVERHEAD(sp)  // deallocate this frame
         mr r_exp,a0  // save &entry
@@ -180,20 +230,21 @@ sz_Phdr= 8*NBPW
 p_vaddr= 2*NBPW
 p_memsz= 5*NBPW
 // Discard pages of compressed data (includes [ADRX,+LENX) )
-        lwz a1,p_memsz+sz_Phdr+sz_Ehdr(r_elf)  // Phdr[C_TEXT= 1].p_memsz
-        //lhz r0,e_type(r_elf); cmpwi r0,ET_EXEC; bne 1f  // only ET_EXEC
-        movr a0,r_elf; call brk  // also set the brk
+        lwz a1,p_memsz+sz_Phdr+sz_Ehdr(r_elfa)  // Phdr[C_TEXT= 1].p_memsz
+        //lhz r0,e_type(r_elfa); cmpwi r0,ET_EXEC; bne 1f  // only ET_EXEC
+        movr a0,r_elfa; call brk  // also set the brk
 1:
-        lwz a1,p_memsz+sz_Phdr+sz_Ehdr(r_elf)  // Phdr[C_TEXT= 1].p_memsz
-        movr a0,r_elf; call munmap  # discard C_TEXT compressed data
+        lwz a1,p_memsz+sz_Phdr+sz_Ehdr(r_elfa)  // Phdr[C_TEXT= 1].p_memsz
+        movr a0,r_elfa; call munmap  # discard C_TEXT compressed data
 
+    beq cr4,no_map_pse
 // first page of /proc/self/exe, to preserve it despite munmap(ADRU, LENU)
         li a5,0  // offset
         movr a4,r_fd
         cmpwi a4,0; blt no_map_pse
         li a3,MAP_PRIVATE
         li a2,PROT_READ
-        neg a1,r_PMASK  // PAGE_SIZE
+        neg a1,r_PMASK  // page_size
         li a0,0  // kernel chooses where
         call mmap
 // close /proc/self/exe
@@ -210,7 +261,7 @@ sz_auxv= 2*NBPW
         mr a0,r_auxv
 0:
         lwz r0,a_type(a0); lwz a1,a_val(a0); addi a0,a0,sz_auxv
-        cmplwi cr7,r0,AT_NULL; bne+ cr7,0b
+        cmplwi cr0,r0,AT_NULL; bne+ cr0,0b
         mtctr a1  // escape hatch
 
         mr a0,r_ADRU
@@ -223,6 +274,8 @@ sz_auxv= 2*NBPW
 
         bctr  // goto escape hatch
 
+  section SYSCALLS
+
 SYS_exit=  1
 SYS_fork=  2
 SYS_read=  3
@@ -234,15 +287,33 @@ SYS_brk=       45
 SYS_readlink=  85
 SYS_mmap=      90
 SYS_munmap=    91
+SYS_ftruncate= 93
 SYS_mprotect= 125
+SYS_msync=    144
+SYS_memfd_create= 360
 
-Pprotect: .globl Pprotect
-        li r0, 0xfff  // ~PAGE_MASK  (FIXME: probably use 4th arg)
-        and r0,a0,r0
-        sub a0,a0,r0
-        add a1,a1,r0
-        b mprotect
-
+exit: .globl exit
+        li r0,SYS_exit;     5: b 5f
+brk: .globl brk
+        li r0,SYS_brk;      5: b 5f
+readlink: .globl readlink
+        li r0,SYS_readlink; 5: b 5f
+ftruncate: .globl ftruncate
+        li r0,SYS_ftruncate;5: b 5f
+close: .globl close
+        li r0,SYS_close;    5: b 5f
+write: .globl write
+        li r0,SYS_write;    5: b 5f
+read: .globl read
+        li r0,SYS_read;     5: b 5f
+open: .globl open
+        li r0,SYS_open;     5: b 5f
+mprotect: .globl mprotect
+        li 0,SYS_mprotect;  5: b 5f
+msync: .globl msync
+        li 0,SYS_msync;     5: b 5f
+munmap: .globl munmap
+        li r0,SYS_munmap;   5: b sysgo
 mmap: .globl mmap
         li r0,SYS_mmap
 sysgo:
@@ -252,26 +323,51 @@ sysgo:
 no_fail:
         ret
 
-exit: .globl exit
-        li r0,SYS_exit;        b 5f
-brk: .globl brk
-        li r0,SYS_brk;      5: b 5f
-readlink: .globl readlink
-        li r0,SYS_readlink; 5: b 5f
-write: .globl write
-        li r0,SYS_write;    5: b 5f
-read: .globl read
-        li r0,SYS_read;     5: b 5f
-open: .globl open
-        li r0,SYS_open;     5: b 5f
-close: .globl close
-        li r0,SYS_close;    5: b 5f
-mprotect: .globl mprotect
-        li r0,SYS_mprotect; 5: b 5f
-munmap: .globl munmap
-        li r0,SYS_munmap;   5: b sysgo
+__NR_memfd_create= 360
+MFD_EXEC= 0x10
+EINVAL= 22
+
+memfd_create: .globl memfd_create
+        mflr a3
+        li a1,MFD_EXEC  // modern clue
+mfd_try:
+        call 0f; .asciz "upx"; 0:
+        mflr a0
+SYS_memfd_create= __NR_memfd_create
+        li r0,SYS_memfd_create; sc; bns+ 0f  // success
+        cmpi cr7,a1,0; bne cr7,1f  // not 2nd time
+8:
+        teq r0,r0  // 2nd error, or unexpected 1st error
+1:
+        cmpi cr7,a0,EINVAL; bne cr7,8b  // unexpected 1st error
+        li a1,0; b mfd_try  // 2nd attempt
+0:
+        mtlr a3
+        ret
+
+memcpy: .globl memcpy  // (dst, src, n)
+        cmpwi a2,0; beq- 9f
+        mtctr a2
+        subi a3,a0,1
+        subi a1,a1,1
+0:
+        lbzu r0,1(a1)
+        stbu r0,1(a3)
+        bdnz 0b
+9:
+        blr  // return original dst
+
+memset: .globl memset  // (dst, val, n)
+        cmpwi a2,0; beq- 9f
+        mtctr a2
+        subi a3,a0,1
+0:
+        stbu a1,1(a3)
+        bdnz 0b
+9:
+        blr  // return original dst
 
 my_bkpt: .globl my_bkpt
-        teq r0,r0
+        teq r0,r0  // my_bkpt
         blr
 /* vim:set ts=8 sw=8 et: */

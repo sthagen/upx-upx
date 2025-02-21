@@ -2,9 +2,9 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2024 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2024 Laszlo Molnar
-   Copyright (C) 2000-2024 John F. Reiser
+   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2025 Laszlo Molnar
+   Copyright (C) 2000-2025 John F. Reiser
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -109,7 +109,8 @@ void PackLinuxElf32x86interp::pack1(OutputFile *fo, Filter &)
     h3.phdr[1].p_flags = Elf32_Phdr::PF_W | Elf32_Phdr::PF_R;
     h3.phdr[1].p_align = 1;
     h3.phdr[2].p_type = PT_INTERP;
-    h3.phdr[2].p_offset = (char *)&h3.phdr[2].p_vaddr - (char *)&h3;
+    // h3.phdr[2].p_offset = (char *)&h3.phdr[2].p_vaddr - (char *)&h3;
+    h3.phdr[2].p_offset = offsetof(cprElfHdr3, phdr[2].p_vaddr);
     memcpy(&h3.phdr[2].p_vaddr, "/upxrun", h3.phdr[2].p_filesz = 8);
     h3.phdr[2].p_align = 1;
 

@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2024 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2024 Laszlo Molnar
+   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2025 Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -150,27 +150,23 @@ static void handle_allegropak(InputFile *fi, OutputFile *fo) {
 }
 
 int PackDjgpp2::readFileHeader() {
-    byte hdr[0x1c];
-    byte magic[8];
+    dos_header_t dos_hdr;
 
     fi->seek(0, SEEK_SET);
-    fi->readx(hdr, sizeof(hdr));
-    if (get_le16(hdr) == 0x5a4d) // MZ exe signature, stubbed?
-    {
-        coff_offset = 512 * get_le16(hdr + 4);
-        if (get_le16(hdr + 2) != 0)
-            coff_offset += get_le16(hdr + 2) - 512;
-        fi->seek(512, SEEK_SET);
+    fi->readx(&dos_hdr, sizeof(dos_hdr));
+    if (get_le16(&dos_hdr.e_magic) == 0x5a4d) { // MZ exe signature, stubbed?
+        byte magic[8];
+        fi->seek(16 * get_le16(&dos_hdr.e_cparhdr), SEEK_SET);
         fi->readx(magic, 8);
         if (memcmp("go32stub", magic, 8) != 0)
             return 0; // not V2 image
-        fi->seek(coff_offset, SEEK_SET);
-        if (fi->read(&coff_hdr, sizeof(coff_hdr)) != sizeof(coff_hdr))
-            throwCantPack("skipping djgpp symlink");
-    } else {
-        fi->seek(coff_offset, SEEK_SET);
-        fi->readx(&coff_hdr, 0xa8);
     }
+    coff_offset = 512 * get_le16(&dos_hdr.e_cp);
+    if (get_le16(&dos_hdr.e_cblp) != 0)
+        coff_offset += get_le16(&dos_hdr.e_cblp) - 512;
+    fi->seek(coff_offset, SEEK_SET);
+    if (fi->read(&coff_hdr, sizeof(coff_hdr)) != sizeof(coff_hdr))
+        throwCantPack("skipping djgpp symlink");
     if (coff_hdr.f_magic != 0x014c) // I386MAGIC
         return 0;
     if ((coff_hdr.f_flags & 2) == 0) // F_EXEC - COFF executable

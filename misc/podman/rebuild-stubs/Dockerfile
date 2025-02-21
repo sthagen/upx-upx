@@ -14,12 +14,14 @@ RUN dpkg --add-architecture i386 \
         # the following packages are not required for rebuilding the stubs, but
         # they do make the image *much* more convenient and also allow building
         # the full UPX binary inside the container via CMake:
-        7zip bfs bubblewrap busybox bzip2 bzip3 cabextract ccache chrpath cmake cpio dash diffstat \
-        elfutils execstack fd-find file fish fzf g++ gawk gdb gojq ht htop hyperfine jq ksh \
-        libzstd-dev lsb-release lz4 lzip lzop minify mksh moreutils musl neovim ninja-build \
+        7zip bat bfs btop bubblewrap busybox bzip2 bzip3 cabextract ccache chrpath cmake cpio \
+        dash diffstat direnv elfutils execstack eza fd-find file fish fzf \
+        g++ gawk gdb gojq ht htop hyperfine jq ksh \
+        lftp libzstd-dev lsb-release lsd lz4 lzip lzop minify mksh moreutils musl neovim ninja-build \
         p7zip parallel patch patchelf patchutils pax-utils proot \
-        python3 python3-pyasn1 python3-pycryptodome python3-pycurl python3-toml python3-yaml python3-zstd \
-        re2c ripgrep rsync screen strace universal-ctags unzip valgrind yash yq \
+        python3 python3-pyasn1 python3-pycryptodome python3-pycurl python3-tomli python3-tomli-w \
+        python3-yaml python3-zstd \
+        re2c ripgrep rsync screen socat strace universal-ctags unzip valgrind yash yq \
         zip zlib1g-dev zoxide zsh zstd \
         # extra packages for compiling with "gcc -m32" and "gcc -mx32":
         g++-multilib gcc-multilib \
@@ -59,9 +61,9 @@ RUN cd /root \
 
 # install official UPX release binaries into /usr/local/bin; not required but convenient for testing
 RUN cd /root \
-    && wget -q https://github.com/upx/upx/releases/download/v3.91/upx-3.91-amd64_linux.tar.bz2 \
-    && xzversions="3.92 3.93 3.94 3.95 3.96 4.0.0 4.0.1 4.0.2 4.1.0 4.2.0 4.2.1 4.2.2 4.2.3" \
-    && for v in $xzversions; do wget -q https://github.com/upx/upx/releases/download/v${v}/upx-${v}-amd64_linux.tar.xz; done \
+    && curl -sS -L -O https://github.com/upx/upx/releases/download/v3.91/upx-3.91-amd64_linux.tar.bz2 \
+    && xzversions="3.92 3.93 3.94 3.95 3.96 4.0.0 4.0.1 4.0.2 4.1.0 4.2.0 4.2.1 4.2.2 4.2.3 4.2.4" \
+    && for v in $xzversions; do curl -sS -L -O https://github.com/upx/upx/releases/download/v${v}/upx-${v}-amd64_linux.tar.xz; done \
     && for f in ./upx-*.tar.*; do tar -xoaf $f; done \
     && for v in 3.91 $xzversions; do d=upx-${v}-amd64_linux; ./$d/upx -qq -d $d/upx -o /usr/local/bin/upx-${v}; done \
     && rm -r ./upx-*.tar.* ./upx-*linux \
@@ -79,15 +81,17 @@ RUN useradd upx -U --uid 2000 --shell /bin/bash -m \
     # symlink upx-stubtools
     && ln -s /usr/local/bin/bin-upx-20221212 .local/bin/bin-upx \
     # some convenience settings according to upx developer preferences
+    && echo "alias path='echo PATH=\"\$PATH\"'" >> .bashrc \
     && echo "alias md=mkdir" >> .bashrc \
     && echo "alias rd=rmdir" >> .bashrc \
     && echo 'mdd() { mkdir "$1" && cd "$1"; }' >> .bashrc \
     && echo 'm() { make "$@"; }' >> .bashrc \
+    && echo 'mm() { make -j8 "$@"; }' >> .bashrc \
     && echo 'tn() { time nice "$@"; }' >> .bashrc \
     && echo 'tnm() { time nice make "$@"; }' >> .bashrc \
-    && echo 'tnmm() { time nice make -j "$@"; }' >> .bashrc \
+    && echo 'tnmm() { time nice make -j8 "$@"; }' >> .bashrc \
     && echo 'source /usr/share/bash-completion/completions/make' >> .bashrc \
-    && echo 'complete -F _make m tnm tnmm' >> .bashrc \
+    && echo 'complete -F _make m mm tnm tnmm' >> .bashrc \
     && echo 'eval "$(zoxide init bash)"' >> .bashrc \
     && echo "alias zz=zi\nalias y=z\nalias yy=zi" >> .bashrc \
     && echo "alias cd..='cd ..'" >> .bashrc \

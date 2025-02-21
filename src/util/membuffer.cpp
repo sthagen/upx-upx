@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2024 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2024 Laszlo Molnar
+   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2025 Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -49,6 +49,8 @@ unsigned membuffer_get_size(MemBuffer &mb) noexcept { return mb.getSize(); }
 
 #if defined(__SANITIZE_ADDRESS__) || defined(__SANITIZE_MEMORY__)
 static forceinline constexpr bool use_simple_mcheck() noexcept { return false; }
+#elif defined(__CHERI__) && defined(__CHERI_PURE_CAPABILITY__)
+static forceinline constexpr bool use_simple_mcheck() noexcept { return false; }
 #elif (WITH_VALGRIND) && defined(RUNNING_ON_VALGRIND)
 static bool use_simple_mcheck_flag;
 static noinline void init_use_simple_mcheck() noexcept {
@@ -73,7 +75,7 @@ static forceinline constexpr bool use_simple_mcheck() noexcept { return true; }
 //
 **************************************************************************/
 
-MemBuffer::MemBuffer(upx_uint64_t bytes) : MemBufferBase<byte>() {
+MemBuffer::MemBuffer(upx_uint64_t bytes) may_throw : MemBufferBase<byte>() {
     static_assert(element_size == 1);
     alloc(bytes);
     debug_set(debug.last_return_address_alloc, upx_return_address());
@@ -97,8 +99,6 @@ void *MemBuffer::subref_impl(const char *errfmt, size_t skip, size_t take) {
     return ptr + skip;
 }
 
-static forceinline constexpr size_t umax(size_t a, size_t b) { return (a >= b) ? a : b; }
-
 /*static*/
 unsigned MemBuffer::getSizeForCompression(unsigned uncompressed_size, unsigned extra) {
     if (uncompressed_size == 0)
@@ -106,9 +106,9 @@ unsigned MemBuffer::getSizeForCompression(unsigned uncompressed_size, unsigned e
     const size_t z = uncompressed_size; // fewer keystrokes and display columns
     size_t bytes = mem_size(1, z);      // check size
     // All literal: 1 bit overhead per literal byte; from UCL documentation
-    bytes = umax(bytes, z + z / 8 + 256);
+    bytes = upx::umax(bytes, z + z / 8 + 256);
     // zstd: ZSTD_COMPRESSBOUND
-    bytes = umax(bytes, z + (z >> 8) + ((z < (128 << 10)) ? (((128 << 10) - z) >> 11) : 0));
+    bytes = upx::umax(bytes, z + (z >> 8) + ((z < (128 << 10)) ? (((128 << 10) - z) >> 11) : 0));
     // add extra and 256 safety for various rounding/alignments
     bytes = mem_size(1, bytes, extra, 256);
     return ACC_ICONV(unsigned, bytes);
@@ -148,11 +148,11 @@ void MemBuffer::fill(unsigned off, unsigned len, int value) {
 **************************************************************************/
 
 // for use_simple_mcheck()
-#define PTR_BITS32(p) ((unsigned) ((upx_uintptr_t) (p) &0xffffffff))
+#define PTR_BITS32(p) ((upx_uint32_t) (ptr_get_address(p) & 0xffffffff))
 #define MAGIC1(p)     ((PTR_BITS32(p) ^ 0xfefdbeeb) | 1)
 #define MAGIC2(p)     ((PTR_BITS32(p) ^ 0xfefdbeeb ^ 0x88224411) | 1)
 
-void MemBuffer::checkState() const {
+void MemBuffer::checkState() const may_throw {
     if (!ptr)
         throwInternalError("block not allocated");
     assert(size_in_bytes > 0);
@@ -167,7 +167,7 @@ void MemBuffer::checkState() const {
     }
 }
 
-void MemBuffer::alloc(upx_uint64_t bytes) {
+void MemBuffer::alloc(upx_uint64_t bytes) may_throw {
     // INFO: we don't automatically free a used buffer
     assert(ptr == nullptr);
     assert(size_in_bytes == 0);
@@ -177,6 +177,8 @@ void MemBuffer::alloc(upx_uint64_t bytes) {
     size_t malloc_bytes = mem_size(1, bytes); // check size
     if (use_simple_mcheck())
         malloc_bytes += 32;
+    else
+        malloc_bytes += 4;
     byte *p = (byte *) ::malloc(malloc_bytes);
     NO_printf("MemBuffer::alloc %llu: %p\n", bytes, p);
     if (!p)
@@ -281,7 +283,7 @@ TEST_CASE("MemBuffer core") {
     CHECK_THROWS(mb.subref("", N, 1));
     if (use_simple_mcheck()) {
         byte *p = raw_bytes(mb, 0);
-        unsigned magic1 = get_ne32(p - 4);
+        upx_uint32_t magic1 = get_ne32(p - 4);
         set_ne32(p - 4, magic1 ^ 1);
         CHECK_THROWS(mb.checkState());
         set_ne32(p - 4, magic1);

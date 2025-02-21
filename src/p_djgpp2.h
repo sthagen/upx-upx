@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2024 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2024 Laszlo Molnar
+   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2025 Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -61,6 +61,16 @@ protected:
     virtual Linker *newLinker() const override;
 
     unsigned coff_offset;
+
+    // based on https://dox.ipxe.org/PeImage_8h_source.html
+    struct alignas(1) dos_header_t {
+        LE16 e_magic;
+        LE16 e_cblp;    // Bytes on last page of file
+        LE16 e_cp;      // Pages in file
+        LE16 e_crlc;    // Relocations
+        LE16 e_cparhdr; // Size of header in paragraphs
+        LE16 e_OMITTED[32 - 5 * 2];
+    }; // 64 bytes
 
     struct alignas(1) external_scnhdr_t {
         byte _[12]; // name, paddr

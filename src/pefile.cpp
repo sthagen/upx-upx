@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2024 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2024 Laszlo Molnar
+   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) 1996-2025 Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -258,7 +258,7 @@ void PeFile::Interval::add_interval(const Interval *other) {
 void PeFile::Interval::flatten() {
     if (!ivnum)
         return;
-    upx_qsort(ivarr, ivnum, sizeof(interval), Interval::compare);
+    upx_qsort(ivarr, ivnum, sizeof(ivarr[0]), Interval::compare);
     for (unsigned ic = 0; ic < ivnum - 1; ic++) {
         unsigned jc;
         for (jc = ic + 1; jc < ivnum && ivarr[ic].start + ivarr[ic].len >= ivarr[jc].start; jc++)
@@ -286,6 +286,9 @@ void PeFile::Interval::dump() const {
 // relocation handling
 **************************************************************************/
 
+// do NOT allow --force to override reloc checks
+static constexpr bool ALWAYS_CHECK_STRICT_RELOCS = true;
+
 void PeFile::Reloc::RelocationBlock::reset() noexcept {
     rel = nullptr;  // SPAN_0
     rel1 = nullptr; // SPAN_0
@@ -312,8 +315,8 @@ static int __acc_cdecl_qsort reloc_entry_compare(const void *a, const void *b) {
     const unsigned pos2 = get_ne32(b);
     if (pos1 != pos2)
         return pos1 < pos2 ? -1 : 1;
-    const unsigned reloc_type1 = ((const byte *) a)[4];
-    const unsigned reloc_type2 = ((const byte *) b)[4];
+    const unsigned reloc_type1 = ((const upx_uint8_t *) a)[4];
+    const unsigned reloc_type2 = ((const upx_uint8_t *) b)[4];
     if (reloc_type1 != reloc_type2)
         return reloc_type1 < reloc_type2 ? -1 : 1;
     return 0;
@@ -340,7 +343,7 @@ PeFile::Reloc::Reloc(byte *ptr, unsigned bytes) {
 
 PeFile::Reloc::Reloc(unsigned relocnum) {
     start_size_in_bytes = mem_size(RELOC_ENTRY_SIZE, relocnum, RELOC_INPLACE_OFFSET, 8192);
-    start = new byte[start_size_in_bytes]; // => transfer to oxrelocs[] in finish()
+    start = new byte[start_size_in_bytes]; // => transfer ownership to oxrelocs[] in finish()
     start_did_alloc = true;
     initSpans();
 }
@@ -358,8 +361,12 @@ bool PeFile::Reloc::readFromRelocationBlock(byte *next_rb) { // set rb
     const unsigned off = ptr_udiff_bytes(next_rb, start);
     assert((off & 1) == 0);
     rb.reset();
-    if (off >= start_size_in_bytes) // permissive: use ">=" instead of strict "=="
-        return false;               // EOF
+    if (off >= start_size_in_bytes) { // permissive: use ">=" instead of strict "=="
+        if (off > start_size_in_bytes) {
+            // MAYBE TODO later: could add a warning here?
+        }
+        return false; // EOF
+    }
     if (start_size_in_bytes - off < 8)
         throwCantPack("relocs overflow");
     const unsigned sob = get_le32(start_buf + (off + 4)); // size_of_block
@@ -368,7 +375,14 @@ bool PeFile::Reloc::readFromRelocationBlock(byte *next_rb) { // set rb
     if (sob == 0 && (off == 0 && start_size_in_bytes == 8))
         return false; // EOF
 #endif
-    if (!opt->force) {
+    if (ALWAYS_CHECK_STRICT_RELOCS) {
+        if (sob < 8)
+            throwCantPack("bad reloc size_of_block %u", sob);
+        if (start_size_in_bytes - off < sob)
+            throwCantPack("overflow reloc size_of_block %u", sob);
+        if ((sob & 1) != 0)
+            throwCantPack("odd reloc size_of_block %u", sob);
+    } else if (!opt->force) {
         if (sob < 8)
             throwCantPack("bad reloc size_of_block %u (try --force)", sob);
         if (start_size_in_bytes - off < sob)
@@ -418,8 +432,9 @@ void PeFile::Reloc::add_reloc(unsigned pos, unsigned reloc_type) {
 void PeFile::Reloc::finish(byte *(&result_ptr), unsigned &result_size) {
     assert(start_did_alloc);
     // sort in-place relocs
-    upx_qsort(raw_index_bytes(start_buf, RELOC_INPLACE_OFFSET, RELOC_ENTRY_SIZE * counts[0]),
-              counts[0], RELOC_ENTRY_SIZE, reloc_entry_compare);
+    upx_qsort(
+        raw_index_bytes(start_buf, RELOC_INPLACE_OFFSET, mem_size(RELOC_ENTRY_SIZE, counts[0])),
+        counts[0], RELOC_ENTRY_SIZE, reloc_entry_compare);
 
     auto finish_block = [](SPAN_S(BaseReloc) rel) -> byte * {
         unsigned sob = rel->size_of_block;
@@ -440,9 +455,12 @@ void PeFile::Reloc::finish(byte *(&result_ptr), unsigned &result_size) {
         const auto entry_ptr = start_buf + mem_size(RELOC_ENTRY_SIZE, ic, RELOC_INPLACE_OFFSET);
         unsigned pos, reloc_type;
         reloc_entry_decode(entry_ptr, &pos, &reloc_type);
-        if (ic > 0 && pos == prev_pos)
-            if (!opt->force)
+        if (ic > 0 && pos == prev_pos) {
+            if (ALWAYS_CHECK_STRICT_RELOCS)
+                throwCantPack("duplicate relocs");
+            else if (!opt->force)
                 throwCantPack("duplicate relocs (try --force)");
+        }
         prev_pos = pos;
         if (ic == 0 || pos - current_page >= 0x1000) {
             current_page = pos & ~0xfff; // page start
@@ -860,7 +878,7 @@ public:
 
         // sort the sections by name before adding them all
         // NOLINTNEXTLINE(bugprone-multi-level-implicit-pointer-conversion)
-        upx_qsort(sections, nsections, sizeof(Section *), ImportLinker::compare);
+        upx_qsort(sections, nsections, sizeof(sections[0]), ImportLinker::compare);
 
         for (unsigned ic = 0; ic < nsections; ic++)
             addLoader(sections[ic]->name);
@@ -884,8 +902,9 @@ public:
         ACC_COMPILE_TIME_ASSERT(sizeof(C1) == 1) // "char" or "byte"
         ACC_COMPILE_TIME_ASSERT(sizeof(C2) == 1) // "char" or "byte"
         const Section *s = getThunk((const char *) dll, (const char *) proc, thunk_separator_first);
-        if (s == nullptr &&
-            (s = getThunk((const char *) dll, (const char *) proc, thunk_separator)) == nullptr)
+        if (s == nullptr)
+            s = getThunk((const char *) dll, (const char *) proc, thunk_separator);
+        if (s == nullptr)
             throwInternalError("entry not found");
         return s->offset;
     }
@@ -897,7 +916,9 @@ public:
         char ord[1 + 5 + 1];
         upx_safe_snprintf(ord, sizeof(ord), "%c%05u", ordinal_id, ordinal);
         const Section *s = getThunk((const char *) dll, ord, thunk_separator_first);
-        if (s == nullptr && (s = getThunk((const char *) dll, ord, thunk_separator)) == nullptr)
+        if (s == nullptr)
+            s = getThunk((const char *) dll, ord, thunk_separator);
+        if (s == nullptr)
             throwInternalError("entry not found");
         return s->offset;
     }
@@ -910,12 +931,13 @@ public:
     }
 
     template <typename C>
-    upx_uint64_t hasDll(const C *dll) const {
+    bool hasDll(const C *dll) const {
         ACC_COMPILE_TIME_ASSERT(sizeof(C) == 1) // "char" or "byte"
         TStr sdll(name_for_dll((const char *) dll, dll_name_id));
         return findSection(sdll, false) != nullptr;
     }
-};
+}; // class PeFile::ImportLinker
+
 /*static*/ const char PeFile::ImportLinker::zeros[sizeof(import_desc)] = {0};
 
 void PeFile::addKernelImport(const char *name) { ilinker->add_import(kernelDll(), name); }
@@ -928,8 +950,7 @@ void PeFile::addStubImports() {
     addKernelImport("VirtualProtect");
 }
 
-void PeFile::processImports2(unsigned myimport, unsigned) // pass 2
-{
+void PeFile::processImports2(unsigned myimport, unsigned) { // pass 2
     COMPILE_TIME_ASSERT(sizeof(import_desc) == 20)
     if (ilinker == nullptr)
         return;
@@ -941,8 +962,7 @@ void PeFile::processImports2(unsigned myimport, unsigned) // pass 2
 }
 
 template <typename LEXX, typename ord_mask_t>
-unsigned PeFile::processImports0(ord_mask_t ord_mask) // pass 1
-{
+unsigned PeFile::processImports0(ord_mask_t ord_mask) { // pass 1
     if (isefi) {
         if (IDSIZE(PEDIR_IMPORT))
             throwCantPack("imports not supported on EFI");
@@ -1043,7 +1063,7 @@ unsigned PeFile::processImports0(ord_mask_t ord_mask) // pass 1
     oimport = mb_oimport;
 
     // NOLINTNEXTLINE(bugprone-multi-level-implicit-pointer-conversion)
-    upx_qsort(idlls, dllnum, sizeof(*idlls), UDll::compare);
+    upx_qsort(idlls, dllnum, sizeof(idlls[0]), UDll::compare);
 
     info("Processing imports: %d DLLs", dllnum);
     for (unsigned ic = 0; ic < dllnum; ic++) {
@@ -1354,8 +1374,7 @@ struct PeFile::tls_traits<LE64> final {
 
 template <typename LEXX>
 void PeFile::processTls1(Interval *iv, typename tls_traits<LEXX>::cb_value_t imagebase,
-                         unsigned imagesize) // pass 1
-{
+                         unsigned imagesize) { // pass 1
     typedef typename tls_traits<LEXX>::tls tls;
     typedef typename tls_traits<LEXX>::cb_value_t cb_value_t;
     constexpr unsigned cb_size = tls_traits<LEXX>::cb_size;
@@ -1417,7 +1436,7 @@ void PeFile::processTls1(Interval *iv, typename tls_traits<LEXX>::cb_value_t ima
     // ... and those dwords should be correctly aligned
     if (use_tls_callbacks)
         sotls = ALIGN_UP(sotls, cb_size) + 2 * cb_size;
-    const unsigned aligned_sotls = ALIGN_UP(sotls, (unsigned) sizeof(LEXX));
+    const unsigned aligned_sotls = ALIGN_UP(sotls, usizeof(LEXX));
 
     // the PE loader wants this stuff uncompressed
     mb_otls.alloc(aligned_sotls);
@@ -1441,8 +1460,7 @@ void PeFile::processTls1(Interval *iv, typename tls_traits<LEXX>::cb_value_t ima
 
 template <typename LEXX>
 void PeFile::processTls2(Reloc *const rel, const Interval *const iv, unsigned newaddr,
-                         typename tls_traits<LEXX>::cb_value_t imagebase) // pass 2
-{
+                         typename tls_traits<LEXX>::cb_value_t imagebase) { // pass 2
     typedef typename tls_traits<LEXX>::tls tls;
     typedef typename tls_traits<LEXX>::cb_value_t cb_value_t;
     constexpr unsigned cb_size = tls_traits<LEXX>::cb_size;
@@ -1501,8 +1519,7 @@ void PeFile::processTls2(Reloc *const rel, const Interval *const iv, unsigned ne
 // Load Configuration handling
 **************************************************************************/
 
-void PeFile::processLoadConf(Interval *iv) // pass 1
-{
+void PeFile::processLoadConf(Interval *iv) { // pass 1
     if (IDSIZE(PEDIR_LOAD_CONFIG) == 0)
         return;
 
@@ -1920,6 +1937,8 @@ void PeFile::processResources(Resource *res) {
 
     for (soresources = res->dirsize(); res->next(); soresources += 4 + res->size())
         ;
+    if (!soresources)
+        return; // empty .rsrc Section
     mb_oresources.alloc(soresources);
     mb_oresources.clear();
     oresources = mb_oresources; // => SPAN_S
@@ -2140,7 +2159,7 @@ void PeFile::checkHeaderValues(unsigned subsystem, unsigned mask, unsigned ih_en
         throwCantPack("run a virus scanner on this file!");
 
     const unsigned fam1 = ih_filealign - 1;
-    if (!(1 + fam1) || (1 + fam1) & fam1) { // ih_filealign is not a power of 2
+    if (!upx::has_single_bit(ih_filealign)) { // ih_filealign is not a power of 2
         char buf[32];
         snprintf(buf, sizeof(buf), "bad file alignment %#x", 1 + fam1);
         throwCantPack(buf);
@@ -2178,8 +2197,6 @@ unsigned PeFile::handleStripRelocs(upx_uint64_t ih_imagebase, upx_uint64_t defau
         info("Base relocations stripping is disabled for this image");
     return 0;
 }
-
-static unsigned umax(unsigned a, unsigned b) { return (a >= b) ? a : b; }
 
 unsigned PeFile::readSections(unsigned objs, unsigned usize, unsigned ih_filealign,
                               unsigned ih_datasize) {
@@ -2224,7 +2241,7 @@ unsigned PeFile::readSections(unsigned objs, unsigned usize, unsigned ih_fileali
         if (isection[ic].vaddr + jc > ibuf.getSize())
             throwInternalError("buffer too small 1");
         fi->readx(ibuf.subref("bad section %#x", isection[ic].vaddr, jc), jc);
-        ibufgood = umax(ibufgood, jc + isection[ic].vaddr); // FIXME: simplistic
+        ibufgood = upx::umax(ibufgood, jc + isection[ic].vaddr); // FIXME: simplistic
         jc += isection[ic].rawdataptr;
     }
     return overlaystart;
@@ -2340,7 +2357,7 @@ void PeFile::pack0(OutputFile *fo, ht &ih, ht &oh, unsigned subsystem_mask,
         allow_filter = false;
 
     const unsigned oam1 = ih.objectalign - 1;
-    if (!(1 + oam1) || (1 + oam1) & oam1) { // ih.objectalign is not a power of 2
+    if (!upx::has_single_bit(ih.objectalign)) { // ih.objectalign is not a power of 2
         char buf[32];
         snprintf(buf, sizeof(buf), "bad object alignment %#x", 1 + oam1);
         throwCantPack(buf);
@@ -2352,7 +2369,7 @@ void PeFile::pack0(OutputFile *fo, ht &ih, ht &oh, unsigned subsystem_mask,
     unsigned newvsize = (isection[objs - 1].vaddr + isection[objs - 1].vsize + oam1) & ~oam1;
 
     NO_fprintf(stderr, "newvsize=%x objs=%d\n", newvsize, objs);
-    if (newvsize + soimport + sorelocs > ibuf.getSize())
+    if ((upx_uint64_t) newvsize + soimport + sorelocs > ibuf.getSize())
         throwInternalError("buffer too small 2");
     memcpy(ibuf + newvsize, oimport, soimport);
     memcpy(ibuf + newvsize + soimport, orelocs, sorelocs);
@@ -2416,7 +2433,7 @@ void PeFile::pack0(OutputFile *fo, ht &ih, ht &oh, unsigned subsystem_mask,
     if (tlsindex && ((newvsize - ph.c_len - 1024 + oam1) & ~oam1) > tlsindex + 4)
         tlsindex = 0;
 
-    const int oh_filealign = UPX_MIN(ih.filealign, 0x200);
+    const int oh_filealign = UPX_MIN(ih.filealign, 0x200u);
     const unsigned fam1 = oh_filealign - 1;
 
     int identsize = 0;
@@ -2451,16 +2468,16 @@ void PeFile::pack0(OutputFile *fo, ht &ih, ht &oh, unsigned subsystem_mask,
     else if (((identsplit + identsize) ^ identsplit) < oh_filealign)
         identsplit = identsize;
     else
-        identsplit = ALIGN_GAP(identsplit, oh_filealign);
+        identsplit = ALIGN_UP_GAP(identsplit, oh_filealign);
     ic = identsize - identsplit;
 
     const unsigned c_len =
         ((ph.c_len + ic) & 15) == 0 ? ph.c_len : ph.c_len + 16 - ((ph.c_len + ic) & 15);
     obuf.clear(ph.c_len, c_len - ph.c_len);
 
-    const unsigned aligned_sotls = ALIGN_UP(sotls, (unsigned) sizeof(LEXX));
+    const unsigned aligned_sotls = ALIGN_UP(sotls, usizeof(LEXX));
     const unsigned s1size =
-        ALIGN_UP(ic + c_len + codesize, (unsigned) sizeof(LEXX)) + aligned_sotls + soloadconf;
+        ALIGN_UP(ic + c_len + codesize, usizeof(LEXX)) + aligned_sotls + soloadconf;
     const unsigned s1addr = (newvsize - (ic + c_len) + oam1) & ~oam1;
 
     const unsigned ncsection = (s1addr + s1size + oam1) & ~oam1;
@@ -3146,8 +3163,7 @@ tribool PeFile32::canUnpack() {
     return canUnpack0(getFormat() == UPX_F_WINCE_ARM ? 4 : 3, ih.objects, ih.entry, sizeof(ih));
 }
 
-unsigned PeFile32::processImports() // pass 1
-{
+unsigned PeFile32::processImports() { // pass 1
     return processImports0<LE32>(1u << 31);
 }
 
@@ -3197,8 +3213,7 @@ tribool PeFile64::canUnpack() {
     return canUnpack0(3, ih.objects, ih.entry, sizeof(ih));
 }
 
-unsigned PeFile64::processImports() // pass 1
-{
+unsigned PeFile64::processImports() { // pass 1
     return processImports0<LE64>(1ULL << 63);
 }
 
