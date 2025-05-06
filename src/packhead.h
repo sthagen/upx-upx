@@ -63,6 +63,7 @@ struct PackHeader final {
         int n_mru;       // specific name for filter ctojr
     };
     int header_checksum;
+    int set_method(int m, unsigned offset = 0); // check, then assign
 
     // support fields for verifying decompression
     unsigned saved_u_adler;

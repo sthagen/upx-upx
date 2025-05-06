@@ -502,18 +502,14 @@ do_xmap(
     ElfW(Addr) reloc = 0;
     if (xi) { // compressed main program:
         // C_BASE space reservation, C_TEXT compressed data and stub
-        ElfW(Addr)  ehdr0 = *p_reloc;  // the 'hi' copy!
+        ElfW(Addr)  ehdr0 = *p_reloc;
         ElfW(Phdr) *phdr0 = (ElfW(Phdr) *)(1+ (ElfW(Ehdr) *)ehdr0);  // cheats .e_phoff
-        // Clear the 'lo' space reservation for use by PT_LOADs
-        ehdr0 -= phdr0[1].p_vaddr;  // the 'lo' copy
-        if (ET_EXEC == ehdr->e_type) {
-            ehdr0 = phdr0[0].p_vaddr;
+        v_brk = ehdr0 + phdr0->p_vaddr + phdr0->p_memsz;
+        if (ET_DYN == ehdr->e_type) {
+            reloc = ehdr0 - phdr0[1].p_vaddr;
         }
-        else {
-            reloc = ehdr0;
-        }
-        v_brk = phdr0->p_memsz + ehdr0;
-        munmap((void *)ehdr0, phdr0->p_memsz);
+        // paranoia: prevent "hangover" from VMA for C_BASE
+        munmap((void *)(reloc + phdr0->p_vaddr), phdr0->p_memsz);
     }
     else { // PT_INTERP
         DPRINTF("INTERP\\n", 0);

@@ -128,11 +128,32 @@ Pprotect: .globl Pprotect
         add a1,a1,r0
         b mprotect
 
-Psync: .globl Psync
-        mflr r0; bl 0f; 0: mflr r6; mtlr r0; ld r0,page_mask - 0b(r6)
+Psync: .globl Psync  // (addr, len, flags)
+        mflr r0; bl 0f; 0: mflr r6; mtlr r0; lwz r0,page_mask - 0b(r6)
         andc r0,a0,r0  // offset within page
         sub a0,a0,r0
         add a1,a1,r0
+
+// System calls write() and msync(,,MS_SYNC) should implicitly flush dcache
+// over the covered region before doing the write().
+// But strange errors were observed, so flush explicitly.
+// Same code as for powerpc32, but with larger CACHELINE.
+CACHELINE=128
+sweep= a3  // temp addr
+dlast= a4  // final addr
+        add dlast,a0,a1  // addr + len
+        addi dlast,dlast,-1  // highest covered addr
+        ori sweep,a0,-1+ CACHELINE  // highest addr on initial cache line
+fl_loop:
+        dcbst  0,sweep  // initiate store (modified) cacheline to memory
+        cmpl cr0,sweep,dlast  // did we cover the highest-addressed byte?
+        icbi   0,sweep  // discard instructions from cacheline
+        addi     sweep,sweep,CACHELINE  // highest addr on next line
+        blt  cr0,fl_loop  // not done yet
+
+        sync   // wait for all memory operations to finish
+        isync  // discard prefetched instructions (if any)
+
         b msync
 
 Pmap: .globl Pmap
@@ -357,6 +378,7 @@ SYS_munmap=    91
 SYS_ftruncate= 93
 SYS_mprotect= 125
 SYS_msync=    144
+SYS_openat=   286
 SYS_memfd_create= 360
 
 mmap: .globl mmap
@@ -365,7 +387,7 @@ mmap: .globl mmap
 sysgo:
         sc
         bns+ no_fail  // 'bns': branch if No Summary[Overflow]
-        li a0,-1  // failure; IGNORE errno
+        neg a0,a0  // failure: return -errno (always >[unsigned] PAGE_MASK)
 no_fail:
         ret
 
@@ -389,6 +411,9 @@ read: .globl read
         li r0,SYS_read;     5: b 5f
 open: .globl open
         li r0,SYS_open;     5: b 5f
+openat64: .globl openat64  // alias of openat because this is 64-bit already
+openat: .globl openat
+        li r0,SYS_openat;   5: b 5f
 close: .globl close
         li r0,SYS_close;    5: b sysgo
 
@@ -399,13 +424,13 @@ upxfd_create: .globl upxfd_create // (char *tag, unsigned flags)
         li a2,0; b 0b  // try again without MFD_EXEC
 no_memfd:  // so try /dev/shm
 O_RDWR= 2
-O_DIRECTORY= 0200000  // 0x010000
+O_DIRECTORY= 040000  // 0x4000
 O_TMPFILE= 020000000  // 0x400000
         mflr r6; bl 0f; .asciz "/dev/shm"; .balign 4;
 0:      mflr a1; mtlr r6
         li a2,0700
-        lis a3,(O_DIRECTORY|O_TMPFILE)>>16
-        ori a3,a3,O_RDWR
+        lis a3,O_TMPFILE>>16
+        ori a3,a3,O_RDWR | O_DIRECTORY
         li r0,SYS_open; sc; bns+ ok_memfd; teq r0,r0
 ok_memfd:
         ret

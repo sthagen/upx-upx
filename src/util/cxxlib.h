@@ -413,10 +413,10 @@ constexpr bool mem_eq(const unsigned char *a, const unsigned char *b, std::size_
     return n == 0 || (*a == *b && mem_eq(a + 1, b + 1, n - 1));
 }
 constexpr bool mem_eq(const char *a, const unsigned char *b, std::size_t n) noexcept {
-    return n == 0 || (*a == *b && mem_eq(a + 1, b + 1, n - 1));
+    return n == 0 || ((uchar) *a == *b && mem_eq(a + 1, b + 1, n - 1));
 }
 constexpr bool mem_eq(const unsigned char *a, const char *b, std::size_t n) noexcept {
-    return n == 0 || (*a == *b && mem_eq(a + 1, b + 1, n - 1));
+    return n == 0 || (*a == (uchar) *b && mem_eq(a + 1, b + 1, n - 1));
 }
 
 constexpr void mem_set(char *p, char c, std::size_t n) noexcept {

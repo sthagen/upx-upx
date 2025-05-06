@@ -11,15 +11,15 @@ TARGET(elf64-powerpcle)
 LOAD tmp/powerpc64le-linux.elf-fold.o
 OUTPUT(tmp/powerpc64le-linux.elf-fold.bin elf64-powerpcle)
 
-.text           0x0000000000000000      0xedc
- .text          0x0000000000000000      0xedc tmp/powerpc64le-linux.elf-fold.o
+.text           0x0000000000000000      0xefc
+ .text          0x0000000000000000      0xefc tmp/powerpc64le-linux.elf-fold.o
                 0x0000000000000014                get_page_mask
                 0x000000000000002c                Pprotect
                 0x0000000000000050                Psync
-                0x0000000000000074                Pmap
-                0x0000000000000098                Punmap
-                0x0000000000000cb8                underlay
-                0x0000000000000d44                upx_main2
+                0x000000000000009c                Pmap
+                0x00000000000000c0                Punmap
+                0x0000000000000cd8                underlay
+                0x0000000000000d64                upx_main2
 
 .data           0x0000000000000000        0x0
  .data          0x0000000000000000        0x0 tmp/powerpc64le-linux.elf-fold.o
@@ -27,8 +27,8 @@ OUTPUT(tmp/powerpc64le-linux.elf-fold.bin elf64-powerpcle)
 .bss            0x0000000000000000        0x0
  .bss           0x0000000000000000        0x0 tmp/powerpc64le-linux.elf-fold.o
 
-SYSCALLS        0x0000000000000000      0x140
- SYSCALLS       0x0000000000000000      0x140 tmp/powerpc64le-linux.elf-fold.o
+SYSCALLS        0x0000000000000000      0x148
+ SYSCALLS       0x0000000000000000      0x148 tmp/powerpc64le-linux.elf-fold.o
                 0x0000000000000008                mmap
                 0x0000000000000020                munmap
                 0x0000000000000028                mprotect
@@ -40,11 +40,13 @@ SYSCALLS        0x0000000000000000      0x140
                 0x0000000000000058                write
                 0x0000000000000060                read
                 0x0000000000000068                open
-                0x0000000000000070                close
-                0x0000000000000078                upxfd_create
-                0x00000000000000d0                memfd_create
-                0x0000000000000114                memcpy
-                0x0000000000000138                my_bkpt
+                0x0000000000000070                openat64
+                0x0000000000000070                openat
+                0x0000000000000078                close
+                0x0000000000000080                upxfd_create
+                0x00000000000000d8                memfd_create
+                0x000000000000011c                memcpy
+                0x0000000000000140                my_bkpt
 
 .comment        0x0000000000000000       0x33
  .comment       0x0000000000000000       0x33 tmp/powerpc64le-linux.elf-fold.o
@@ -54,8 +56,8 @@ SYSCALLS        0x0000000000000000      0x140
  .note.GNU-stack
                 0x0000000000000000        0x0 tmp/powerpc64le-linux.elf-fold.o
 
-EXP_HEAD        0x0000000000000000       0xa8
- EXP_HEAD       0x0000000000000000       0xa8 tmp/powerpc64le-linux.elf-fold.o
+EXP_HEAD        0x0000000000000000       0xac
+ EXP_HEAD       0x0000000000000000       0xac tmp/powerpc64le-linux.elf-fold.o
                 0x0000000000000000                f_expand
 
 EXP_TAIL        0x0000000000000000       0x8c

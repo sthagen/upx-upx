@@ -25,13 +25,12 @@ LC_ALL=C sort -z | xargs -0r perl -n -e '
     if (m,[\x00\x01\x02\x7f\xfe\xff],) { print "ERROR: binary file detected $ARGV: $_"; exit(1); }
     if (m,[\r\x1a],) { print "ERROR: DOS EOL detected $ARGV: $_"; exit(1); }
     if (m,([ \t]+)$,) {
-        # allow exactly two trailing spaces for GitHub flavoured Markdown in .md files
-        if ($1 ne "  " || $ARGV !~ m,\.md$,) {
-            print "ERROR: trailing whitespace detected $ARGV: $_"; exit(1);
-        }
+        if ($ARGV =~ m,\.patch$,) { }
+        else { print "ERROR: trailing whitespace detected $ARGV: $_"; exit(1); }
     }
     if (m,\t,) {
-        if ($ARGV =~ m,(^|/)(gnu|m)?make(file|vars),i) { }
+        if ($ARGV =~ m,\.patch$,) { }
+        elsif ($ARGV =~ m,(^|/)(gnu|m)?make(file|vars),i) { }
         elsif ($ARGV =~ m,\.mk$,) { }
         elsif ($ARGV =~ m,/tmp/.*\.(disasm|dump)$,) { }
         elsif ($ARGV =~ m,/src/stub/src/arch/.*/lzma\w+\.S$,) { }

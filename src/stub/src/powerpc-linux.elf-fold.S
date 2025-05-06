@@ -97,11 +97,31 @@ Pprotect: .globl Pprotect
         add a1,a1,r0
         b mprotect
 
-Psync: .globl Psync
+Psync: .globl Psync  // (addr, len, flags)
         mflr r0; bl 0f; 0: mflr r6; mtlr r0; lwz r0,page_mask - 0b(r6)
         andc r0,a0,r0  // offset within page
         sub a0,a0,r0
         add a1,a1,r0
+
+// System calls write() and msync(,,MS_SYNC) should implicitly flush dcache
+// over the covered region before doing the write().
+// But strange errors were observed, so flush explicitly.
+CACHELINE=32
+sweep= a3  // temp addr
+dlast= a4  // final addr
+        add dlast,a0,a1  // addr + len
+        addi dlast,dlast,-1  // highest covered addr
+        ori sweep,a0,-1+ CACHELINE  // highest addr on initial cache line
+fl_loop:
+        dcbst  0,sweep  // initiate store (modified) cacheline to memory
+        cmpl cr0,sweep,dlast  // did we cover the highest-addressed byte?
+        icbi   0,sweep  // discard instructions from cacheline
+        addi     sweep,sweep,CACHELINE  // highest addr on next line
+        blt  cr0,fl_loop  // not done yet
+
+        sync   // wait for all memory operations to finish
+        isync  // discard prefetched instructions (if any)
+
         b msync
 
 Pmap: .globl Pmap
@@ -290,6 +310,7 @@ SYS_munmap=    91
 SYS_ftruncate= 93
 SYS_mprotect= 125
 SYS_msync=    144
+SYS_openat=   286
 SYS_memfd_create= 360
 
 exit: .globl exit
@@ -308,6 +329,8 @@ read: .globl read
         li r0,SYS_read;     5: b 5f
 open: .globl open
         li r0,SYS_open;     5: b 5f
+openat: .globl openat
+        li r0,SYS_openat;   5: b 5f
 mprotect: .globl mprotect
         li 0,SYS_mprotect;  5: b 5f
 msync: .globl msync
@@ -317,33 +340,141 @@ munmap: .globl munmap
 mmap: .globl mmap
         li r0,SYS_mmap
 sysgo:
+#ifndef TRACE  //{
+#define TRACE 0
+#endif  //}
+
+#if TRACE  //{
+FD_STDERR= 2
+Tr1= 0*NBPW
+Tr0= 1*NBPW
+Tr3= 2*NBPW  // a0
+Tr4= 3*NBPW  // a1
+Tr5= 4*NBPW  // a2
+Tr6= 5*NBPW  // a3
+Tr7= 6*NBPW  // a4
+Tr8= 7*NBPW  // a5
+Tlr= 8*NBPW
+Tctr= 9*NBPW
+Tbuf= 10*NBPW
+T_FRAME= 10*NBPW + 96
+        stwu sp,-T_FRAME(sp)
+        stw r0,Tr0(sp)  // SYS_n
+        stw r3,Tr3(sp)  // a0
+        stw r4,Tr4(sp)  // a1
+        stw r5,Tr5(sp)  // a2
+        stw r6,Tr6(sp)  // a3
+        stw r7,Tr7(sp)  // a4
+        stw r8,Tr8(sp)  // a5
+        mflr  r0; stw r0,Tlr(sp)
+        mfctr r0; stw r0,Tctr(sp)
+outp=   r3
+p_word= r4
+Tw=     r5
+Thex=   r6
+nib=    r7
+
+        call get_Thex
+        la outp,-1+Tbuf(sp)  // output ptr (for update)
+        la p_word,-NBPW+Tr1(sp)
+Lword:
+        lwzu Tw,NBPW(p_word)  // next word
+        call Tword
+        la r0,NBPW+Tr8(sp)
+        cmpw r0,p_word; bgt Lword
+        li r0,' '; call Tflush
+
+        lwz r0,Tlr(sp); mtlr r0
+        lwz r0,Tctr(sp); mtctr r0
+        lwz r0,Tr0(sp)
+        lwz a0,Tr3(sp)
+        lwz a1,Tr4(sp)
+        lwz a2,Tr5(sp)
+        lwz a3,Tr6(sp)
+        lwz a4,Tr7(sp)
+        lwz a5,Tr8(sp)
+#endif  //}
         sc
         bns+ no_fail  // 'bns': branch if No Summary[Overflow]
-        li a0,-1  // failure; IGNORE errno
+        neg a0,a0  // failure: return -errno (always >[unsigned] PAGE_MASK)
 no_fail:
+#if TRACE //{
+        stw r0,Tr0(sp)  // SYS_n
+        stw r3,Tr3(sp)  // a0
+        stw r4,Tr4(sp)  // a1
+        stw r5,Tr5(sp)  // a2
+        stw r6,Tr6(sp)  // a3
+        stw r7,Tr7(sp)  // a4
+        stw r8,Tr8(sp)  // a5
+        mflr  r0; stw r0,Tlr(sp)
+        mfctr r0; stw r0,Tctr(sp)
+
+        mr Tw,a0  // value from sc
+        call get_Thex
+        la outp,-1+Tbuf(sp)  // output ptr (for update)
+        la p_word,NBPW+Tr8(sp); call Tword  // one word only
+        li r0,'\n'; call Tflush
+
+        lwz r0, Tlr(sp); mtlr  r0
+        lwz r0,Tctr(sp); mtctr r0
+        lwz r0,Tr0(sp)
+        lwz a0,Tr3(sp)
+        lwz a1,Tr4(sp)
+        lwz a2,Tr5(sp)
+        lwz a3,Tr6(sp)
+        lwz a4,Tr7(sp)
+        lwz a5,Tr8(sp)
+        addi sp,sp,T_FRAME
+#endif  //}
         ret
+#if TRACE  //{
+Tword:
+        li r0,8; mtctr r0  // 8 nibbles per word
+        li r0,' '; stbu r0,1(outp)  // leading punctuation for word
+Tnib:
+        rotlwi Tw,Tw,4; andi. nib,Tw,0xF; add nib,nib,Thex
+        lbz  r0,0(nib)
+        stbu r0,1(outp)
+        bdnz Tnib
+        ret
+
+Tflush:
+        stbu r0,1(outp)  // terminating punctuation
+        la outp,1(outp)  // update adjust
+        la a1,Tbuf(sp)  // in Tflush
+        subf a2,a1,outp
+        li a0,FD_STDERR; li r0,SYS_write; sc  // write(FD_STDERR, ptr, size)
+        ret
+
+get_Thex:
+        mflr r0
+        call 0f; .asciI "0123456789abcdef"; 0:
+        mflr Thex
+        mtlr r0; ret
+#endif  //}
 
 __NR_memfd_create= 360
 MFD_EXEC= 0x10
 EINVAL= 22
 
 memfd_create: .globl memfd_create
-        mflr a3
+        mflr r0; stwu r0,-2*NBPW(sp)
         li a1,MFD_EXEC  // modern clue
 mfd_try:
         call 0f; .asciz "upx"; 0:
         mflr a0
 SYS_memfd_create= __NR_memfd_create
-        li r0,SYS_memfd_create; sc; bns+ 0f  // success
-        cmpi cr7,a1,0; bne cr7,1f  // not 2nd time
+        li r0,SYS_memfd_create; call sysgo
+        cmpi cr7,a0,0; bge cr7,0f  // success
+        cmpi cr6,a1,0; bne cr6,1f  // not 2nd time
 8:
-        teq r0,r0  // 2nd error, or unexpected 1st error
+        teq r3,r3  // 2nd error, or unexpected 1st error
 1:
-        cmpi cr7,a0,EINVAL; bne cr7,8b  // unexpected 1st error
+        cmpi cr7,a0,-EINVAL; bne cr7,8b  // unexpected 1st error
         li a1,0; b mfd_try  // 2nd attempt
 0:
-        mtlr a3
-        ret
+        lwz r0,0(sp); la sp,2*NBPW(sp)
+        mtlr r0; ret
 
 memcpy: .globl memcpy  // (dst, src, n)
         cmpwi a2,0; beq- 9f

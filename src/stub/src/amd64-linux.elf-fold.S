@@ -201,11 +201,16 @@ p_memsz= 5*NBPW
 
         mov %ebx,%edi  # fd
         call close
+
+.macro NOTRACK
+       .byte 0x3e
+.endm
+
 no_pse_map:
         pop %arg1  # ADRU: unfolded upx_main2 etc.
         pop %arg2  # LENU
         push $__NR_munmap; pop %rax
-        /*notrack*/ jmp *(%r14)  # goto: syscall; pop %rdx; ret
+        NOTRACK; jmp *(%r14)  # goto: syscall; pop %rdx; ret
 
 get_page_mask: .globl get_page_mask
         mov PAGE_MASK(%rip),%rax

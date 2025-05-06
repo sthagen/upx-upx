@@ -30,7 +30,8 @@
 struct Options;
 #define options_t Options // old name
 
-extern Options *opt; // global options, see class PackMaster for per-file local options
+// global options, see class PackMaster for per-file local options
+extern Options *opt;
 
 #if WITH_THREADS
 extern std::mutex opt_lock_mutex; // for locking "opt"

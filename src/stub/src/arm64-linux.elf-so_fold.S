@@ -91,6 +91,42 @@ Psync: .globl Psync
         bic x8,x0,x8
         sub x0,x0,x8
         add x1,x1,x8
+// Sync contents of data cache into RAM.
+// Linux should do this implicitly, but apparently not.
+CTR_IDC_SHIFT= 28
+CTR_DIC_SHIFT= 29
+
+        mov x3,x0  // lo
+        add x4,x0,x1  // hi
+sync_cache_range:  // (void *lo= x3, void *const hi= x4)
+    mrs x6,ctr_el0
+    tbnz w6,#CTR_IDC_SHIFT,dc_not_dirty
+    ubfx x5,x6,#16,#4  // -2+ log2(dline_size)
+    mov x8,#-4; lsl x8,x8,x5  // sz_dline mask
+    and x5,x8,x3  // round down to dc line
+//    cmp x5,x4; b.hs dc_done
+dc_loop:
+    dc cvau,x5  // sync dline
+    sub x5,x5,x8  // next dline
+    cmp x5,x4; b.lo dc_loop
+//dc_done:
+dc_not_dirty:
+    dsb ish  // why here if dc not dirty?
+
+    tbnz w6,#CTR_DIC_SHIFT,ic_not_dirty
+    and x6,x6,#0xf  // -2+ log2(iline_size)
+    mov x8,#-4; lsl x8,x8,x6  // sz_iline mask
+    and x3,x8,x3  // round down to ic line
+//    cmp x3,x4; b.hs ic_done
+ic_loop:
+    ic ivau,x3  // sync iline
+    sub x3,x3,x8  // next iline
+    cmp x3,x4; b.lo ic_loop
+//ic_done:
+    dsb ish
+ic_not_dirty:
+    isb
+// fall into msync
         do_sys __NR_msync; ret
 
 fold:  // enter here (x0= &so_info; x1= &{argc,argv,envp,lr}
@@ -205,11 +241,6 @@ brk:
         .globl readlink
 readlink:
         do_sys __NR_readlink; ret
-
-        .globl __sync_cache_range
-__sync_cache_range:  // (void *lo, void *hi)
-#include "arm64-sync-cache-range.S"
-        ret
 
 get_sys_munmap: .globl get_sys_munmap  // r0= system call instruction
 #if defined(ARMEL_DARWIN)  /*{*/

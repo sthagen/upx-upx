@@ -33,19 +33,6 @@
 #define DEBUG 0
 #endif  //}
 
-#ifdef __mips__  //{
-// We want to supersede in *.elf-fold.S, not use include/linux.h
-#define NO_WANT_CLOSE 1
-#define NO_WANT_EXIT 1
-#define NO_WANT_MMAP 1
-#define NO_WANT_MPROTECT 1
-#define NO_WANT_MSYNC 1
-#define NO_WANT_OPEN 1
-#define NO_WANT_READ 1
-#define NO_WANT_WRITE 1
-extern int open(char const *pathname, int flags, unsigned mode);
-extern int read(int fd, void *buf, unsigned count);
-#endif  //}
 #include "include/linux.h"
 
 #define MFD_EXEC 0x0010
@@ -616,18 +603,14 @@ do_xmap(
     ElfW(Addr) reloc = 0;
     if (xi) { // compressed main program:
         // C_BASE space reservation, C_TEXT compressed data and stub
-        ElfW(Addr)  ehdr0 = *p_reloc;  // the 'hi' copy!
+        ElfW(Addr)  ehdr0 = *p_reloc;
         ElfW(Phdr) *phdr0 = (ElfW(Phdr) *)(1+ (ElfW(Ehdr) *)ehdr0);  // cheats .e_phoff
-        // Clear the 'lo' space reservation for use by PT_LOADs
-        ehdr0 -= phdr0[1].p_vaddr;  // the 'lo' copy
-        if (ET_EXEC == ehdr->e_type) {
-            ehdr0 = phdr0[0].p_vaddr;
+        v_brk = ehdr0 + phdr0->p_vaddr + phdr0->p_memsz;
+        if (ET_DYN == ehdr->e_type) {
+            reloc = ehdr0 - phdr0[1].p_vaddr;
         }
-        else {
-            reloc = ehdr0;
-        }
-        v_brk = phdr0->p_memsz + ehdr0;
-        munmap((void *)ehdr0, phdr0->p_memsz);
+        // paranoia: prevent "hangover" from VMA for C_BASE
+        munmap((void *)(reloc + phdr0->p_vaddr), phdr0->p_memsz);
     }
     else { // PT_INTERP
         DPRINTF("INTERP ehdr=%%p  av=%%p\\n", ehdr, av);
@@ -675,8 +658,8 @@ do_xmap(
         DPRINTF("  mlen=%%p\\n", mlen);
 #endif
 
-        DPRINTF("mmap addr=%%p  mlen=%%p  offset=%%p  frag=%%p  prot=%%x\\n",
-            addr, mlen, phdr->p_offset - frag, frag, prot);
+        DPRINTF("mmap addr=%%p  mlen=%%p  phdr=%%p  offset=%%p  frag=%%p  prot=%%x\\n",
+            addr, mlen, phdr, phdr->p_offset - frag, frag, prot);
         int mfd = 0;
         if (xi && phdr->p_flags & PF_X) { // SELinux
             // Cannot set PROT_EXEC except via mmap() into a region (Linux "vma")
@@ -756,6 +739,9 @@ ERR_LAB
     return ehdr->e_entry + reloc;
 }
 
+
+int open(char const *, int, int);
+ssize_t read(int, void *, size_t);
 
 /*************************************************************************
 // upx_main - called by our entry code

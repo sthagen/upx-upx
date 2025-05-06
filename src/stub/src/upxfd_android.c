@@ -127,18 +127,7 @@ struct stat { // __NR_stat = 106 + NR_SYSCALL_BASE
 #define S_IRWXU 00700
 #define AT_FDCWD -100
 #define restrict /**/
-//
-#ifdef __mips__  //{
-// We want to supersede in *.elf-fold.S, not use include/linux.h
-#define NO_WANT_CLOSE 1
-#define NO_WANT_EXIT 1
-#define NO_WANT_MMAP 1
-#define NO_WANT_MPROTECT 1
-#define NO_WANT_MSYNC 1
-#define NO_WANT_OPEN 1
-#define NO_WANT_READ 1
-#define NO_WANT_WRITE 1
-#endif  //}
+
 #include "include/linux.h"  // syscalls; i386 inlines via "int 0x80"
 extern int open(char const *, int, int);
 
@@ -157,8 +146,29 @@ extern int fstatat(int dirfd, const char *restrict pathname,
 
 #define MFD_EXEC 0x10
 //#define O_RDWR 2
-#define O_DIRECTORY 0200000  /* 0x010000 */
-#define O_TMPFILE 020000000  /* 0x400000 */
+
+#if defined(__aarch64__)  //{
+// linux/arch/arm64/include/uapi/asm/fcntl.h:
+#define O_DIRECTORY  040000 /* must be a directory */
+
+#elif defined(__arm__)  //}{
+// linux/arch/arm/include/uapi/asm/fcntl.h:
+#define O_DIRECTORY  040000 /* must be a directory */
+
+#elif defined(__powerpc__) || defined(__powerpc64__)  //}{
+// linux/arch/powerpc/include/uapi/asm/fcntl.h:
+#define O_DIRECTORY      040000 /* must be a directory */
+
+#else  //}{ i386, amd64, mips
+// linux/include/uapi/asm-generic/fcntl.h:
+#define O_DIRECTORY 00200000 /* must be a directory */
+
+#endif  //}
+
+// linux/include/uapi/asm-generic/fcntl.h:
+#define __O_TMPFILE 020000000
+#define O_TMPFILE (__O_TMPFILE | O_DIRECTORY)
+
 
 #define PATH_MAX 4096  /* linux/include/uapi/linux/limits.h */
 

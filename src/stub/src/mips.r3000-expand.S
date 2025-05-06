@@ -42,7 +42,6 @@ SZ_DLINE= 128  # size of data cache line in Apple G5
 
 #include "arch/mips/r3000/macros.ash"
 #include "arch/mips/r3000/bits.ash"
-#define NO_WANT_MMAP 1
 
 /* These from /usr/include/asm/unistd.h */
 __NR_cacheflush = 147+ __NR_Linux

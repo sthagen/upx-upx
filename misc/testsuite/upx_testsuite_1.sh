@@ -119,11 +119,12 @@ cd testsuite_1 || exit 1
 #***********************************************************************
 
 run_upx() {
+    local flags="--disable-random-id --fake-stub-version=5.01 --fake-stub-year=2025"
     local ec=0
     if [[ $UPX_TESTSUITE_VERBOSE == 1 ]]; then
         echo "LOG: '${run_upx[*]}' $*"
     fi
-    "${run_upx[@]}" "$@" || ec=$?
+    "${run_upx[@]}" $flags "$@" || ec=$?
     if [[ $ec != 0 ]]; then
         echo "FATAL: '${run_upx[*]}' $*"
         echo "  (exit code was $ec)"

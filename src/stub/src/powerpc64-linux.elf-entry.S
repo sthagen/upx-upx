@@ -70,6 +70,7 @@ __NR_munmap = 91
 __NR_close = 6
 __NR_open =  5
 __NR_write = 4
+__NR_openat = 286
 
 EINVAL= 22
 

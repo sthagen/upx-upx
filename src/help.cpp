@@ -220,9 +220,12 @@ void show_help(int verbose) {
                 "%s"
                 "  -d     decompress                        -l    list compressed file\n"
                 "  -t     test compressed file              -V    display version number\n"
+                "%s"
                 "  -h     give %s help                    -L    display software license\n%s",
                 verbose == 0 ? "" : "  --best compress best (can be slow for big files)\n",
-                verbose == 0 ? "more" : "this", verbose == 0 ? "" : "\n");
+                verbose == 0 ? "" : "  --fileinfo show parameters of already-compressed file\n",
+                verbose == 0 ? "more" : "this",
+                verbose == 0 ? "" : "\n");
 
     fg = con_fg(f, FG_YELLOW);
     con_fprintf(f, "Options:\n");

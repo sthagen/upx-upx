@@ -28,7 +28,8 @@
 #include "conf.h"
 
 static Options global_options;
-Options *opt = &global_options; // also see class PackMaster for per-file local options
+// also see class PackMaster for per-file local options
+Options *opt = &global_options;
 
 #if WITH_THREADS
 std::mutex opt_lock_mutex; // for locking "opt"

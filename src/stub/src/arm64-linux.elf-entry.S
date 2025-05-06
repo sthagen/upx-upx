@@ -188,7 +188,7 @@ L00:
         mov w1,wzr; b 0b  // try again without MFD_EXEC
 no_memfd:  // so try /dev/shm
 O_RDWR= 2
-O_DIRECTORY= 0200000  // 0x010000
+O_DIRECTORY= 040000   //  0x04000
 O_TMPFILE= 020000000  // 0x400000
         call 0f; .int 0700, O_RDWR|O_DIRECTORY|O_TMPFILE; .asciz "/dev/shm"
         .balign 4; 0:

@@ -1534,7 +1534,7 @@ PackLinuxElf32::buildLinuxLoader(
 //   SO_MAIN  C-language supervision based on PT_LOADs
         char sec[120]; memset(sec, 0, sizeof(sec));  // debug convenience
         int len = 0;
-        unsigned m_decompr = methods_used | (1u << ph_forced_method(ph.method));
+        unsigned m_decompr = methods_used | (1u << (0xFF & ph_forced_method(ph.method)));
         len += snprintf(sec, sizeof(sec), "%s", "SO_HEAD,ptr_NEXT,EXP_HEAD");
 
         // Start of dasiy-chain fall-through.
@@ -1554,10 +1554,13 @@ PackLinuxElf32::buildLinuxLoader(
         len += snprintf(&sec[len], sizeof(sec) - len, ",%s", "EXP_TAIL");
         // End of daisy-chain fall-through.
 
-        len += snprintf(&sec[len], sizeof(sec) - len, ",%s",
-            (sec_arm_attr || is_asl)
-                ? "HUMF_A,UMF_ANDROID"
-                : "HUMF_L,UMF_LINUX");
+        // MIPS directly calls memfd_create
+        if (this->e_machine != Elf32_Ehdr::EM_MIPS) {
+            len += snprintf(&sec[len], sizeof(sec) - len, ",%s",
+                (sec_arm_attr || is_asl)
+                    ? "HUMF_A,UMF_ANDROID"
+                    : "HUMF_L,UMF_LINUX");
+        }
         if (hasLoaderSection("STRCON")) {
             len += snprintf(&sec[len], sizeof(sec) - len, ",%s", "STRCON");
         }
@@ -1583,7 +1586,7 @@ PackLinuxElf32::buildLinuxLoader(
         initLoader(fold, szfold);
         char sec[120]; memset(sec, 0, sizeof(sec));  // debug convenience
         int len = 0;
-        unsigned m_decompr = methods_used | (1u << ph_forced_method(ph.method));
+        unsigned m_decompr = methods_used | (1u << (0xFF & ph_forced_method(ph.method)));
         len += snprintf(sec, sizeof(sec), "%s", ".text,EXP_HEAD");
         if (((1u<<M_NRV2B_LE32)|(1u<<M_NRV2B_8)|(1u<<M_NRV2B_LE16)) & m_decompr) {
             len += snprintf(&sec[len], sizeof(sec) - len, ",%s", "NRV2B");
@@ -1689,7 +1692,7 @@ PackLinuxElf32::buildLinuxLoader(
             defineSymbols(ft);
     }
     else { // main program with ELF1 de-compressor
-        addStubEntrySections(ft, methods_used | (1u << ph_forced_method(ph.method)) );
+        addStubEntrySections(ft, methods_used | (1u << (0xFF & ph_forced_method(ph.method))) );
         if (!xct_off) { // main program
             defineSymbols(ft);
         }
@@ -1728,7 +1731,7 @@ PackLinuxElf64::buildLinuxLoader(
 //   SO_MAIN  C-language supervision based on PT_LOADs
         char sec[120]; memset(sec, 0, sizeof(sec));  // debug convenience
         int len = 0;
-        unsigned m_decompr = methods_used | (1u << ph_forced_method(ph.method));
+        unsigned m_decompr = methods_used | (1u << (0xFF & ph_forced_method(ph.method)));
         len += snprintf(sec, sizeof(sec), "%s", "SO_HEAD,ptr_NEXT,EXP_HEAD");
 
         // Start of dasiy-chain fall-through.
@@ -1773,7 +1776,7 @@ PackLinuxElf64::buildLinuxLoader(
         initLoader(fold, szfold);
         char sec[120]; memset(sec, 0, sizeof(sec));  // debug convenience
         int len = 0;
-        unsigned m_decompr = methods_used | (1u << ph_forced_method(ph.method));
+        unsigned m_decompr = methods_used | (1u << (0xFF & ph_forced_method(ph.method)));
         len += snprintf(sec, sizeof(sec), "%s", ".text,EXP_HEAD");
         if (((1u<<M_NRV2B_LE32)|(1u<<M_NRV2B_8)|(1u<<M_NRV2B_LE16)) & m_decompr) {
             len += snprintf(&sec[len], sizeof(sec) - len, ",%s", "NRV2B");
@@ -1878,7 +1881,7 @@ PackLinuxElf64::buildLinuxLoader(
         }
     }
     else { // main program with ELF1 de-compressor
-        addStubEntrySections(ft, methods_used | (1u << ph_forced_method(ph.method)) );
+        addStubEntrySections(ft, methods_used | (1u << (0xFF & ph_forced_method(ph.method))) );
         if (!xct_off) { // main program
             defineSymbols(ft);
         }
@@ -2312,6 +2315,8 @@ unsigned PackLinuxElf32::elf_find_table_size(unsigned dt_type, unsigned sh_type)
         x_rva = elf_unsigned_dynamic(dt_type);
     }
     Elf32_Phdr const *const x_phdr = elf_find_Phdr_for_va(x_rva, phdri, e_phnum);
+    if (!x_phdr)
+        return ~0u;  // corrupted Phdrs?
     unsigned const           d_off =             x_rva - get_te32(&x_phdr->p_vaddr);
     unsigned const           y_ndx = find_dt_ndx(d_off + get_te32(&x_phdr->p_offset));
     if (~0u != y_ndx) {
@@ -2394,6 +2399,12 @@ PackLinuxElf32::invert_pt_dynamic(Elf32_Dyn const *dynp, u32_t headway)
         // Find end of DT_HASH
         hashend = (unsigned const *)(void const *)(elf_find_table_size(
             Elf32_Dyn::DT_HASH, Elf32_Shdr::SHT_HASH) + (char const *)hashtab);
+        if (!hashtab || (char const *)hashend <= (char const *)&hashtab[2]
+        ||  file_image.getSizeInBytes()
+            < (unsigned)((char const *)&hashtab[2] - (char *)&file_image[0]) )
+        {
+            throwCantPack("bad DT_HASH %#x", v_hsh);
+        }
 
         unsigned const nbucket = get_te32(&hashtab[0]);
         unsigned const *const buckets = &hashtab[2];
@@ -3786,8 +3797,8 @@ PackLinuxElf32::generateElfHdr(
     assert(get_te16(&h2->ehdr.e_phentsize) == sizeof(Elf32_Phdr));
 
     h2->ehdr.e_shoff = 0;
+    set_te16(&h2->ehdr.e_shentsize, sizeof(Elf32_Shdr));  // libbfd-2.41-38.fc40
     if (o_elf_shnum) {
-        set_te16(&h2->ehdr.e_shentsize, sizeof(Elf32_Shdr));
         h2->ehdr.e_shnum = o_elf_shnum;
         h2->ehdr.e_shstrndx = o_elf_shnum - 1;
     }
@@ -3795,7 +3806,9 @@ PackLinuxElf32::generateElfHdr(
         // https://bugzilla.redhat.com/show_bug.cgi?id=2131609
         // 0==.e_shnum is a special case for libbfd
         // that requires 0==.e_shentsize in order to force "no Shdrs"
-        h2->ehdr.e_shentsize = 0;
+        // But qemu 8.2.9 with libbfd-2.41-38.fc40  says EXEC format error
+        // and uses 0==.e_shoff instead.
+        // h2->ehdr.e_shentsize = 0;
         h2->ehdr.e_shnum = 0;
         h2->ehdr.e_shstrndx = 0;
     }
@@ -3995,7 +4008,7 @@ PackOpenBSDElf32x86::generateElfHdr(
                          h3->ehdr.e_shoff = 0;
     assert(get_te16(&h3->ehdr.e_ehsize)    == sizeof(Elf32_Ehdr));
     assert(get_te16(&h3->ehdr.e_phentsize) == sizeof(Elf32_Phdr));
-    h3->ehdr.e_shentsize = 0;
+    set_te16(&h3->ehdr.e_shentsize, sizeof(Elf32_Shdr));  // libbfd-2.41-38.fc40
     h3->ehdr.e_shnum = 0;
     h3->ehdr.e_shstrndx = 0;
 
@@ -4091,8 +4104,8 @@ PackLinuxElf64::generateElfHdr(
     assert(get_te16(&h2->ehdr.e_phentsize) == sizeof(Elf64_Phdr));
 
     h2->ehdr.e_shoff = 0;
+    set_te16(&h2->ehdr.e_shentsize, sizeof(Elf64_Shdr));  // libbfd-2.41-38.fc40
     if (o_elf_shnum) {
-        set_te16(&h2->ehdr.e_shentsize, sizeof(Elf64_Shdr));
         h2->ehdr.e_shnum = o_elf_shnum;
         h2->ehdr.e_shstrndx = o_elf_shnum - 1;
     }
@@ -4100,7 +4113,9 @@ PackLinuxElf64::generateElfHdr(
         // https://bugzilla.redhat.com/show_bug.cgi?id=2131609
         // 0==.e_shnum is a special case for libbfd
         // that requires 0==.e_shentsize in order to force "no Shdrs"
-        h2->ehdr.e_shentsize = 0;
+        // But qemu 8.2.9 with libbfd-2.41-38.fc40  says EXEC format error
+        // and uses 0==.e_shoff instead.
+        // h2->ehdr.e_shentsize = 0;
         h2->ehdr.e_shnum = 0;
         h2->ehdr.e_shstrndx = 0;
     }
@@ -4300,7 +4315,7 @@ void PackLinuxElf32::pack1(OutputFile * /*fo*/, Filter &ft)
                         fi->readx(ibuf, filesz);
                         ft = orig_ft;
                         ph = orig_ph;
-                        ph.method = ph_force_method(methods[k]);
+                        ph.set_method(ph_force_method(methods[k]), offset);
                         ph.u_len = filesz;
                         compressWithFilters(&ft, OVERHEAD, NULL_cconf, 10, true);
                         sz_this += ph.c_len;
@@ -4313,7 +4328,7 @@ void PackLinuxElf32::pack1(OutputFile * /*fo*/, Filter &ft)
                 fi->readx(ibuf, sz_tail);
                 ft = orig_ft;
                 ph = orig_ph;
-                ph.method = ph_force_method(methods[k]);
+                ph.set_method(ph_force_method(methods[k]));
                 ph.u_len = sz_tail;
                 compressWithFilters(&ft, OVERHEAD, NULL_cconf, 10, true);
                 sz_this += ph.c_len;
@@ -4326,7 +4341,7 @@ void PackLinuxElf32::pack1(OutputFile * /*fo*/, Filter &ft)
         }
         ft = orig_ft;
         ph = orig_ph;
-        ph.method = ph_force_method(method_best);
+        ph.set_method(ph_force_method(method_best));
     }
 
     Elf32_Phdr *phdr = phdri;
@@ -5152,7 +5167,7 @@ void PackLinuxElf64::pack1(OutputFile * /*fo*/, Filter &ft)
                         fi->readx(ibuf, filesz);
                         ft = orig_ft;
                         ph = orig_ph;
-                        ph.method = ph_force_method(methods[k]);
+                        ph.set_method(ph_force_method(methods[k]));
                         ph.u_len = filesz;
                         compressWithFilters(&ft, OVERHEAD, NULL_cconf, 10, true);
                         sz_this += ph.c_len;
@@ -5165,7 +5180,7 @@ void PackLinuxElf64::pack1(OutputFile * /*fo*/, Filter &ft)
                 fi->readx(ibuf, sz_tail);
                 ft = orig_ft;
                 ph = orig_ph;
-                ph.method = ph_force_method(methods[k]);
+                ph.set_method(ph_force_method(methods[k]));
                 ph.u_len = sz_tail;
                 compressWithFilters(&ft, OVERHEAD, NULL_cconf, 10, true);
                 sz_this += ph.c_len;
@@ -5178,7 +5193,7 @@ void PackLinuxElf64::pack1(OutputFile * /*fo*/, Filter &ft)
         }
         ft = orig_ft;
         ph = orig_ph;
-        ph.method = ph_force_method(method_best);
+        ph.set_method(ph_force_method(method_best));
     }
 
     Elf64_Phdr *phdr = phdri;
@@ -7303,8 +7318,11 @@ void PackLinuxElf32::un_DT_INIT(
             ||       Elf32_Dyn::DT_PREINIT_ARRAY == tag) {
                 // 'val' is the RVA of the first slot, which is the slot that
                 // the compressor changed to be the entry to the run-time stub.
-                Elf32_Rel *rp = (Elf32_Rel *)elf_find_dynamic(Elf32_Dyn::DT_NULL);
-                ((Elf32_Dyn *)elf_find_dynptr(Elf32_Dyn::DT_NULL))->d_val = 0;
+                Elf32_Dyn *dyn_null = elf_find_dynptr(Elf32_Dyn::DT_NULL);
+                if (!dyn_null)
+                    throwCantUnpack("bad PT_DYNAMIC .end");
+                Elf32_Rel *rp = (Elf32_Rel *)elf_find_dynamic(dyn_null->d_val);
+                dyn_null->d_val = 0;
                 if (rp) {
                     // Compressor saved the original *rp in dynsym[0]
                     Elf32_Rel *rp_unc = (Elf32_Rel *)&dynsym[0];  // pointer
@@ -7403,6 +7421,8 @@ void PackLinuxElf32::un_DT_INIT(
 
             Elf32_Ehdr const *const o_ehdr = (Elf32_Ehdr const *)(void *)lowmem;
             unsigned const o_phnum = o_ehdr->e_phnum;
+            if (((1<<16) - sizeof(Elf32_Ehdr)) / sizeof(Elf32_Phdr) < o_phnum)
+                throwCantUnpack("bad Ehdr.e_phnum %#x", o_phnum);
             phdr = phdro;
             for (unsigned j = 0; j < o_phnum; ++j, ++phdr) if (is_LOAD(phdr)) {
                 upx_uint32_t vaddr = get_te32(&phdr->p_vaddr);
@@ -7410,6 +7430,8 @@ void PackLinuxElf32::un_DT_INIT(
                 upx_uint32_t d = plt_va - vaddr - asl_delta;
                 if (d < filesz) {
                     upx_uint32_t offset = get_te32(&phdr->p_offset);
+                    if ((upx_uint32_t)file_size <= offset)
+                        throwCantUnpack("bad phdr[%d].p_offset %#zx", j, (size_t)offset);
                     if (fo) {
                         fo->seek(d + offset, SEEK_SET);
                         fo->rewrite(jump_slots, n_plt * sizeof(upx_uint32_t));
@@ -7479,12 +7501,15 @@ void PackLinuxElf64::un_DT_INIT(
             }
             // Apparently the hard case is common for some Android IDEs.
             // No DT_INIT; only DT_INIT_ARRAY.
-            else if (Elf32_Dyn::DT_INIT_ARRAY    == tag
+            else if (Elf64_Dyn::DT_INIT_ARRAY    == tag
             ||       Elf64_Dyn::DT_PREINIT_ARRAY == tag) {
                 // 'val' is the RVA of the first slot, which is the slot that
                 // the compressor changed to be the entry to the run-time stub.
-                Elf64_Rela *rp = (Elf64_Rela *)elf_find_dynamic(Elf64_Dyn::DT_NULL);
-                ((Elf64_Dyn *)elf_find_dynptr(Elf64_Dyn::DT_NULL))->d_val = 0;
+                Elf64_Dyn *dyn_null = elf_find_dynptr(Elf64_Dyn::DT_NULL);
+                if (!dyn_null)
+                    throwCantUnpack("bad PT_DYNAMIC .end");
+                Elf64_Rela *rp = (Elf64_Rela *)elf_find_dynamic(dyn_null->d_val);
+                dyn_null->d_val = 0;
                 if (rp) {
                     // Compressor saved the original *rp in dynsym[0]
                     Elf64_Rela *rp_unc = (Elf64_Rela *)&dynsym[0];  // pointer
@@ -7547,6 +7572,8 @@ void PackLinuxElf64::un_DT_INIT(
 
             Elf64_Ehdr const *const o_ehdr = (Elf64_Ehdr const *)(void *)lowmem;
             unsigned const o_phnum = o_ehdr->e_phnum;
+            if (((1<<16) - sizeof(Elf64_Ehdr)) / sizeof(Elf64_Phdr) < o_phnum)
+                throwCantUnpack("bad Ehdr.e_phnum %#x", o_phnum);
             phdr = phdro;
             for (unsigned j = 0; j < o_phnum; ++j, ++phdr) if (is_LOAD(phdr)) {
                 upx_uint64_t vaddr = get_te64(&phdr->p_vaddr);
@@ -7554,6 +7581,8 @@ void PackLinuxElf64::un_DT_INIT(
                 upx_uint64_t d = plt_va - vaddr - asl_delta;
                 if (d < filesz) {
                     upx_uint64_t offset = get_te64(&phdr->p_offset);
+                    if ((upx_uint64_t)file_size <= offset)
+                        throwCantUnpack("bad phdr[%d].p_offset %#zx", j, (size_t)offset);
                     if (fo) {
                         fo->seek(d + offset, SEEK_SET);
                         fo->rewrite(jump_slots, n_plt * sizeof(upx_uint64_t));
@@ -7620,7 +7649,7 @@ void PackLinuxElf64::unpack(OutputFile *fo)
     fi->readx(&bhdr, szb_info);
     ph.u_len = get_te32(&bhdr.sz_unc);
     ph.c_len = get_te32(&bhdr.sz_cpr);
-    ph.method = bhdr.b_method;
+    ph.set_method(bhdr.b_method, overlay_offset + sizeof(p_info));
     if (ph.c_len > file_size_u || ph.c_len == 0 || ph.u_len == 0
     ||  ph.u_len > orig_file_size)
         throwCantUnpack("b_info corrupted");
@@ -7665,15 +7694,17 @@ void PackLinuxElf64::unpack(OutputFile *fo)
             unsigned b_method = ibuf[0];
             unsigned b_extra  = ibuf[3];
             if (M_ZSTD >= b_method && 0 == b_extra) {
-                fi->seek( -(upx_off_t)(ph.c_len + szb_info), SEEK_CUR);
+                unsigned where = fi->seek( -(upx_off_t)(ph.c_len + szb_info), SEEK_CUR);
                 szb_info = 12;
                 fi->readx(&bhdr, szb_info);
                 ph.filter_cto = bhdr.b_cto8;
-                ph.method = bhdr.b_method;
+                ph.set_method(bhdr.b_method, where);
                 prev_method = bhdr.b_method;  // FIXME if multiple de-compressors
                 fi->readx(ibuf, ph.c_len);
             }
         }
+        if (ph.u_len < sizeof(*ehdr))
+            throwCantUnpack("ElfXX_Ehdr corrupted");
         decompress(ibuf, (upx_byte *)ehdr, false);
         if (ehdr->e_type   !=ehdri.e_type
         ||  ehdr->e_machine!=ehdri.e_machine
@@ -7867,7 +7898,7 @@ void PackLinuxElf64::unpack(OutputFile *fo)
 
     // check for end-of-file
     fi->readx(&bhdr, szb_info);
-    ph.method = bhdr.b_method;
+    ph.set_method(bhdr.b_method, ~0u);
     unsigned const sz_unc = ph.u_len = get_te32(&bhdr.sz_unc);
 
     if (sz_unc == 0) { // uncompressed size 0 -> EOF
@@ -8372,6 +8403,8 @@ unsigned PackLinuxElf64::elf_find_table_size(unsigned dt_type, unsigned sh_type)
         x_rva = elf_unsigned_dynamic(dt_type);
     }
     Elf64_Phdr const *const x_phdr = elf_find_Phdr_for_va(x_rva, phdri, e_phnum);
+    if (!x_phdr)
+        return ~0u;  // corrupted Phdrs?
     unsigned const           d_off =             x_rva - get_te64(&x_phdr->p_vaddr);
     unsigned const           y_ndx = find_dt_ndx(d_off + get_te64(&x_phdr->p_offset));
     if (~0u != y_ndx) {
@@ -8459,6 +8492,12 @@ PackLinuxElf64::invert_pt_dynamic(Elf64_Dyn const *dynp, upx_uint64_t headway)
         // Find end of DT_HASH
         hashend = (unsigned const *)(void const *)(elf_find_table_size(
             Elf64_Dyn::DT_HASH, Elf64_Shdr::SHT_HASH) + (char const *)hashtab);
+        if (!hashtab || (char const *)hashend <= (char const *)&hashtab[2]
+        ||  file_image.getSizeInBytes()
+            < (unsigned)((char const *)&hashtab[2] - (char *)&file_image[0]) )
+        {
+            throwCantPack("bad DT_HASH %#x", v_hsh);
+        }
 
         unsigned const nbucket = get_te32(&hashtab[0]);
         unsigned const *const buckets = &hashtab[2];
@@ -8851,7 +8890,7 @@ void PackLinuxElf32::unpack(OutputFile *fo)
     fi->readx(&bhdr, szb_info);
     ph.u_len = get_te32(&bhdr.sz_unc);
     ph.c_len = get_te32(&bhdr.sz_cpr);
-    ph.method = bhdr.b_method;
+    ph.set_method(bhdr.b_method, overlay_offset + sizeof(p_info));
     if (ph.c_len > (unsigned)file_size || ph.c_len == 0 || ph.u_len == 0
     ||  ph.u_len > orig_file_size)
         throwCantUnpack("b_info corrupted");
@@ -8885,6 +8924,8 @@ void PackLinuxElf32::unpack(OutputFile *fo)
         if (ibuf.getSize() < ph.c_len)
             throwCompressedDataViolation();
         fi->readx(ibuf, ph.c_len);
+        if (ph.u_len < sizeof(*ehdr))
+            throwCantUnpack("ElfXX_Ehdr corrupted");
         decompress(ibuf, (upx_byte *)ehdr, false);
         if (ehdr->e_type   !=ehdri.e_type
         ||  ehdr->e_machine!=ehdri.e_machine
@@ -9076,7 +9117,7 @@ void PackLinuxElf32::unpack(OutputFile *fo)
 
     // check for end-of-file
     fi->readx(&bhdr, szb_info);
-    ph.method = bhdr.b_method;
+    ph.set_method(bhdr.b_method, ~0u);
     unsigned const sz_unc = ph.u_len = get_te32(&bhdr.sz_unc);
 
     if (sz_unc == 0) { // uncompressed size 0 -> EOF

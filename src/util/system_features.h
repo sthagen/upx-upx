@@ -34,14 +34,6 @@
 #endif
 #endif
 
-// aligned_alloc() was added in glibc-2.16
-#if !defined(_LIBCPP_HAS_NO_LIBRARY_ALIGNED_ALLOCATION) && defined(__cplusplus)
-#if defined(__GLIBC__) && defined(__GLIBC_MINOR__) && (__GLIBC__ + 0 == 2) &&                      \
-    (__GLIBC_MINOR__ + 0 > 0) && (__GLIBC_MINOR__ + 0 < 16)
-#define _LIBCPP_HAS_NO_LIBRARY_ALIGNED_ALLOCATION
-#endif
-#endif // _LIBCPP_HAS_NO_LIBRARY_ALIGNED_ALLOCATION
-
 // libc++ hardenining
 #if defined(__cplusplus) && 0 // TODO later
 
@@ -64,5 +56,25 @@
 #endif // _LIBCPP_ENABLE_ASSERTIONS
 
 #endif // TODO later
+
+// aligned_alloc() was added in glibc-2.16
+#if !defined(_LIBCPP_HAS_NO_LIBRARY_ALIGNED_ALLOCATION) && defined(__cplusplus)
+#if defined(__GLIBC__) && defined(__GLIBC_MINOR__) && (__GLIBC__ + 0 == 2) &&                      \
+    (__GLIBC_MINOR__ + 0 > 0) && (__GLIBC_MINOR__ + 0 < 16)
+#define _LIBCPP_HAS_NO_LIBRARY_ALIGNED_ALLOCATION
+#endif
+#endif // _LIBCPP_HAS_NO_LIBRARY_ALIGNED_ALLOCATION
+
+#if defined(_LIBCPP_HAS_NO_LIBRARY_ALIGNED_ALLOCATION) && defined(__cplusplus)
+#if defined(__has_include)
+#if __has_include(<__config>)
+#include <__config>
+#undef _LIBCPP_HAS_LIBRARY_ALIGNED_ALLOCATION
+#undef _LIBCPP_HAS_ALIGNED_ALLOCATION
+#define _LIBCPP_HAS_LIBRARY_ALIGNED_ALLOCATION 0
+#define _LIBCPP_HAS_ALIGNED_ALLOCATION         0
+#endif
+#endif
+#endif
 
 /* vim:set ts=4 sw=4 et: */

@@ -86,6 +86,7 @@ no_unf:
 
     POP2 a0,a1   // MATCH_81  dst, len
     add a1,a1,a0  // lo, hi
+    addi a1,a1,-1  // highest covered addr
 
 CACHELINE=32
         ori a0,a0,-1+ CACHELINE  // highest addr on cache line

@@ -116,6 +116,8 @@ __NR_close    =   6+ __NR_Linux
 __NR_exit     =   1+ __NR_Linux
 __NR_ftruncate=  93+ __NR_Linux
 __NR_memfd_create= 354+ __NR_Linux
+  MFD_EXEC= 0x10
+  EINVAL= 22
 __NR_mmap     =  90+ __NR_Linux
 __NR_mprotect = 125+ __NR_Linux
 __NR_msync    = 144+ __NR_LINUX
@@ -180,7 +182,7 @@ eof_n2b:
         subu a1,lxdst,v1  // actual length generated
           sw a1,(lxdstlen)
         li a2,ICACHE|DCACHE
-        li v0,__NR_cacheflush; syscall
+        li v0,__NR_cacheflush; syscall  // ignore failure
 
         lw v0,0(sp)
         jr ra
@@ -192,13 +194,6 @@ eof_n2b:
 //        // section UMF_LINUX or UMF_ANDROID goes here
 
   section ELFMAINZ; .set noreorder
-L72:
-        li a0,2  # fd stderr
-        li v0,__NR_write; syscall
-die:
-        li a0,127
-        li v0,__NR_exit; syscall
-
 unfold:  # IN: $r_fexp,$r_auxv,$r_PMASK,$r_FOLD
         addiu sp,sp,-sp_frame
         sw $r_PMASK,F_PMASK(sp)
@@ -206,10 +201,23 @@ unfold:  # IN: $r_fexp,$r_auxv,$r_PMASK,$r_FOLD
         la $r_elfa,sz_pack2 - f_exp($r_fexp)
         sub $r_elfa,$r_elfa,$r_LENX  # $r_elfa= &Elf32_Ehdr of this stub
 
-        bal 0f; move a0,ra; .asciz "upx"; .balign 4
+        li a1,MFD_EXEC  // modern
+2:
+        bal 0f
+          move a0,ra
+        .asciz "upx"; .balign 4
 0:
-        move a1,zero
-        li v0,__NR_memfd_create; syscall; move $r_mfd,v0
+        li v0,__NR_memfd_create; syscall  // attempt recovery
+        beqz a3,9f  // success
+          move $r_mfd,v0  // return value
+        beqz a1,8f  // failure if (, 0) already tried
+          addiu a1,v0,-EINVAL  // MFD_EXEC appeared Linux 6.3 2023-04-23
+        beqz a1,2b  // try old (, 0) if failure was EINVAL
+          nop
+8:
+HALT:
+        break  // both (, MFD_EXEC) and (, 0) failed
+9:
 
 # alloca() for de-compressed stub
         lw $r_szuf,sz_unc($r_FOLD)  # sz_unc of fold
@@ -243,8 +251,8 @@ unfold:  # IN: $r_fexp,$r_auxv,$r_PMASK,$r_FOLD
         move a2,$r_szuf  # .sz_unc
         move a1,sp
         move a0,$r_mfd
-        li v0,__NR_write; syscall
-        move sp,fp
+        li v0,__NR_write; syscall; bnez a3,HALT  // faliure
+          move sp,fp
 
 # Map de-compressed stub
         addiu sp,-6*NBPW  # space for all 6 args to mmap()
@@ -254,24 +262,16 @@ unfold:  # IN: $r_fexp,$r_auxv,$r_PMASK,$r_FOLD
         li   a2,PROT_READ|PROT_EXEC  # FIXME: PROT_WRITE is DEBUG only
         lw   a1,sz_unc($r_FOLD)
         move a0,zero
-        li v0,__NR_mmap; syscall; addiu sp,6*NBPW
+        li v0,__NR_mmap; syscall; bnez a3,HALT  // failure
+          addiu sp,6*NBPW
         sw v0,F_ADRU(sp)
         addiu ra,v0,2*NBPW
 
-        move a0,$r_mfd; li v0,__NR_close; syscall
+        move a0,$r_mfd
+        li v0,__NR_close; syscall  // ignore failure
 
         jr ra
           addu $r_ADRX,$r_elfa,$r_ADRX  # compressed data
-
-memfd_create: .globl memfd_create
-        li v0,__NR_memfd_create; syscall
-        j ra
-          nop
-
-ftruncate: .globl ftruncate
-        li v0,__NR_ftruncate; syscall
-        j ra
-          nop
 
 zfind:  # result in $r_auxv
         lw v1,(a0); addiu a0,a0,NBPW

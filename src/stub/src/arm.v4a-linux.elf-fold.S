@@ -107,6 +107,13 @@ Psync: .globl Psync
         bic r12,arg1,r12  // lo frag
         sub arg1,arg1,r12  // page align lo end
         add arg2,arg2,r12
+
+        stmdb sp!,{r0,r1,r2}  // lo, len, ??
+        add r1,r1,r0  // hi
+        mov r2,#0  // might be CSSELR_DCACHE from linux/arch/arm/include/asm/cachetype.h
+        do_sys2 __ARM_NR_cacheflush
+        ldmia sp!,{r0,r1,r2}
+
         do_sys __NR_msync; ret
 
 mmap_privanon: .globl mmap_privanon
@@ -199,7 +206,7 @@ r_pse .req r8
         sub arg3,arg3,#1  @ room for null terminator
         do_sys7t __NR_readlink  // ENOENT is OK
         cmn r0,#1<<12
-        movcs r1,arg1  @ FIXME?  "/proc/self/exe"
+        adrcs r1,proc_self_exe
         movcs r0,#14  @ strlen("/proc/self/exe")
 link_ok:
         add r2,r1,r0  @ end

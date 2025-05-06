@@ -62,7 +62,7 @@ option(UPX_CONFIG_DISABLE_EXHAUSTIVE_TESTS "Do not run exhaustive tests"        
 # init
 #***********************************************************************
 
-set(UPX_VERSION_STRING "5.0.0") # this should match src/version.h
+set(UPX_VERSION_STRING "5.0.1") # this should match src/version.h
 
 upx_cmake_include_hook(2_init)
 

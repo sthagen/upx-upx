@@ -129,7 +129,8 @@ void FileBase::closex() may_throw {
 upx_off_t FileBase::seek(upx_off_t off, int whence) {
     if (!isOpen())
         throwIOException("bad seek 1");
-    mem_size_assert(1, off >= 0 ? off : -off); // sanity check
+    if (!mem_size_valid_bytes(off >= 0 ? off : -off)) // sanity check
+        throwIOException("bad seek");
     if (whence == SEEK_SET) {
         if (off < 0)
             throwIOException("bad seek 2");
@@ -318,7 +319,8 @@ void OutputFile::rewrite(SPAN_P(const void) buf, int len) {
 }
 
 upx_off_t OutputFile::seek(upx_off_t off, int whence) {
-    mem_size_assert(1, off >= 0 ? off : -off); // sanity check
+    if (!mem_size_valid_bytes(off >= 0 ? off : -off)) // sanity check
+        throwIOException("bad seek");
     assert(!opt->to_stdout);
     switch (whence) {
     case SEEK_SET:

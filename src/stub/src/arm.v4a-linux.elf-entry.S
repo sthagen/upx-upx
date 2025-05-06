@@ -237,6 +237,13 @@ mfd  .req old_sp
         call f_expand
         add sp,sp,#2*NBPW  @ P_02, P_01  remove 5th param
 
+
+// faster than clearcache + msync; also avoids msync() bug
+        ldr arg3,[sp,#F_LENU]
+        ldr arg2,[sp,#F_ADRU]
+        mov arg1,mfd
+        do_sys __NR_write
+
         mov r5,#0
         mov r4,mfd
         mov r3,#MAP_PRIVATE|MAP_FIXED

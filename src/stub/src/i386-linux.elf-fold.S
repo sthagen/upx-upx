@@ -285,8 +285,12 @@ L60:
         push eax
         push eax  // 32 bytes of zeroes now on stack, ready for 'popa'
 
+.macro NOTRACK
+        .byte 0x3e
+.endm
         mov al, __NR_munmap  // eax was 0 from L60
-        /*notrack*/ jmp [edi]  // unmap ourselves via escape hatch, then goto entry
+        // valgrind-3.24.0 has bug with NOTRACK on i386
+        /*NOTRACK;*/ jmp [edi]  // unmap ourselves via escape hatch, then goto entry
 
         section SYSCALLS
 // Sometimes linux enforces page-aligned address

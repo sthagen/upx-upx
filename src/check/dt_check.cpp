@@ -158,8 +158,8 @@ static_assert(8 * sizeof(int) == __INT_WIDTH__, "");
 #if defined(__LONG_WIDTH__)
 static_assert(8 * sizeof(long) == __LONG_WIDTH__, "");
 #endif
-#if defined(__LONG_LONG_WIDTH__)
-static_assert(8 * sizeof(long long) == __LONG_LONG_WIDTH__, "");
+#if defined(__LLONG_WIDTH__)
+static_assert(8 * sizeof(long long) == __LLONG_WIDTH__, "");
 #endif
 #if defined(__INTMAX_WIDTH__)
 static_assert(8 * sizeof(intmax_t) == __INTMAX_WIDTH__, "");
@@ -253,19 +253,6 @@ ASSERT_COMPATIBLE_TYPE(uintptr_t, expected_uintptr_t); // some toolchains are bu
 #if defined(__PTRADDR_TYPE__)
 static_assert(std::is_unsigned<expected_ptraddr_t>::value, "");
 ASSERT_SAME_TYPE(upx_ptraddr_t, expected_ptraddr_t);
-#endif
-
-#if defined(__INTPTR_TYPE__) && defined(__UINTPTR_TYPE__)
-#if defined(__m68k__) && defined(__atarist__) && defined(__GNUC__)
-// BUG: compiler/mintlib mismatch: int vs long
-#elif (defined(__arm__) || defined(__mips__)) && defined(__linux__) && defined(__clang__) &&       \
-    (__SIZEOF_LONG__ == 4)
-// BUG: compiler/libc mismatch: int vs long
-// TODO later: check zig and clang for possible misconfiguration under 32-bit arm & mips
-#else
-ASSERT_SAME_TYPE(intptr_t, expected_intptr_t);
-ASSERT_SAME_TYPE(uintptr_t, expected_uintptr_t);
-#endif // BUG
 #endif
 
 // UPX types
@@ -727,6 +714,7 @@ template <class A, class B>
 static forceinline bool testNoAliasing(A *a, B *b) noexcept {
     return TestNoAliasingStruct<A, B>::test(a, b);
 }
+
 template <class T>
 struct TestIntegerWrap { // check working -fno-strict-overflow
     static inline bool inc_gt(const T x) noexcept { return x + 1 > x; }
@@ -1144,6 +1132,7 @@ void upx_compiler_sanity_check(void) noexcept {
         assert_noexcept(bele->get32(d) == 0xfffefdfc);
         assert_noexcept(get_be32_signed(d) == -66052);
         assert_noexcept(get_be64(d) == 0xfffefdfcfbfaf9f8ULL);
+        assert_noexcept(bele->get64(d) == 0xfffefdfcfbfaf9f8ULL);
         assert_noexcept(get_be64_signed(d) == -283686952306184LL);
         bele = &N_BELE_RTP::le_policy;
         assert_noexcept(get_le16(d) == 0xfeff);
@@ -1156,6 +1145,7 @@ void upx_compiler_sanity_check(void) noexcept {
         assert_noexcept(bele->get32(d) == 0xfcfdfeff);
         assert_noexcept(get_le32_signed(d) == -50462977);
         assert_noexcept(get_le64(d) == 0xf8f9fafbfcfdfeffULL);
+        assert_noexcept(bele->get64(d) == 0xf8f9fafbfcfdfeffULL);
         assert_noexcept(get_le64_signed(d) == -506097522914230529LL);
         static_assert(get_be24(d) == 0xfffefd);
         static_assert(get_le24(d) == 0xfdfeff);

@@ -31,11 +31,11 @@ NBPW=  4
 #include "arch/mips/r3000/macros.ash"
 #include "arch/mips/r3000/bits.ash"
 
-#define NO_WANT_MMAP 1
-#define NO_WANT_CLOSE 1
-#define NO_WANT_EXIT 1
-#define NO_WANT_MPROTECT 1
-#define NO_WANT_WRITE 1
+/*
+eglibc-2.11.1/ports/sysdeps/unix/sysv/linux/mips/mips64/n32/sysdep.h
+#define __SYSCALL_CLOBBERS "$1", "$3", "$10", "$11", "$12", "$13", \
+    "$14", "$15", "$24", "$25", "hi", "lo", "memory"
+*/
 
         .set mips1
         .set noreorder
@@ -334,6 +334,14 @@ Psync: .globl Psync
         and TMP,a0,v0
         sub a0,TMP
         add a1,TMP
+
+__NR_cacheflush = 147+ __NR_Linux
+/* asm/cachectl.h */
+ICACHE= 1<<0
+DCACHE= 1<<1
+        li a2,DCACHE
+        li v0,__NR_cacheflush; syscall  // ignore failure
+
         li v0,__NR_msync; syscall
         jr ra
           addiu sp,2*NBPW
@@ -405,12 +413,11 @@ mmap: .globl mmap
           addiu sp,sp,sp_frame
 
 sysgo:  // src/mipsel.r3000-linux.elf-fold.S
-sysgo2:
         syscall
 sysret:
-        bgez a3,sysOK
+        beqz a3,sysOK  // Linux MIPS convention
           nop
-        move v0,a3  // -errno:  < 0, and > 0xfffff000
+        sub v0,zero,v0  // -errno:  < 0, and > 0xfffff000
 sysOK:
         jr ra
           nop

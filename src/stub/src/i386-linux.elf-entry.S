@@ -201,7 +201,7 @@ AT_PAGESZ= 6  // /usr/include/elf.h
         pop %edx  // MATCH_33  restore &getbit
         mov %eax,%ecx
         shr $12,%eax; shl $12,%eax; mov %eax,F_ADRU(old_sp)
-        sub %eax,%ecx; sub $1,%ecx; mov %ecx,F_MFD (old_sp)
+        sub %eax,%ecx;    dec %ecx; mov %ecx,F_MFD (old_sp)
 #undef r_unc
 #undef u_len
 

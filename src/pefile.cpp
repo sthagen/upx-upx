@@ -1718,6 +1718,8 @@ PeFile::Resource::upx_rnode *PeFile::Resource::convert(const void *rnode, upx_rn
     branch->nc = ic;
     branch->children = New(upx_rnode *, ic);
     branch->data = *node;
+    if (!root)         // first one
+        root = branch; // prevent leak if xcheck throws (hacked unpack or test)
 
     for (const res_dir_entry *rde = node->entries + ic - 1; --ic >= 0; rde--) {
         upx_rnode *child = convert(start + (rde->child & 0x7fffffff), branch, level + 1);

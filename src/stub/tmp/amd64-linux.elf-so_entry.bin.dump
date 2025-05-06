@@ -5,10 +5,10 @@ Idx Name          Size      VMA               LMA               File off  Algn  
   0 HUMF_A        05  0  0  040  2**0  CONTENTS
   1 HUMF_L        05  0  0  045  2**0  CONTENTS
   2 UMF_ANDROID   0133  0  0  050  2**4  CONTENTS
-  3 UMF_LINUX     0d4  0  0  0184  2**2  CONTENTS
-  4 ELFMAINX      0188  0  0  0258  2**2  CONTENTS
-  5 ELFMAINZ      0  0  0  03e0  2**0  CONTENTS
-  6 STRCON        027  0  0  03e0  2**0  CONTENTS
+  3 UMF_LINUX     0f9  0  0  0184  2**2  CONTENTS
+  4 ELFMAINX      0188  0  0  0280  2**2  CONTENTS
+  5 ELFMAINZ      0  0  0  0408  2**0  CONTENTS
+  6 STRCON        065  0  0  0408  2**0  CONTENTS
 SYMBOL TABLE:
 0000000000000000 l    d  ELFMAINZ 0 ELFMAINZ
 0000000000000000 l    d  STRCON 0 STRCON
@@ -22,10 +22,11 @@ SYMBOL TABLE:
 0000000000000000         *UND* 0 ftruncate
 0000000000000000 g     F UMF_ANDROID 0133 upx_mmap_and_fd_android
 0000000000000000         *UND* 0 mmap
-0000000000000000 g     F UMF_LINUX 0d4 upx_mmap_and_fd_linux
+0000000000000000 g     F UMF_LINUX 0f9 upx_mmap_and_fd_linux
 0000000000000000         *UND* 0 write
 0000000000000000         *UND* 0 memfd_create
 0000000000000000         *UND* 0 my_bkpt
+0000000000000000         *UND* 0 exit
 0000000000000000         *UND* 0 open
 
 RELOCATION RECORDS FOR [HUMF_A]:
@@ -58,9 +59,12 @@ OFFSET           TYPE              VALUE
 0000000000000042 R_X86_64_PLT32    memfd_create+0xfffffffffffffffc
 000000000000004f R_X86_64_PC32     STRCON+0x000000000000001a
 000000000000005e R_X86_64_PLT32    open+0xfffffffffffffffc
-0000000000000071 R_X86_64_PLT32    ftruncate+0xfffffffffffffffc
-000000000000009d R_X86_64_PLT32    mmap+0xfffffffffffffffc
-00000000000000a5 R_X86_64_PLT32    get_page_mask+0xfffffffffffffffc
+0000000000000073 R_X86_64_PC32     STRCON+0x0000000000000023
+0000000000000082 R_X86_64_PLT32    write+0xfffffffffffffffc
+000000000000008c R_X86_64_PLT32    exit+0xfffffffffffffffc
+0000000000000096 R_X86_64_PLT32    ftruncate+0xfffffffffffffffc
+00000000000000c2 R_X86_64_PLT32    mmap+0xfffffffffffffffc
+00000000000000ca R_X86_64_PLT32    get_page_mask+0xfffffffffffffffc
 
 RELOCATION RECORDS FOR [ELFMAINX]:
 OFFSET           TYPE              VALUE

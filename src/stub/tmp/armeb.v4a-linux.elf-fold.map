@@ -7,24 +7,24 @@ Name             Origin             Length             Attributes
 Linker script and memory map
 
 
-.text           0x0000000000000000      0xc94
- .text          0x0000000000000000      0x36c tmp/armeb.v4a-linux.elf-fold.o
+.text           0x0000000000000000      0xccc
+ .text          0x0000000000000000      0x398 tmp/armeb.v4a-linux.elf-fold.o
                 0x0000000000000004                get_page_mask
-                0x000000000000030c                memcpy
+                0x0000000000000338                memcpy
                 0x0000000000000048                Psync
-                0x0000000000000350                mempcpy
-                0x0000000000000084                mmap
-                0x000000000000006c                mmap_privanon
+                0x000000000000037c                mempcpy
+                0x00000000000000b0                mmap
+                0x0000000000000098                mmap_privanon
                 0x000000000000000c                get_upxfn_path
-                0x0000000000000330                memset
+                0x000000000000035c                memset
                 0x00000000fffffff4                page_mask
                 0x0000000000000024                Pprotect
                 0x0000000000000024                mprotect
- .text          0x000000000000036c        0x0 tmp/armeb.v4a-linux.elf-help_umf.o
- .text          0x000000000000036c        0x0 tmp/armeb.v4a-expand.o
- .text          0x000000000000036c      0x928 tmp/armeb.v4a-linux.elf-main2.o
-                0x0000000000000c30                underlay
-                0x0000000000000afc                upx_main
+ .text          0x0000000000000398        0x0 tmp/armeb.v4a-linux.elf-help_umf.o
+ .text          0x0000000000000398        0x0 tmp/armeb.v4a-expand.o
+ .text          0x0000000000000398      0x934 tmp/armeb.v4a-linux.elf-main2.o
+                0x0000000000000c68                underlay
+                0x0000000000000b34                upx_main
 
 SYSCALLS        0x0000000000000000      0x214
  SYSCALLS       0x0000000000000000      0x214 tmp/armeb.v4a-linux.elf-fold.o
@@ -59,12 +59,12 @@ HUMF_A          0x0000000000000000        0x4
 HUMF_L          0x0000000000000000        0x4
  HUMF_L         0x0000000000000000        0x4 tmp/armeb.v4a-linux.elf-help_umf.o
 
-UMF_ANDROID     0x0000000000000000      0x540
- UMF_ANDROID    0x0000000000000000      0x540 tmp/armeb.v4a-linux.elf-upxfd_android.o
+UMF_ANDROID     0x0000000000000000      0x544
+ UMF_ANDROID    0x0000000000000000      0x544 tmp/armeb.v4a-linux.elf-upxfd_android.o
                 0x00000000000002c4                upx_mmap_and_fd_android
 
-UMF_LINUX       0x0000000000000000       0xdc
- UMF_LINUX      0x0000000000000000       0xdc tmp/armeb.v4a-linux.elf-upxfd_linux.o
+UMF_LINUX       0x0000000000000000      0x144
+ UMF_LINUX      0x0000000000000000      0x144 tmp/armeb.v4a-linux.elf-upxfd_linux.o
                 0x0000000000000000                upx_mmap_and_fd_linux
 
 EXP_HEAD        0x0000000000000000       0xdc

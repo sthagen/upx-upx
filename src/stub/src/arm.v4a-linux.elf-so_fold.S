@@ -30,6 +30,9 @@
 #define ARM_OLDABI 1
 #include "arch/arm/v4a/macros.S"
 #include "MAX_ELF_HDR.S"
+__NR_SYSCALL_BASE = 0
+__ARM_NR_BASE= 0xf0000 + __NR_SYSCALL_BASE
+__ARM_NR_cacheflush = 2 + __ARM_NR_BASE
 NBPW= 4
 
 sz_Elf32_Ehdr = 13*4
@@ -139,6 +142,13 @@ Psync: .globl Psync
         bic r12,arg1,r12
         sub arg1,arg1,r12
         add arg2,arg2,r12
+
+        stmdb sp!,{r0,r1,r2}  // lo, len, ??
+        add r1,r1,r0  // hi
+        mov r2,#0  // might be CSSELR_DCACHE from linux/arch/arm/include/asm/cachetype.h
+        do_sys2 __ARM_NR_cacheflush
+        ldmia sp!,{r0,r1,r2}
+
         b msync
 
 L05:
