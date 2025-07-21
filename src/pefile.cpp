@@ -580,14 +580,15 @@ void PeFile32::processRelocs() // pass1
     // deliberately corrupt.  Sometimes it is even tuned to cause us trouble!
     // Use an extra check to avoid AccessViolation (SIGSEGV) when appending
     // the relocs into one array.
-    if ((4 * relocnum + 8192) <
-        (sorelocs + 4 * (2 + xcounts[IMAGE_REL_BASED_LOW] + xcounts[IMAGE_REL_BASED_HIGH])))
+    if ((sizeof(LE32) * relocnum + 8192) <
+        (sorelocs +
+         sizeof(LE32) * (2 + xcounts[IMAGE_REL_BASED_LOW] + xcounts[IMAGE_REL_BASED_HIGH])))
         throwCantUnpack("Invalid relocs");
 
     // append relocs type "LOW" then "HIGH"
     for (unsigned ic = IMAGE_REL_BASED_LOW; ic >= IMAGE_REL_BASED_HIGH; ic--) {
-        memcpy(orelocs + sorelocs, fix[ic], 4 * xcounts[ic]);
-        sorelocs += 4 * xcounts[ic];
+        memcpy(orelocs + sorelocs, fix[ic], sizeof(LE32) * xcounts[ic]);
+        sorelocs += sizeof(LE32) * xcounts[ic];
         set_le32(orelocs + sorelocs, 0);
         if (xcounts[ic]) {
             sorelocs += 4;
@@ -1224,7 +1225,15 @@ void PeFile::Export::convert(unsigned eoffs, unsigned esize) {
     size += len;
     iv.add_interval(edir.name, len);
 
-    len = 4 * edir.functions;
+    // This test is weak because it does not consider other necessary storage.
+    // But it does detect outrageous individual members.
+    // Note: sizeof(LE32) <= sizeof(char *)
+    if (UPX_RSIZE_MAX_MEM / sizeof(char *) <= edir.functions ||
+        UPX_RSIZE_MAX_MEM / sizeof(char *) <= edir.names) {
+        throwCantPack("export directory too big:  functions=%#x  names=%#x",
+                      (unsigned) edir.functions, (unsigned) edir.names);
+    }
+    len = sizeof(LE32) * edir.functions;
     functionptrs = New(char, len + 1);
     memcpy(functionptrs, base + edir.addrtable, len);
     size += len;
@@ -1233,14 +1242,14 @@ void PeFile::Export::convert(unsigned eoffs, unsigned esize) {
     unsigned ic;
     names = New(char *, edir.names + edir.functions + 1);
     for (ic = 0; ic < edir.names; ic++) {
-        char *n = base + get_le32(base + edir.nameptrtable + ic * 4);
+        char *n = base + get_le32(base + edir.nameptrtable + ic * sizeof(LE32));
         len = strlen(n) + 1;
         names[ic] = strdup(n);
         size += len;
-        iv.add_interval(get_le32(base + edir.nameptrtable + ic * 4), len);
+        iv.add_interval(get_le32(base + edir.nameptrtable + ic * sizeof(LE32)), len);
     }
-    iv.add_interval(edir.nameptrtable, 4 * edir.names);
-    size += 4 * edir.names;
+    iv.add_interval(edir.nameptrtable, sizeof(LE32) * edir.names);
+    size += sizeof(LE32) * edir.names;
 
     LE32 *fp = (LE32 *) functionptrs;
     // export forwarders
@@ -1270,8 +1279,8 @@ void PeFile::Export::convert(unsigned eoffs, unsigned esize) {
 
 void PeFile::Export::build(char *newbase, unsigned newoffs) {
     char *const functionp = newbase + sizeof(edir);
-    char *const namep = functionp + 4 * edir.functions;
-    char *const ordinalp = namep + 4 * edir.names;
+    char *const namep = functionp + sizeof(LE32) * edir.functions;
+    char *const ordinalp = namep + sizeof(LE32) * edir.names;
     char *const enamep = ordinalp + 2 * edir.names;
     char *exports = enamep + strlen(ename) + 1;
 
@@ -1286,15 +1295,15 @@ void PeFile::Export::build(char *newbase, unsigned newoffs) {
     unsigned ic;
     for (ic = 0; ic < edir.names; ic++) {
         strcpy(exports, names[ic]);
-        set_le32(namep + 4 * ic, newoffs + ptr_diff_bytes(exports, newbase));
+        set_le32(namep + sizeof(LE32) * ic, newoffs + ptr_diff_bytes(exports, newbase));
         exports += strlen(exports) + 1;
     }
 
-    memcpy(functionp, functionptrs, 4 * edir.functions);
+    memcpy(functionp, functionptrs, sizeof(LE32) * edir.functions);
     for (ic = 0; ic < edir.functions; ic++)
         if (names[edir.names + ic]) {
             strcpy(exports, names[edir.names + ic]);
-            set_le32(functionp + 4 * ic, newoffs + ptr_diff_bytes(exports, newbase));
+            set_le32(functionp + sizeof(LE32) * ic, newoffs + ptr_diff_bytes(exports, newbase));
             exports += strlen(exports) + 1;
         }
 
@@ -1477,12 +1486,13 @@ void PeFile::processTls2(Reloc *const rel, const Interval *const iv, unsigned ne
 
     unsigned ic;
     // NEW: if TLS callbacks are used, relocate the VA of the callback chain, too - Stefan Widmann
-    for (ic = 0; ic < (use_tls_callbacks ? 4 * cb_size : 3 * cb_size); ic += cb_size)
+    for (ic = 0; ic < (use_tls_callbacks ? sizeof(LE32) * cb_size : (sizeof(LE32) - 1) * cb_size);
+         ic += cb_size)
         rel->add_reloc(newaddr + ic, reloc_type);
 
     SPAN_S_VAR(tls, const tlsp, mb_otls);
     // now the relocation entries in the tls data area
-    for (ic = 0; ic < iv->ivnum; ic += 4) {
+    for (ic = 0; ic < iv->ivnum; ic += sizeof(LE32)) {
         SPAN_S_VAR(byte, const pp,
                    otls + (iv->ivarr[ic].start - (tlsp->datastart - imagebase) + sizeof(tls)));
         LEXX *const p = (LEXX *) raw_bytes(pp, sizeof(LEXX));
@@ -2760,12 +2770,12 @@ void PeFile::rebuildRelocs(SPAN_S(byte) & extra_info, unsigned bits, unsigned fl
 
     SPAN_S_VAR(byte, const wrkmem, mb_wrkmem);
     for (unsigned ic = 0; ic < relocnum; ic++) {
-        OPTR_VAR(byte, const p, obuf + get_le32(wrkmem + 4 * ic));
+        OPTR_VAR(byte, const p, obuf + get_le32(wrkmem + sizeof(LE32) * ic));
         if (bits == 32)
             set_le32(p, get_le32(p) + imagebase + rvamin);
         else
             set_le64(p, get_le64(p) + imagebase + rvamin);
-        rel.add_reloc(rvamin + get_le32(wrkmem + 4 * ic),
+        rel.add_reloc(rvamin + get_le32(wrkmem + sizeof(LE32) * ic),
                       bits == 32 ? IMAGE_REL_BASED_HIGHLOW : IMAGE_REL_BASED_DIR64);
     }
     rel.finish(oxrelocs, soxrelocs);

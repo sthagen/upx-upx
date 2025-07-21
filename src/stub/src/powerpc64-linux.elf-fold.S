@@ -129,7 +129,7 @@ Pprotect: .globl Pprotect
         b mprotect
 
 Psync: .globl Psync  // (addr, len, flags)
-        mflr r0; bl 0f; 0: mflr r6; mtlr r0; lwz r0,page_mask - 0b(r6)
+        mflr r0; bl 0f; 0: mflr r6; mtlr r0; ld r0,page_mask - 0b(r6)
         andc r0,a0,r0  // offset within page
         sub a0,a0,r0
         add a1,a1,r0

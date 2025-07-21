@@ -16,7 +16,7 @@ RUN dpkg --add-architecture i386 \
         # the full UPX binary inside the container via CMake:
         7zip bat bfs btop bubblewrap busybox bzip2 bzip3 cabextract ccache chrpath cmake cpio \
         dash diffstat direnv elfutils execstack eza fd-find file fish fzf \
-        g++ gawk gdb gojq ht htop hyperfine jq ksh \
+        g++ gawk gdb gh gojq ht htop hyperfine jq ksh \
         lftp libzstd-dev lsb-release lsd lz4 lzip lzop minify mksh moreutils musl neovim ninja-build \
         p7zip parallel patch patchelf patchutils pax-utils proot \
         python3 python3-pyasn1 python3-pycryptodome python3-pycurl python3-tomli python3-tomli-w \
@@ -62,7 +62,7 @@ RUN cd /root \
 # install official UPX release binaries into /usr/local/bin; not required but convenient for testing
 RUN cd /root \
     && curl -sS -L -O https://github.com/upx/upx/releases/download/v3.91/upx-3.91-amd64_linux.tar.bz2 \
-    && xzversions="3.92 3.93 3.94 3.95 3.96 4.0.0 4.0.1 4.0.2 4.1.0 4.2.0 4.2.1 4.2.2 4.2.3 4.2.4 5.0.0" \
+    && xzversions="3.92 3.93 3.94 3.95 3.96 4.0.0 4.0.1 4.0.2 4.1.0 4.2.0 4.2.1 4.2.2 4.2.3 4.2.4 5.0.0 5.0.1" \
     && for v in $xzversions; do curl -sS -L -O https://github.com/upx/upx/releases/download/v${v}/upx-${v}-amd64_linux.tar.xz; done \
     && for f in ./upx-*.tar.*; do tar -xoaf $f; done \
     && for v in 3.91 $xzversions; do d=upx-${v}-amd64_linux; ./$d/upx -qq -d $d/upx -o /usr/local/bin/upx-${v}; done \

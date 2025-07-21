@@ -350,6 +350,7 @@ struct ObjectDeleter final {
             delete item; // single object delete
         }
     }
+    static_assert(std::is_nothrow_destructible_v<T>);
 };
 template <class T>
 struct ArrayDeleter final {
@@ -363,6 +364,7 @@ struct ArrayDeleter final {
             delete[] item; // array delete
         }
     }
+    static_assert(std::is_nothrow_destructible_v<T>);
 };
 template <class T>
 struct MallocDeleter final {

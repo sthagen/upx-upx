@@ -283,18 +283,18 @@ static_assert(bswap32(bswap32(0xf4f3f2f1)) == no_bswap32(0xf4f3f2f1));
 static_assert(bswap64(bswap64(0xf8f7f6f5f4f3f2f1ull)) == no_bswap64(0xf8f7f6f5f4f3f2f1ull));
 #endif
 
-static_assert(sign_extend(0u + 0, 8) == 0);
-static_assert(sign_extend(0u + 1, 8) == 1);
-static_assert(sign_extend(0u + 127, 8) == 127);
-static_assert(sign_extend(0u + 128, 8) == -128);
-static_assert(sign_extend(0u - 1, 8) == -1);
-static_assert(sign_extend(0u + 256, 8) == 0);
-static_assert(sign_extend(0u + 257, 8) == 1);
-static_assert(sign_extend(0u + 383, 8) == 127);
-static_assert(sign_extend(0u + 384, 8) == -128);
-static_assert(sign_extend(0u + 511, 8) == -1);
-static_assert(sign_extend(upx_uint64_t(0) + 0, 1) == 0);
-static_assert(sign_extend(upx_uint64_t(0) + 1, 1) == -1);
+static_assert(sign_extend32(0u + 0, 8) == 0);
+static_assert(sign_extend32(0u + 1, 8) == 1);
+static_assert(sign_extend32(0u + 127, 8) == 127);
+static_assert(sign_extend32(0u + 128, 8) == -128);
+static_assert(sign_extend32(0u - 1, 8) == -1);
+static_assert(sign_extend32(0u + 256, 8) == 0);
+static_assert(sign_extend32(0u + 257, 8) == 1);
+static_assert(sign_extend32(0u + 383, 8) == 127);
+static_assert(sign_extend32(0u + 384, 8) == -128);
+static_assert(sign_extend32(0u + 511, 8) == -1);
+static_assert(sign_extend64(upx_uint64_t(0) + 0, 1) == 0);
+static_assert(sign_extend64(upx_uint64_t(0) + 1, 1) == -1);
 
 static_assert(CHAR_BIT == 8);
 #if 0 // does not work with MSVC
@@ -1212,29 +1212,33 @@ void upx_compiler_sanity_check(void) noexcept {
         for (int i = 0; i < 256; i++) {
             {
                 const unsigned u = i;
-                assert_noexcept(sign_extend(u, 1) == ((i & 1) ? -1 : 0));
-                assert_noexcept(sign_extend(u, 2) == ((i & 2) ? -2 + (i & 1) : (i & 1)));
-                assert_noexcept(sign_extend(u, 3) == ((i & 4) ? -4 + (i & 3) : (i & 3)));
-                assert_noexcept(sign_extend(u, 4) == ((i & 8) ? -8 + (i & 7) : (i & 7)));
-                assert_noexcept(sign_extend(u, 5) == ((i & 16) ? -16 + (i & 15) : (i & 15)));
-                assert_noexcept(sign_extend(u, 6) == ((i & 32) ? -32 + (i & 31) : (i & 31)));
-                assert_noexcept(sign_extend(u, 7) == ((i & 64) ? -64 + (i & 63) : (i & 63)));
-                assert_noexcept(sign_extend(u, 8) == ((i & 128) ? -128 + (i & 127) : (i & 127)));
-                assert_noexcept(sign_extend(u, 32) == i);
-                assert_noexcept(sign_extend(0u - u, 32) == -i);
+                assert_noexcept(sign_extend32(u, 1) == ((i & 1) ? -1 : 0));
+                assert_noexcept(sign_extend32(u, 2) == ((i & 2) ? -2 + (i & 1) : (i & 1)));
+                assert_noexcept(sign_extend32(u, 3) == ((i & 4) ? -4 + (i & 3) : (i & 3)));
+                assert_noexcept(sign_extend32(u, 4) == ((i & 8) ? -8 + (i & 7) : (i & 7)));
+                assert_noexcept(sign_extend32(u, 5) == ((i & 16) ? -16 + (i & 15) : (i & 15)));
+                assert_noexcept(sign_extend32(u, 6) == ((i & 32) ? -32 + (i & 31) : (i & 31)));
+                assert_noexcept(sign_extend32(u, 7) == ((i & 64) ? -64 + (i & 63) : (i & 63)));
+                assert_noexcept(sign_extend32(u, 8) == ((i & 128) ? -128 + (i & 127) : (i & 127)));
+                assert_noexcept(sign_extend32(u, 9) == i);
+                assert_noexcept(sign_extend32(u, 32) == i);
+                assert_noexcept(sign_extend32(0u - u, 32) == -i);
             }
             {
                 const upx_uint64_t u = i;
-                assert_noexcept(sign_extend(u, 1) == ((i & 1) ? -1 : 0));
-                assert_noexcept(sign_extend(u, 2) == ((i & 2) ? -2 + (i & 1) : (i & 1)));
-                assert_noexcept(sign_extend(u, 3) == ((i & 4) ? -4 + (i & 3) : (i & 3)));
-                assert_noexcept(sign_extend(u, 4) == ((i & 8) ? -8 + (i & 7) : (i & 7)));
-                assert_noexcept(sign_extend(u, 5) == ((i & 16) ? -16 + (i & 15) : (i & 15)));
-                assert_noexcept(sign_extend(u, 6) == ((i & 32) ? -32 + (i & 31) : (i & 31)));
-                assert_noexcept(sign_extend(u, 7) == ((i & 64) ? -64 + (i & 63) : (i & 63)));
-                assert_noexcept(sign_extend(u, 8) == ((i & 128) ? -128 + (i & 127) : (i & 127)));
-                assert_noexcept(sign_extend(u, 64) == i);
-                assert_noexcept(sign_extend(upx_uint64_t(0) - u, 64) == -i);
+                assert_noexcept(sign_extend64(u, 1) == ((i & 1) ? -1 : 0));
+                assert_noexcept(sign_extend64(u, 2) == ((i & 2) ? -2 + (i & 1) : (i & 1)));
+                assert_noexcept(sign_extend64(u, 3) == ((i & 4) ? -4 + (i & 3) : (i & 3)));
+                assert_noexcept(sign_extend64(u, 4) == ((i & 8) ? -8 + (i & 7) : (i & 7)));
+                assert_noexcept(sign_extend64(u, 5) == ((i & 16) ? -16 + (i & 15) : (i & 15)));
+                assert_noexcept(sign_extend64(u, 6) == ((i & 32) ? -32 + (i & 31) : (i & 31)));
+                assert_noexcept(sign_extend64(u, 7) == ((i & 64) ? -64 + (i & 63) : (i & 63)));
+                assert_noexcept(sign_extend64(u, 8) == ((i & 128) ? -128 + (i & 127) : (i & 127)));
+                assert_noexcept(sign_extend64(u, 9) == i);
+                assert_noexcept(sign_extend64(u, 32) == i);
+                assert_noexcept(sign_extend64(upx_uint64_t(0) - u, 32) == -i);
+                assert_noexcept(sign_extend64(u, 64) == i);
+                assert_noexcept(sign_extend64(upx_uint64_t(0) - u, 64) == -i);
             }
         }
     }

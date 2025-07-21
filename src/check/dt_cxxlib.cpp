@@ -558,7 +558,8 @@ TEST_CASE("upx::ObjectDeleter 1") {
     LE32 *a = nullptr; // array
     LE64 *m = nullptr; // malloc
     {
-        auto o_deleter = upx::ObjectDeleter(&o, 1);
+        // auto o_deleter = upx::ObjectDeleter(&o, 1);
+        upx::ObjectDeleter<LE16> o_deleter = upx::ObjectDeleter(&o, 1);
         o = new LE16;
         assert(o != nullptr);
         auto a_deleter = upx::ArrayDeleter(&a, 1);
@@ -594,7 +595,8 @@ TEST_CASE("upx::ObjectDeleter 2") {
     BE32 *a[N]; // multiple arrays
     BE64 *m[N]; // multiple mallocs
     {
-        auto o_deleter = upx::ObjectDeleter(o, 0);
+        // auto o_deleter = upx::ObjectDeleter(o, 0);
+        upx::ObjectDeleter<BE16> o_deleter = upx::ObjectDeleter(o, 0);
         auto a_deleter = upx::ArrayDeleter(a, 0);
         auto m_deleter = upx::MallocDeleter(m, 0);
         for (size_t i = 0; i < N; i++) {

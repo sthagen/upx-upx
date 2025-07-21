@@ -1,6 +1,8 @@
 /.cache*
+/.idea/
 /.hg*
 /.vscode*
+/.zed/
 /CMakeCache*
 /CMakeFiles*
 /CTest*

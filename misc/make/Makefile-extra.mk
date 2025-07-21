@@ -65,6 +65,13 @@ build/extra/clang-lto-auto/release: PHONY; $(call run_config_and_build,$@,Releas
 build/extra/clang-lto-auto/%: export CC  = clang   -flto=auto
 build/extra/clang-lto-auto/%: export CXX = clang++ -flto=auto
 
+# force building with clang/clang++ -pie
+build/extra/clang-pie/debug:   PHONY; $(call run_config_and_build,$@,Debug)
+build/extra/clang-pie/release: PHONY; $(call run_config_and_build,$@,Release)
+build/extra/clang-pie/%: export CC  = clang   -pie -fPIE -Wno-unused-command-line-argument
+build/extra/clang-pie/%: export CXX = clang++ -pie -fPIE -Wno-unused-command-line-argument
+build/extra/clang-pie/%: export UPX_CONFIG_DISABLE_SHARED_LIBS = ON
+
 # force building with clang/clang++ -static
 build/extra/clang-static/debug:   PHONY; $(call run_config_and_build,$@,Debug)
 build/extra/clang-static/release: PHONY; $(call run_config_and_build,$@,Release)
@@ -140,6 +147,13 @@ build/extra/gcc-lto-auto/release: PHONY; $(call run_config_and_build,$@,Release)
 build/extra/gcc-lto-auto/%: export CC  = gcc -flto=auto
 build/extra/gcc-lto-auto/%: export CXX = g++ -flto=auto
 
+# force building with gcc/g++ -pie
+build/extra/gcc-pie/debug:   PHONY; $(call run_config_and_build,$@,Debug)
+build/extra/gcc-pie/release: PHONY; $(call run_config_and_build,$@,Release)
+build/extra/gcc-pie/%: export CC  = gcc -pie -fPIE
+build/extra/gcc-pie/%: export CXX = g++ -pie -fPIE
+build/extra/gcc-pie/%: export UPX_CONFIG_DISABLE_SHARED_LIBS = ON
+
 # force building with gcc/g++ -static
 build/extra/gcc-static/debug:   PHONY; $(call run_config_and_build,$@,Debug)
 build/extra/gcc-static/release: PHONY; $(call run_config_and_build,$@,Release)
@@ -177,7 +191,7 @@ build/extra/gcc-std-cxx23/%: export CXX = g++ -std=gnu++2b
 build/extra/gcc-std-cxx23/%: export UPX_CONFIG_DISABLE_C_STANDARD = ON
 build/extra/gcc-std-cxx23/%: export UPX_CONFIG_DISABLE_CXX_STANDARD = ON
 
-# force building with gcc/g++ C++26 (EXPERIMENTAL; need gcc-14)
+# force building with gcc/g++ C++26 (and C23)
 build/extra/gcc-std-cxx26/debug:   PHONY; $(call run_config_and_build,$@,Debug)
 build/extra/gcc-std-cxx26/release: PHONY; $(call run_config_and_build,$@,Release)
 build/extra/gcc-std-cxx26/%: export CC  = gcc -std=gnu23

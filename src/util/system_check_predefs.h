@@ -115,8 +115,8 @@
 #if !defined(__ORDER_BIG_ENDIAN__) || (__ORDER_BIG_ENDIAN__ + 0 != 4321)
 #error "unexpected __ORDER_BIG_ENDIAN__"
 #endif
-#if !defined(__ORDER_BIG_ENDIAN__) || (__ORDER_LITTLE_ENDIAN__ + 0 != 1234)
-#error "unexpected __ORDER_BIG_ENDIAN__"
+#if !defined(__ORDER_LITTLE_ENDIAN__) || (__ORDER_LITTLE_ENDIAN__ + 0 != 1234)
+#error "unexpected __ORDER_LITTLE_ENDIAN__"
 #endif
 #if (__BYTE_ORDER__ != __ORDER_BIG_ENDIAN__) && (__BYTE_ORDER__ != __ORDER_LITTLE_ENDIAN__)
 #error "unexpected __BYTE_ORDER__"

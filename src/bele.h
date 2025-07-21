@@ -32,8 +32,9 @@
 // NE - Native Endianness (aka Host Endianness aka CPU Endianness)
 // TE - Target Endianness (not used here, see various packers)
 
-static_assert(std::is_same_v<upx_uint32_t, unsigned>);
 static_assert(std::is_same_v<byte, unsigned char>);
+static_assert(std::is_same_v<upx_int32_t, int>);
+static_assert(std::is_same_v<upx_uint32_t, unsigned>);
 
 #if defined(upx_is_constant_evaluated)
 #define bele_constexpr constexpr
@@ -411,7 +412,7 @@ inline bele_constexpr void set_le14_5(XE32 *p, unsigned v) noexcept {
 // get signed values
 **************************************************************************/
 
-forceinline constexpr int sign_extend(unsigned v, unsigned bits) noexcept {
+forceinline constexpr int sign_extend32(unsigned v, unsigned bits) noexcept {
 #if (ACC_ARCH_M68K) // no barrel shifter
     const unsigned sign_bit = 1u << (bits - 1);
     return ACC_ICAST(int, (v & (sign_bit - 1)) - (v & sign_bit));
@@ -420,7 +421,7 @@ forceinline constexpr int sign_extend(unsigned v, unsigned bits) noexcept {
 #endif
 }
 
-forceinline constexpr upx_int64_t sign_extend(upx_uint64_t v, unsigned bits) noexcept {
+forceinline constexpr upx_int64_t sign_extend64(upx_uint64_t v, unsigned bits) noexcept {
 #if (ACC_ARCH_M68K) // no barrel shifter
     const upx_uint64_t sign_bit = upx_uint64_t(1) << (bits - 1);
     return ACC_ICAST(upx_int64_t, (v & (sign_bit - 1)) - (v & sign_bit));
@@ -432,49 +433,49 @@ forceinline constexpr upx_int64_t sign_extend(upx_uint64_t v, unsigned bits) noe
 REQUIRE_XE16
 inline bele_constexpr int get_be16_signed(const XE16 *p) noexcept {
     unsigned v = get_be16(p);
-    return sign_extend(v, 16);
+    return sign_extend32(v, 16);
 }
 
 REQUIRE_XE24
 inline bele_constexpr int get_be24_signed(const XE24 *p) noexcept {
     unsigned v = get_be24(p);
-    return sign_extend(v, 24);
+    return sign_extend32(v, 24);
 }
 
 REQUIRE_XE32
 inline bele_constexpr int get_be32_signed(const XE32 *p) noexcept {
     unsigned v = get_be32(p);
-    return sign_extend(v, 32);
+    return sign_extend32(v, 32);
 }
 
 REQUIRE_XE64
 inline bele_constexpr upx_int64_t get_be64_signed(const XE64 *p) noexcept {
     upx_uint64_t v = get_be64(p);
-    return sign_extend(v, 64);
+    return sign_extend64(v, 64);
 }
 
 REQUIRE_XE16
 inline bele_constexpr int get_le16_signed(const XE16 *p) noexcept {
     unsigned v = get_le16(p);
-    return sign_extend(v, 16);
+    return sign_extend32(v, 16);
 }
 
 REQUIRE_XE24
 inline bele_constexpr int get_le24_signed(const XE24 *p) noexcept {
     unsigned v = get_le24(p);
-    return sign_extend(v, 24);
+    return sign_extend32(v, 24);
 }
 
 REQUIRE_XE32
 inline bele_constexpr int get_le32_signed(const XE32 *p) noexcept {
     unsigned v = get_le32(p);
-    return sign_extend(v, 32);
+    return sign_extend32(v, 32);
 }
 
 REQUIRE_XE64
 inline bele_constexpr upx_int64_t get_le64_signed(const XE64 *p) noexcept {
     upx_uint64_t v = get_le64(p);
-    return sign_extend(v, 64);
+    return sign_extend64(v, 64);
 }
 
 /*************************************************************************

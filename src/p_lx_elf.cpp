@@ -1532,7 +1532,7 @@ PackLinuxElf32::buildLinuxLoader(
 //   EXP_TAIL  FIXME: unfilter
 //   SO_TAIL
 //   SO_MAIN  C-language supervision based on PT_LOADs
-        char sec[120]; memset(sec, 0, sizeof(sec));  // debug convenience
+        char sec[200]; memset(sec, 0, sizeof(sec));  // debug convenience
         int len = 0;
         unsigned m_decompr = methods_used | (1u << (0xFF & ph_forced_method(ph.method)));
         len += snprintf(sec, sizeof(sec), "%s", "SO_HEAD,ptr_NEXT,EXP_HEAD");
@@ -1584,7 +1584,7 @@ PackLinuxElf32::buildLinuxLoader(
          ||  this->e_machine==Elf32_Ehdr::EM_MIPS
          ) { // main program with ELF2 de-compressor (folded portion)
         initLoader(fold, szfold);
-        char sec[120]; memset(sec, 0, sizeof(sec));  // debug convenience
+        char sec[200]; memset(sec, 0, sizeof(sec));  // debug convenience
         int len = 0;
         unsigned m_decompr = methods_used | (1u << (0xFF & ph_forced_method(ph.method)));
         len += snprintf(sec, sizeof(sec), "%s", ".text,EXP_HEAD");
@@ -1729,7 +1729,7 @@ PackLinuxElf64::buildLinuxLoader(
 //   EXP_TAIL  FIXME: unfilter
 //   SO_TAIL
 //   SO_MAIN  C-language supervision based on PT_LOADs
-        char sec[120]; memset(sec, 0, sizeof(sec));  // debug convenience
+        char sec[200]; memset(sec, 0, sizeof(sec));  // debug convenience
         int len = 0;
         unsigned m_decompr = methods_used | (1u << (0xFF & ph_forced_method(ph.method)));
         len += snprintf(sec, sizeof(sec), "%s", "SO_HEAD,ptr_NEXT,EXP_HEAD");
@@ -1774,7 +1774,7 @@ PackLinuxElf64::buildLinuxLoader(
          ||  this->e_machine==Elf64_Ehdr::EM_PPC64
          ) { // main program with ELF2 de-compressor (folded portion)
         initLoader(fold, szfold);
-        char sec[120]; memset(sec, 0, sizeof(sec));  // debug convenience
+        char sec[200]; memset(sec, 0, sizeof(sec));  // debug convenience
         int len = 0;
         unsigned m_decompr = methods_used | (1u << (0xFF & ph_forced_method(ph.method)));
         len += snprintf(sec, sizeof(sec), "%s", ".text,EXP_HEAD");
@@ -2378,10 +2378,11 @@ PackLinuxElf32::invert_pt_dynamic(Elf32_Dyn const *dynp, u32_t headway)
         throwCantPack("bad DT_STRSZ %#x", strtab_max);
     }
 
-    // Find end of DT_SYMTAB
-    unsigned const tmp2 = elf_find_table_size(Elf32_Dyn::DT_SYMTAB,
-        Elf32_Shdr::SHT_DYNSYM);
-    symnum_max = (~0u == tmp2) ? 0 : tmp1 / sizeof(Elf32_Sym);
+    { // Find end of DT_SYMTAB
+        unsigned const tmp2 = elf_find_table_size(Elf32_Dyn::DT_SYMTAB,
+            Elf32_Shdr::SHT_DYNSYM);
+        symnum_max = (~0u == tmp2) ? 0 : tmp2 / sizeof(Elf32_Sym);
+    }
 
     unsigned v_sym = dt_table[Elf32_Dyn::DT_SYMTAB];
     if (v_sym) {
@@ -8470,10 +8471,11 @@ PackLinuxElf64::invert_pt_dynamic(Elf64_Dyn const *dynp, upx_uint64_t headway)
         throwCantPack("bad DT_STRSZ %#x", strtab_max);
     }
 
-    // Find end of DT_SYMTAB
-    unsigned const tmp2 = elf_find_table_size(Elf64_Dyn::DT_SYMTAB,
-        Elf64_Shdr::SHT_DYNSYM);
-    symnum_max = (~0u == tmp2) ? 0 : tmp1 / sizeof(Elf64_Sym);
+    { // Find end of DT_SYMTAB
+        unsigned const tmp2 = elf_find_table_size(Elf64_Dyn::DT_SYMTAB,
+            Elf64_Shdr::SHT_DYNSYM);
+        symnum_max = (~0u == tmp2) ? 0 : tmp2 / sizeof(Elf64_Sym);
+    }
 
     unsigned v_sym = dt_table[Elf64_Dyn::DT_SYMTAB];
     if (v_sym) {
@@ -8704,9 +8706,9 @@ Elf32_Sym const *PackLinuxElf32::elf_lookup(char const *name) const
 
             if (1& (w>>hbit1) & (w>>hbit2)) {
                 unsigned const hhead = get_te32(&buckets[h % n_bucket]);
-                if (n_bucket <= (hhead - symbias)) {
-                    throwCantPack("bad DT_GNU_HASH n_bucket{%#x} <= buckets[%d]{%#x} - symbias{%#x}\n",
-                            n_bucket, h % n_bucket, hhead, symbias);
+                if (symnum_max <= hhead || (hhead && hhead < symbias)) {
+                    throwCantPack("bad DT_GNU_HASH symnum_max{%#x} <= buckets[%d]{%#x} < symbias{%#x}\n",
+                            symnum_max, h % n_bucket, hhead, symbias);
                 }
                 if (hhead) {
                     Elf32_Sym const *dsp = &dynsym[hhead];
@@ -8805,6 +8807,10 @@ Elf64_Sym const *PackLinuxElf64::elf_lookup(char const *name) const
             upx_uint64_t const w = get_te64(&bitmask[(n_bitmask -1) & (h>>6)]);
             if (1& (w>>hbit1) & (w>>hbit2)) {
                 unsigned hhead = get_te32(&buckets[h % n_bucket]);
+                if (symnum_max <= hhead || (hhead && hhead < symbias)) {
+                    throwCantPack("bad DT_GNU_HASH symnum_max{%#x} <= buckets[%d]{%#x} < symbias{%#x}\n",
+                            symnum_max, h % n_bucket, hhead, symbias);
+                }
                 if (hhead) {
                     Elf64_Sym const *dsp = &dynsym[hhead];
                     unsigned const *hp = &hasharr[hhead - symbias];

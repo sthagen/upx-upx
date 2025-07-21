@@ -71,6 +71,10 @@ static_assert((-1) >> 31 == -1);               // arithmetic right shift
 static_assert(CHAR_MAX == 255);                // -funsigned-char
 static_assert((char) (-1) == 255);             // -funsigned-char
 
+// disable some more strict warnings
+#if defined(__clang__) && __has_warning("-Wunnecessary-virtual-specifier")
+#pragma clang diagnostic ignored "-Wunnecessary-virtual-specifier"
+#endif
 // enable some more strict warnings for Git developer builds
 #if defined(UPX_CONFIG_DISABLE_WSTRICT) && (UPX_CONFIG_DISABLE_WSTRICT + 0 == 0)
 #if defined(UPX_CONFIG_DISABLE_WERROR) && (UPX_CONFIG_DISABLE_WERROR + 0 == 0)

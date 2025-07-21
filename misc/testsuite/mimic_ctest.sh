@@ -16,6 +16,12 @@ argv0=$0; argv0abs=$(readlink -fn "$argv0"); argv0dir=$(dirname "$argv0abs")
 #   $upx_exe_runner         (e.g. "qemu-x86_64 -cpu Nehalem" or "valgrind")
 #
 
+# Debugging aid for locating failing commands.  Depends on 'bash' shell.
+# (BASH_LINENO is relative to current FUNCTION only; non-function ==> 0)
+# Notice single-quoting of entire first argument.
+trap 'echo ERROR: pwd=\"$PWD\"  file=\"$BASH_SOURCE\"  line=${BASH_LINENO[0]}  cmd=\"$BASH_COMMAND\"' ERR
+# Example: "false a b c" ==> ERROR: pwd="path/misc/testsuite" file="./mimic_ctest.sh" line=0 cmd="false a b c"
+
 #***********************************************************************
 # init & checks
 #***********************************************************************
@@ -148,17 +154,24 @@ if [[ $UPX_CONFIG_DISABLE_EXHAUSTIVE_TESTS != ON ]]; then
     set +x
     for method in nrv2b nrv2d nrv2e lzma; do
         for level in 1 2 3 4 5 6 7; do
-            s="${method}-${level}"
-            echo "========== $s =========="
-            "${run_upx[@]}" -qq --${method} -${level} --all-filters --debug-use-random-filter "${upx_self_exe}" ${fo} -o upx-packed-${s}${exe}
-            "${run_upx[@]}" -qq -l upx-packed-${s}${exe}
-            "${run_upx[@]}" -qq --fileinfo upx-packed-${s}${exe}
-            "${run_upx[@]}" -qq -t upx-packed-${s}${exe}
-            "${run_upx[@]}" -qq -d upx-packed-${s}${exe} ${fo} -o upx-unpacked-${s}${exe}
-            cmp -s upx-unpacked${exe} upx-unpacked-${s}${exe}
-            if [[ $UPX_CONFIG_DISABLE_RUN_PACKED_TEST != ON ]]; then
-                "${emu[@]}" ./upx-packed-${s}${exe} --version-short
-            fi
+            for small in normal small; do
+                s="${method}-${level}"
+                ss=
+                if [[ $small == "small" ]]; then
+                    s="${method}-${level}-${small}"
+                    ss="--small"
+                fi
+                echo "========== $s =========="
+                "${run_upx[@]}" -qq --${method} -${level} ${ss} --all-filters --debug-use-random-filter "${upx_self_exe}" ${fo} -o upx-packed-${s}${exe}
+                "${run_upx[@]}" -qq -l upx-packed-${s}${exe}
+                "${run_upx[@]}" -qq --fileinfo upx-packed-${s}${exe}
+                "${run_upx[@]}" -qq -t upx-packed-${s}${exe}
+                "${run_upx[@]}" -qq -d upx-packed-${s}${exe} ${fo} -o upx-unpacked-${s}${exe}
+                cmp -s upx-unpacked${exe} upx-unpacked-${s}${exe}
+                if [[ $UPX_CONFIG_DISABLE_RUN_PACKED_TEST != ON ]]; then
+                    "${emu[@]}" ./upx-packed-${s}${exe} --version-short
+                fi
+            done
         done
     done
 fi

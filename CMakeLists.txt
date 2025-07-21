@@ -30,6 +30,7 @@ endif()
 # support functions and some utility
 include("${CMAKE_CURRENT_SOURCE_DIR}/misc/cmake/functions.cmake")
 upx_print_var(CMAKE_VERSION UPX_CONFIG_CMAKE_MINIMUM_REQUIRED_VERSION CMAKE_GENERATOR)
+upx_print_var(CMAKE_GENERATOR_TOOLSET CMAKE_GENERATOR_PLATFORM)
 
 #***********************************************************************
 # options
@@ -62,13 +63,15 @@ option(UPX_CONFIG_DISABLE_EXHAUSTIVE_TESTS "Do not run exhaustive tests"        
 # init
 #***********************************************************************
 
-set(UPX_VERSION_STRING "5.0.1") # this should match src/version.h
+set(UPX_VERSION_STRING "5.0.2") # this should match src/version.h
 
 upx_cmake_include_hook(2_init)
 
 # Disallow in-source build. Note that you will still have to manually
 # clean up a few files if you accidentally try an in-source build.
-upx_disallow_in_source_build()
+if(IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/.git")
+    upx_disallow_in_source_build()
+endif()
 
 # global settings
 if(${CMAKE_VERSION} VERSION_GREATER "3.14.99" AND NOT DEFINED CMAKE_MSVC_RUNTIME_LIBRARY)
