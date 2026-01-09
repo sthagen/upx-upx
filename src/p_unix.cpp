@@ -2,9 +2,9 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2025 Laszlo Molnar
-   Copyright (C) 2000-2025 John F. Reiser
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Laszlo Molnar
+   Copyright (C) John F. Reiser
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -658,7 +658,11 @@ void PackUnix::unpack(OutputFile *fo)
         fi->readx(&bhdr, szb_info);
         ph.u_len = sz_unc = get_te32(&bhdr.sz_unc);
         ph.c_len = sz_cpr = get_te32(&bhdr.sz_cpr);
-        ph.set_method(bhdr.b_method);
+        if (szb_info < sizeof(b_info)) { // some upx version 11
+            bhdr.b_method = ph.method;
+            bhdr.b_ftid = ph.filter;
+            bhdr.b_cto8 = ph.filter_cto;
+        }
 
         if (sz_unc == 0)                   // uncompressed size 0 -> EOF
         {

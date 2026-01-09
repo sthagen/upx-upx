@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2025 Laszlo Molnar
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -31,6 +31,8 @@
 #include "packer.h"
 #include "pefile.h"
 #include "p_w32pe_i386.h"
+#define WANT_EHDR_ENUM 1
+#include "p_elf_enum.h"
 #include "linker.h"
 
 static const CLANG_FORMAT_DUMMY_STATEMENT
@@ -93,7 +95,7 @@ void PackW32PeI386::buildLoader(const Filter *ft) {
         tmp_tlsindex = 0;
 
     // prepare loader
-    initLoader(stub_i386_win32_pe, sizeof(stub_i386_win32_pe), 2);
+    initLoader(EM_386, stub_i386_win32_pe, sizeof(stub_i386_win32_pe), 2);
     if (isdll)
         addLoader("PEISDLL1");
     addLoader("PEMAIN01", use_stub_relocs ? "PESOCREL" : "PESOCPIC", "PESOUNC0",

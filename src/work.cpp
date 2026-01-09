@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2025 Laszlo Molnar
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -329,19 +329,21 @@ void do_one_file(const char *const iname, char *const oname) may_throw {
     }
 
     // handle command - actual work starts HERE
-    PackMaster pm(&fi, opt);
-    if (opt->cmd == CMD_COMPRESS)
-        pm.pack(&fo);
-    else if (opt->cmd == CMD_DECOMPRESS)
-        pm.unpack(&fo);
-    else if (opt->cmd == CMD_TEST)
-        pm.test();
-    else if (opt->cmd == CMD_LIST)
-        pm.list();
-    else if (opt->cmd == CMD_FILEINFO)
-        pm.fileInfo();
-    else
-        throwInternalError("invalid command");
+    {
+        PackMaster pm(&fi, opt);
+        if (opt->cmd == CMD_COMPRESS)
+            pm.pack(&fo);
+        else if (opt->cmd == CMD_DECOMPRESS)
+            pm.unpack(&fo);
+        else if (opt->cmd == CMD_TEST)
+            pm.test();
+        else if (opt->cmd == CMD_LIST)
+            pm.list();
+        else if (opt->cmd == CMD_FILEINFO)
+            pm.fileInfo();
+        else
+            throwInternalError("invalid command");
+    }
 
     // copy time stamp
     if (oname[0] && opt->preserve_timestamp && fo.isOpen())

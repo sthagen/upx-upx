@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2025 Laszlo Molnar
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -35,6 +35,8 @@
 #include "filter.h"
 #include "packer.h"
 #include "p_vmlinz.h"
+#define WANT_EHDR_ENUM 1
+#include "p_elf_enum.h"
 #include "linker.h"
 #include <zlib/zlib.h>
 
@@ -430,7 +432,7 @@ Linker* PackVmlinuzI386::newLinker() const
 void PackVmlinuzI386::buildLoader(const Filter *ft)
 {
     // prepare loader
-    initLoader(stub_i386_linux_kernel_vmlinuz, sizeof(stub_i386_linux_kernel_vmlinuz));
+    initLoader(EM_386, stub_i386_linux_kernel_vmlinuz, sizeof(stub_i386_linux_kernel_vmlinuz));
     addLoader("LINUZ000",
               ph.first_offset_found == 1 ? "LINUZ010" : "",
               ft->id ? "LZCALLT1" : "",
@@ -505,7 +507,7 @@ void PackVmlinuzI386::pack(OutputFile *fo)
 void PackBvmlinuzI386::buildLoader(const Filter *ft)
 {
     // prepare loader
-    initLoader(stub_i386_linux_kernel_vmlinuz, sizeof(stub_i386_linux_kernel_vmlinuz));
+    initLoader(EM_386, stub_i386_linux_kernel_vmlinuz, sizeof(stub_i386_linux_kernel_vmlinuz));
     if (0!=page_offset) { // relocatable kernel
         assert(0==ft->id || 0x40==(0xf0 & ft->id));  // others assume fixed buffer address
         addLoader("LINUZ000,LINUZ001,LINUZVGA,LINUZ101,LINUZ110",
@@ -934,7 +936,7 @@ static const CLANG_FORMAT_DUMMY_STATEMENT
 void PackVmlinuzARMEL::buildLoader(const Filter *ft)
 {
     // prepare loader; same as vmlinux (with 'x')
-    initLoader(stub_arm_v5a_linux_kernel_vmlinux, sizeof(stub_arm_v5a_linux_kernel_vmlinux));
+    initLoader(EM_ARM, stub_arm_v5a_linux_kernel_vmlinux, sizeof(stub_arm_v5a_linux_kernel_vmlinux));
     addLoader("LINUX000", nullptr);
     if (ft->id) {
         assert(ft->calls > 0);

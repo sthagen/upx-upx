@@ -2,9 +2,9 @@
 *
 *  This file is part of the UPX executable compressor.
 *
-*  Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
-*  Copyright (C) 1996-2025 Laszlo Molnar
-*  Copyright (C) 2000-2025 John F. Reiser
+*  Copyright (C) Markus Franz Xaver Johannes Oberhumer
+*  Copyright (C) Laszlo Molnar
+*  Copyright (C) John F. Reiser
 *  All Rights Reserved.
 *
 *  UPX and the UCL library are free software; you can redistribute them
@@ -418,21 +418,30 @@ close: .globl close
         li r0,SYS_close;    5: b sysgo
 
 upxfd_create: .globl upxfd_create // (char *tag, unsigned flags)
+        stdu a0,-AL_STK(sp)  // push tag onto aligned stack
 0: // try memfd_create
+        ld a0,0(sp)  // get tag
         li r0,SYS_memfd_create; sc; bns+ ok_memfd
-        cmpwi a2,0; beq no_memfd  // memfd_create failed twice
-        li a2,0; b 0b  // try again without MFD_EXEC
+        // failed syscall returns errno in a0
+        cmpwi a0,EINVAL; bne 8f  // unexpected error number
+        cmpwi a1,0; beq no_memfd  // memfd_create failed twice
+        li a1,0; b 0b  // try again without MFD_EXEC
 no_memfd:  // so try /dev/shm
 O_RDWR= 2
 O_DIRECTORY= 040000  // 0x4000
 O_TMPFILE= 020000000  // 0x400000
-        mflr r6; bl 0f; .asciz "/dev/shm"; .balign 4;
-0:      mflr a1; mtlr r6
-        li a2,0700
-        lis a3,O_TMPFILE>>16
-        ori a3,a3,O_RDWR | O_DIRECTORY
-        li r0,SYS_open; sc; bns+ ok_memfd; teq r0,r0
+        mflr r6
+               bl 0f; .asciz "/dev/shm"; .balign 4
+            0: mflr a0
+        mtlr r6
+        li a2,0700  // mode
+        lis a1,O_TMPFILE>>16
+        ori a1,a1,O_RDWR | O_DIRECTORY
+        li r0,SYS_open; sc; bns+ ok_memfd  // name, flags, mode
+8:
+        teq r0,r0  // unexpected errno
 ok_memfd:
+        addi sp,sp,AL_STK  // toss tag
         ret
 
 __NR_memfd_create= 360

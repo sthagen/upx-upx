@@ -17,10 +17,22 @@ argv0=$0; argv0abs=$(readlink -fn "$argv0"); argv0dir=$(dirname "$argv0abs")
 #
 
 # Debugging aid for locating failing commands.  Depends on 'bash' shell.
-# (BASH_LINENO is relative to current FUNCTION only; non-function ==> 0)
 # Notice single-quoting of entire first argument.
-trap 'echo ERROR: pwd=\"$PWD\"  file=\"$BASH_SOURCE\"  line=${BASH_LINENO[0]}  cmd=\"$BASH_COMMAND\"' ERR
-# Example: "false a b c" ==> ERROR: pwd="path/misc/testsuite" file="./mimic_ctest.sh" line=0 cmd="false a b c"
+trap '  # Diagnostic at non-zero exit of process invoked by 'bash' shell
+    echo  # A blank line to separate from other output
+
+    echo FAILED in directory $PWD
+
+    # A shell list of words separated by $IFS:
+    argv=( $( eval echo ${BASH_COMMAND[@]} ) )
+
+    echo Command: "${argv[*]}"
+
+    # Search the $PATH
+    echo PATH="$PATH"
+    type ${argv[0]}
+    echo LINENO= $LINENO "(can be wrong)"
+' ERR
 
 #***********************************************************************
 # init & checks
@@ -48,6 +60,7 @@ run_upx=( "${emu[@]}" "$upx_exe" )
 echo "run_upx='${run_upx[*]}'"
 
 # run_upx sanity check
+"${run_upx[@]}" --version-short || true
 if ! "${run_upx[@]}" --version-short >/dev/null; then echo "UPX-ERROR: FATAL: upx --version-short FAILED"; exit 1; fi
 if ! "${run_upx[@]}" -L >/dev/null 2>&1; then echo "UPX-ERROR: FATAL: upx -L FAILED"; exit 1; fi
 if ! "${run_upx[@]}" --help >/dev/null;  then echo "UPX-ERROR: FATAL: upx --help FAILED"; exit 1; fi
@@ -169,7 +182,10 @@ if [[ $UPX_CONFIG_DISABLE_EXHAUSTIVE_TESTS != ON ]]; then
                 "${run_upx[@]}" -qq -d upx-packed-${s}${exe} ${fo} -o upx-unpacked-${s}${exe}
                 cmp -s upx-unpacked${exe} upx-unpacked-${s}${exe}
                 if [[ $UPX_CONFIG_DISABLE_RUN_PACKED_TEST != ON ]]; then
-                    "${emu[@]}" ./upx-packed-${s}${exe} --version-short
+                    : ${upx_run_packed_test_count:=20}
+                    for ((i = 0; i < $upx_run_packed_test_count; i++)); do
+                        "${emu[@]}" ./upx-packed-${s}${exe} --version-short
+                    done
                 fi
             done
         done

@@ -31,6 +31,7 @@ endif()
 include("${CMAKE_CURRENT_SOURCE_DIR}/misc/cmake/functions.cmake")
 upx_print_var(CMAKE_VERSION UPX_CONFIG_CMAKE_MINIMUM_REQUIRED_VERSION CMAKE_GENERATOR)
 upx_print_var(CMAKE_GENERATOR_TOOLSET CMAKE_GENERATOR_PLATFORM)
+upx_print_env_var(CC CXX CPPFLAGS CFLAGS CXXFLAGS)
 
 #***********************************************************************
 # options
@@ -56,14 +57,14 @@ endif()
 
 # test config options (see below)
 # IMPORTANT NOTE: self-pack test can only work if the host executable format is supported by UPX!
-option(UPX_CONFIG_DISABLE_SELF_PACK_TEST   "Do not test packing UPX with itself" OFF)
-option(UPX_CONFIG_DISABLE_EXHAUSTIVE_TESTS "Do not run exhaustive tests"         OFF)
+option(UPX_CONFIG_DISABLE_SELF_PACK_TEST   "Do not test packing UPX with itself." OFF)
+option(UPX_CONFIG_DISABLE_EXHAUSTIVE_TESTS "Do not run exhaustive tests."         OFF)
 
 #***********************************************************************
 # init
 #***********************************************************************
 
-set(UPX_VERSION_STRING "5.0.2") # this should match src/version.h
+set(UPX_VERSION_STRING "5.1.0") # this should match src/version.h
 
 upx_cmake_include_hook(2_init)
 
@@ -92,7 +93,6 @@ upx_cache_bool_vars(OFF
     UPX_CONFIG_DISABLE_SAVE_TEMPS UPX_CONFIG_DISABLE_SHARED_LIBS UPX_CONFIG_REQUIRE_THREADS
 )
 upx_cache_bool_vars(ON UPX_CONFIG_EXPECT_THREADS)
-upx_print_env_var(CC CXX)
 
 # determine Git revision
 set(GITREV_SHORT "")
@@ -289,7 +289,7 @@ if(Threads_FOUND)
         if(NOT result)
             # failed; under MinGW be sure to use the posix-threads and NOT the win32-threads version
             if(UPX_CONFIG_REQUIRE_THREADS OR (UPX_CONFIG_EXPECT_THREADS AND NOT UPX_CONFIG_DISABLE_THREADS))
-                message(WARNING "Threads FAILED ${f}: ${output}") # output from try_compile
+                message(WARNING "Threads FAILED ${f}: ${output}") # output from try_compile()
             endif()
             set(Threads_FOUND OFF)
             break()
@@ -469,6 +469,7 @@ if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR)
         # IMPORTANT NOTE: these tests can only work if the host executable format
         #   is supported by UPX!
         include("${CMAKE_CURRENT_SOURCE_DIR}/misc/cmake/self_pack_test.cmake")
+        upx_self_pack_test()
     endif()
 endif()
 

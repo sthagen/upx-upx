@@ -2,9 +2,9 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2025 Laszlo Molnar
-   Copyright (C) 2002-2025 Jens Medoch
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Laszlo Molnar
+   Copyright (C) Jens Medoch
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -34,6 +34,8 @@
 #include "filter.h"
 #include "packer.h"
 #include "p_ps1.h"
+#define WANT_EHDR_ENUM 1
+#include "p_elf_enum.h"
 #include "linker.h"
 
 static const CLANG_FORMAT_DUMMY_STATEMENT
@@ -282,7 +284,7 @@ void PackPs1::buildLoader(const Filter *) {
         foundBss = findBssSection();
 
     if (M_IS_LZMA(ph.method) && !buildPart2) {
-        initLoader(stub_mipsel_r3000_ps1, sizeof(stub_mipsel_r3000_ps1));
+        initLoader(EM_MIPS_RS3_LE, stub_mipsel_r3000_ps1, sizeof(stub_mipsel_r3000_ps1));
         addLoader("decompressor.start", isCon ? "LZMA_DEC20" : "LZMA_DEC10", "lzma.init", nullptr);
         addLoader(sa_tmp > (0x10000 << 2) ? "memset.long" : "memset.short",
                   !foundBss ? "con.exit" : "bss.exit", nullptr);
@@ -294,11 +296,11 @@ void PackPs1::buildLoader(const Filter *) {
                                  nullptr, nullptr);
             if (r != UPX_E_OK || sz_lcpr >= sz_lunc)
                 throwInternalError("loader compression failed");
-            initLoader(stub_mipsel_r3000_ps1, sizeof(stub_mipsel_r3000_ps1),
+            initLoader(EM_MIPS_RS3_LE, stub_mipsel_r3000_ps1, sizeof(stub_mipsel_r3000_ps1),
                        isCon || !M_IS_LZMA(ph.method) ? 0 : 1);
             linker->addSection("lzma.exec", cprLoader, sz_lcpr, 0);
         } else
-            initLoader(stub_mipsel_r3000_ps1, sizeof(stub_mipsel_r3000_ps1));
+            initLoader(EM_MIPS_RS3_LE, stub_mipsel_r3000_ps1, sizeof(stub_mipsel_r3000_ps1));
 
         pad_code = ALIGN_UP_GAP((ph.c_len + (isCon ? sz_lcpr : 0)), 4u);
         assert(pad_code < 4);

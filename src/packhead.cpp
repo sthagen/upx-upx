@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2025 Laszlo Molnar
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -206,7 +206,7 @@ bool PackHeader::decodePackHeaderFromBuf(SPAN_S(const byte) buf, int blen) {
         fprintf(stderr, "  decodePackHeaderFromBuf  version=%d  format=%d  method=%d  level=%d\n",
                 version, format, method, level);
     }
-    if (!((format >= 1 && format <= UPX_F_W64PE_ARM64EC) ||
+    if (!((format >= 1 && format <= UPX_F_LINUX_ELF64_RISCV64) ||
           (format >= 129 && format <= UPX_F_DYLIB_PPC64))) {
         throwCantUnpack("unknown format %d", format);
     }

@@ -2,9 +2,9 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2025 Laszlo Molnar
-   Copyright (C) 2000-2025 John F. Reiser
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Laszlo Molnar
+   Copyright (C) John F. Reiser
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -550,6 +550,22 @@ protected:
     virtual void defineSymbols(Filter const *) override;
 };
 
+class PackLinuxElf64riscv64 : public PackLinuxElf64Le
+{
+    typedef PackLinuxElf64Le super;
+public:
+    PackLinuxElf64riscv64(InputFile *f);
+    virtual ~PackLinuxElf64riscv64();
+    virtual int getFormat() const override { return UPX_F_LINUX_ELF64_RISCV64; }
+    virtual const char *getName() const override { return "linux/riscv64"; }
+    virtual const char *getFullName(const options_t *) const override { return "riscv64-linux.elf"; }
+    virtual const int *getFilters() const override;
+protected:
+    virtual void pack1(OutputFile *, Filter &) override;  // generate executable header
+    virtual void buildLoader(const Filter *) override;
+    virtual Linker* newLinker() const override;
+    virtual void defineSymbols(Filter const *) override;
+};
 
 /*************************************************************************
 // linux/elf32ppc

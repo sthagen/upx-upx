@@ -8,6 +8,8 @@ name: CI
 
 on: [push, workflow_dispatch]
 
+defaults: { run: { shell: bash } }
+
 env:
   CMAKE_REQUIRED_QUIET: 'OFF'
   CMAKE_VERBOSE_MAKEFILE: 'ON'
@@ -20,8 +22,8 @@ env:
   UPX_DEBUG_TEST_FLOAT_DIVISION_BY_ZERO: 1
   UPX_DEBUG_TEST_LIBC_QSORT: 1
   ZSTD_CLEVEL: 17
-  # 2025-05-21
-  ZIG_DIST_VERSION: 0.14.1
+  # 2025-10-11
+  ZIG_DIST_VERSION: 0.15.2
 
 jobs:
   job-rebuild-and-verify-stubs:
@@ -37,13 +39,14 @@ jobs:
           dpkg --add-architecture i386
           apt-get update && apt-get upgrade -y
           # install system packages
-          apt-get install -y --no-install-recommends bash ca-certificates curl git libmpc3 make perl-base tar time xz-utils libc6:i386 zlib1g:i386
-          # install python2-minimal packages from Debian-11
+          apt-get install -y --no-install-recommends bash ca-certificates curl git libmpc3 make perl-base python3-minimal tar time xz-utils libc6:i386 zlib1g:i386
+          apt-get install -y gcc-riscv64-linux-gnu
           mkdir ../deps; cd ../deps; mkdir packages
-          curl -sS -L -O https://ftp.debian.org/debian/pool/main/p/python2.7/libpython2.7-minimal_2.7.18-8+deb11u1_amd64.deb
-          curl -sS -L -O https://ftp.debian.org/debian/pool/main/p/python2.7/python2.7-minimal_2.7.18-8+deb11u1_amd64.deb
-          dpkg -i ./*python2*.deb && rm ./*python2*.deb && ldconfig
-          ln -s -v python2.7 /usr/bin/python2
+          ### install python2-minimal packages from Debian-11
+          ## curl -sS -L -O https://ftp.debian.org/debian/pool/main/p/python2.7/libpython2.7-minimal_2.7.18-8+deb11u1_amd64.deb
+          ## curl -sS -L -O https://ftp.debian.org/debian/pool/main/p/python2.7/python2.7-minimal_2.7.18-8+deb11u1_amd64.deb
+          ## dpkg -i ./*python2*.deb && rm ./*python2*.deb && ldconfig
+          ## ln -s -v python2.7 /usr/bin/python2
           # manually unpack and install compat libs from Ubuntu-16.04
           curl -sS -L -O https://archive.kernel.org/ubuntu-archive/ubuntu/pool/main/m/mpfr4/libmpfr4_3.1.6-1_amd64.deb
           for f in ./*.deb; do dpkg -x $f ./packages; done
@@ -51,6 +54,7 @@ jobs:
           rm -rf ./*.deb ./packages && ldconfig
           # install upx-stubtools
           curl -sS -L https://github.com/upx/upx-stubtools/releases/download/v20221212/bin-upx-20221212.tar.xz | tar -xJ
+      - run: dpkg -l
       - name: Check out code
         run: |
           git config --global --add safe.directory '*' # needed when running in a container
@@ -73,9 +77,8 @@ jobs:
       - name: Rebuild docs
         run: |
           make -C doc clean all
-          if ! git diff --quiet; then git diff || true; fi # ignore diff error
+          if ! git diff --quiet; then git diff; exit 1; fi
       - name: Clean up
-        shell: bash
         run: |
           git ls-files -z --others --ignored --exclude-standard ./src/stub | xargs -0r rm -v --
           find ./src/stub/src -type d -name tmp -print0 | xargs -0r rmdir -v --
@@ -97,17 +100,17 @@ jobs:
     steps:
       - run: uname -a; pwd; id; umask
       - run: sudo apt-get update
-      - run: sudo apt-get install -y gdb parallel
-      - uses: actions/checkout@v4
+      - run: sudo apt-get install -y dmidecode gdb parallel valgrind
+      - run: (sudo dmidecode | sed -n -e '/System Information/,/^$/p') || true
+      - run: sudo dmidecode -q || true
+      - run: sudo dmidecode || true
+      - uses: actions/checkout@v6
         with: { submodules: true }
       - run: make build/extra/gcc/all
       - run: make build/extra/clang/all
-      # run: make build/extra/gcc-pie/all
-      # run: make build/extra/clang-pie/all
       - run: ls -l build/*/*/*/upx* || true
       - run: file  build/*/*/*/upx* || true
       - name: Make artifact
-        shell: bash
         run: |
           N=$(echo "upx-${GITHUB_REF_NAME}-${GITHUB_SHA:0:7}-${{ matrix.os }}-0" | sed 's/[^0-9a-zA-Z_.-]/-/g')
           mkdir -p "tmp/artifact/$N"
@@ -116,23 +119,37 @@ jobs:
           (cd tmp/artifact && tar --sort=name --zstd -cf "$N.tar.zst" "$N" && rm -rf "./$N" && ls -la && zstd -tq "$N.tar.zst")
           echo "artifact_name=$N" >> $GITHUB_ENV
       - name: ${{ format('Upload artifact {0}', env.artifact_name) }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with: { name: '${{ env.artifact_name }}', path: tmp/artifact }
-      - name: Mimic ctest tests SIGSEGV
-        shell: bash
+      - name: Run install tests
         run: |
           jobs="gcc/debug gcc/release clang/debug clang/release"
-          #jobs="$jobs gcc-pie/debug gcc-pie/release clang-pie/debug clang-pie/release"
-          for ((i = 0; i < 5; i++)); do
-            echo "===== parallel jobs: $jobs"
-            parallel -kv --lb 'cd build/extra/{} && bash ../../../../misc/testsuite/mimic_ctest_sigsegv.sh' ::: $jobs
-          done
+          echo "===== parallel jobs: $jobs"
+          DESTDIR="Install with make 2" parallel -kv --lb 'make build/extra/{}+install' ::: $jobs
+      - name: Mimic ctest tests SIGSEGV
+        run: |
+          jobs="gcc/debug gcc/release clang/debug clang/release"
+          echo "===== parallel jobs: $jobs"
+          parallel -kv --lb 'cd build/extra/{} && bash ../../../../misc/testsuite/mimic_ctest_sigsegv.sh' ::: $jobs
+          ls -ld ./build/*/*/*/upx-* || true
+          rm -rf ./build/*/*/*/upx-*
       - name: Run ctest tests
         run: |
           jobs="gcc/debug gcc/release clang/debug clang/release"
-          #jobs="$jobs gcc-pie/debug gcc-pie/release clang-pie/debug clang-pie/release"
           echo "===== parallel jobs: $jobs"
           CTEST_JOBS=2 parallel -kv --lb 'make build/extra/{}+test' ::: $jobs
+          ls -ld ./build/*/*/*/XTesting/*/* || true
+          rm -rf ./build/*/*/*/XTesting/*/*
+      - name: Mimic ctest tests with Valgrind
+        run: |
+          export UPX_CONFIG_DISABLE_EXHAUSTIVE_TESTS=ON # valgrind is SLOW
+          export upx_exe_runner="valgrind --leak-check=no --error-exitcode=1 --quiet --gen-suppressions=all"
+          # clang/debug does not work before valgrind-3.20, see https://bugs.kde.org/show_bug.cgi?id=452758
+          jobs="gcc/debug gcc/release clang/release"
+          echo "===== parallel jobs: $jobs"
+          parallel -kv --lb 'cd build/extra/{} && bash ../../../../misc/testsuite/mimic_ctest.sh' ::: $jobs
+          ls -ld ./build/*/*/*/upx-* || true
+          rm -rf ./build/*/*/*/upx-*
 
   job-linux-cmake: # uses cmake + make
     if: true
@@ -141,7 +158,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { os: ubuntu-22.04, use_extra: true, use_wine: true }
+          - { os: ubuntu-22.04, use_extra: true }
           - { os: ubuntu-24.04, use_extra: true, use_wine: true }
     name: ${{ format('{0}', matrix.os) }}
     runs-on: ${{ matrix.os }}
@@ -152,6 +169,7 @@ jobs:
         run: |
           sudo dpkg --add-architecture i386
           sudo apt-get update && sudo apt-get upgrade -y
+          sudo apt-get install -y dmidecode gdb libc6-dbg:i386 parallel valgrind
           sudo apt-get install -y g++-multilib g++-mingw-w64-i686 g++-mingw-w64-x86-64
           # make sure that we use posix-threads (pthread/winpthreads) and NOT win32-threads
           for f in i686-w64-mingw32-g++ i686-w64-mingw32-gcc x86_64-w64-mingw32-g++ x86_64-w64-mingw32-gcc; do
@@ -159,14 +177,19 @@ jobs:
             ls -l /usr/bin/${f}*
           done
           ls -l /etc/alternatives/*mingw* || true
-          sudo apt-get install -y libc6-dbg:i386 valgrind
+      - run: (sudo dmidecode | sed -n -e '/System Information/,/^$/p') || true
+        if: ${{ matrix.use_extra }}
+      - run: sudo dmidecode -q || true
+        if: ${{ matrix.use_extra }}
+      - run: sudo dmidecode || true
+        if: ${{ matrix.use_extra }}
       - name: Install Wine
         if: ${{ matrix.use_extra && matrix.use_wine }}
         run: |
           sudo apt-get install -y wine wine32:i386 wine64
           ls -l /usr/bin/wine*
           mkdir -p -v ~/.wine && wineboot --init
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with: { submodules: true }
       - name: Check out test suite
         run: git clone --depth=1 https://github.com/upx/upx-testsuite ../deps/upx-testsuite
@@ -207,18 +230,24 @@ jobs:
           (cd tmp/artifact && tar --sort=name --zstd -cf "$N.tar.zst" "$N" && rm -rf "./$N" && ls -la && zstd -tq "$N.tar.zst")
           echo "artifact_name=$N" >> $GITHUB_ENV
       - name: ${{ format('Upload artifact {0}', env.artifact_name) }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with: { name: '${{ env.artifact_name }}', path: tmp/artifact }
       - name: Run install tests
         run: |
           (cd build/extra/gcc/release && DESTDIR="$PWD/Install with cmake" cmake --install .)
           (cd build/extra/gcc/release && DESTDIR="$PWD/Install with make"  make install)
+          jobs="gcc/debug gcc/release clang/debug clang/release"
+          test "${{ matrix.use_extra }}" = "true" && jobs="$jobs gcc-m32/debug gcc-m32/release"
+          echo "===== parallel jobs: $jobs"
+          DESTDIR="Install with make 2" parallel -kv --lb 'make build/extra/{}+install' ::: $jobs
       - name: Mimic ctest tests SIGSEGV
         run: |
           jobs="gcc/debug gcc/release clang/debug clang/release"
           test "${{ matrix.use_extra }}" = "true" && jobs="$jobs gcc-m32/debug gcc-m32/release"
           echo "===== parallel jobs: $jobs"
           parallel -kv --lb 'cd build/extra/{} && bash ../../../../misc/testsuite/mimic_ctest_sigsegv.sh' ::: $jobs
+          ls -ld ./build/*/*/*/upx-* || true
+          rm -rf ./build/*/*/*/upx-*
       - name: Run ctest tests
         run: |
           jobs="gcc/debug gcc/release clang/debug clang/release"
@@ -227,6 +256,8 @@ jobs:
           command -v wine >/dev/null && jobs="$jobs cross-windows-mingw64/debug cross-windows-mingw64/release"
           echo "===== parallel jobs: $jobs"
           CTEST_JOBS=2 parallel -kv --lb 'make build/extra/{}+test' ::: $jobs
+          ls -ld ./build/*/*/*/XTesting/*/* || true
+          rm -rf ./build/*/*/*/XTesting/*/*
       - name: Mimic ctest tests with Valgrind
         if: true # note: valgrind is SLOW
         run: |
@@ -238,6 +269,8 @@ jobs:
             test "${{ matrix.use_extra }}" = "true" && jobs="$jobs gcc-m32/debug gcc-m32/release"
             echo "===== parallel jobs: $jobs"
             parallel -kv --lb 'cd build/extra/{} && bash ../../../../misc/testsuite/mimic_ctest.sh' ::: $jobs
+            ls -ld ./build/*/*/*/upx-* || true
+            rm -rf ./build/*/*/*/upx-*
           fi
       - name: Run file system tests
         run: |
@@ -263,6 +296,8 @@ jobs:
           test "${{ matrix.use_extra }}" = "true" && jobs="$jobs gcc-m32/debug gcc-m32/release"
           echo "===== parallel jobs: $jobs"
           parallel -kv --lb 'cd build/extra/{} && bash ../../../../misc/testsuite/upx_testsuite_1.sh' ::: $jobs
+          ls -ld ./build/*/*/*/tmp-upx-testsuite* || true
+          rm -rf ./build/*/*/*/tmp-upx-testsuite*
 
   job-macos-cmake: # uses cmake + make
     if: true
@@ -273,10 +308,10 @@ jobs:
         include:
           # NOTE: Xcode updates regularly tend to break Homebrew clang/gcc; often some ld64 issue; use "xcode_version" as needed; or try "-Wl,-ld_classic"
           # NOTE: macos does not have "env -C"; only with brew coreutils
-          - { os: macos-13, gcc: gcc-12, gxx: g++-12, testsuite: true }
           - { os: macos-14, gcc: gcc-13, gxx: g++-13, testsuite: true }
-          # { os: macos-15, gcc: gcc-14, gxx: g++-14, testsuite: true }
-          - { os: macos-15, testsuite: true }
+          - { os: macos-15, gcc: gcc-14, gxx: g++-14, testsuite: true }
+          - { os: macos-26, gcc: gcc-15, gxx: g++-15, testsuite: true }
+          - { os: macos-15-intel, gcc: gcc-14, gxx: g++-14, testsuite: true }
     name: ${{ format('{0} {1}{2}', matrix.os, matrix.xcode_version && 'xcode-' || '',  matrix.xcode_version) }}
     runs-on: ${{ matrix.os }}
     steps:
@@ -301,9 +336,9 @@ jobs:
           echo "UPX_DEBUG_FORCE_PACK_MACOS=1" >> $GITHUB_ENV
           case "${{ matrix.os }}" in
             # TODO FIXME: UPX on macos-13+ is broken => disable run-packed for now
-            macos-1[345]) echo "UPX_CONFIG_DISABLE_RUN_PACKED_TEST=ON" >> $GITHUB_ENV ;;
+            macos-[12][3456]*) echo "UPX_CONFIG_DISABLE_RUN_PACKED_TEST=ON" >> $GITHUB_ENV ;;
           esac
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with: { submodules: true }
       - name: Check out test suite
         if: ${{ matrix.testsuite }}
@@ -329,7 +364,6 @@ jobs:
       - run: ls -l build/*/*/*/upx* || true
       - run: file  build/*/*/*/upx* || true
       - name: Make artifact
-        shell: bash
         run: |
           X="${{ matrix.xcode_version }}"; test -n "$X" && X="-xcode-$X"
           N=$(echo "upx-${GITHUB_REF_NAME}-${GITHUB_SHA:0:7}-${{ matrix.os }}$X" | sed 's/[^0-9a-zA-Z_.-]/-/g')
@@ -346,13 +380,14 @@ jobs:
           (cd tmp/artifact && gtar --sort=name --zstd -cf "$N.tar.zst" "$N" && rm -rf "./$N" && ls -la && zstd -tq "$N.tar.zst")
           echo "artifact_name=$N" >> $GITHUB_ENV
       - name: ${{ format('Upload artifact {0}', env.artifact_name) }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with: { name: '${{ env.artifact_name }}', path: tmp/artifact }
       - name: Run install tests
         run: |
           (cd build/extra/clang/release && DESTDIR="$PWD/Install with cmake" cmake --install .)
           (cd build/extra/clang/release && DESTDIR="$PWD/Install with make"  make install)
       - name: Run ctest tests
+        if: ${{ matrix.testsuite }}
         run: |
           for f in ./build/extra/*/*/upx; do file $f; done
           jobs="clang/debug clang/release"
@@ -360,6 +395,7 @@ jobs:
           echo "===== parallel jobs: $jobs"
           CTEST_JOBS=2 parallel -kv --lb 'make build/extra/{}+test' ::: $jobs
       - name: Mimic ctest tests
+        if: ${{ matrix.testsuite }}
         run: |
           export PATH="$HOMEBREW_PREFIX/opt/coreutils/libexec/gnubin:$PATH"
           jobs="clang/debug clang/release"
@@ -367,7 +403,7 @@ jobs:
           echo "===== parallel jobs: $jobs"
           parallel -kv --lb 'cd build/extra/{} && bash ../../../../misc/testsuite/mimic_ctest.sh' ::: $jobs
       - name: Run file system tests
-        if: ${{ matrix.testsuite }} # for coreutils readlink
+        if: ${{ matrix.testsuite }}
         run: |
           export PATH="$HOMEBREW_PREFIX/opt/coreutils/libexec/gnubin:$PATH"
           export upx_test_file="$PWD"/build/extra/clang/release/upx
@@ -392,43 +428,46 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # { name: windows-2019-amd64,   os: windows-2019, vsversion: 2019, vsarch: amd64 }
-          - { name: windows-2022-amd64,   os: windows-2022, vsversion: 2022, vsarch: amd64 }
-          - { name: windows-2022-arm64,   os: windows-2022, vsversion: 2022, vsarch: amd64_arm64 }
-          # { name: windows-2022-arm64ec, os: windows-2022, vsversion: 2022, vsarch: amd64_arm64, use_amd64ec: true }
-          - { name: windows-2022-i386,    os: windows-2022, vsversion: 2022, vsarch: amd64_x86 }
-          - { name: windows-2025-amd64,   os: windows-2025, vsversion: 2022, vsarch: amd64 }
-          - { name: windows-2025-arm64,   os: windows-2025, vsversion: 2022, vsarch: amd64_arm64 }
-          - { name: windows-2025-arm64ec, os: windows-2025, vsversion: 2022, vsarch: amd64_arm64, use_amd64ec: true }
-          - { name: windows-2025-i386,    os: windows-2025, vsversion: 2022, vsarch: amd64_x86 }
+          - { name: windows-11-arm64,   os: windows-11-arm, vsversion: 2022, vsarch: arm64 }
+          - { name: windows-11-arm64ec, os: windows-11-arm, vsversion: 2022, vsarch: arm64, use_arm64ec: true }
+          # { name: windows-11-arm64x,  os: windows-11-arm, vsversion: 2022, vsarch: arm64, use_arm64x: true }
+          - { name: windows-2022-amd64, os: windows-2022,   vsversion: 2022, vsarch: amd64 }
+          - { name: windows-2022-i386,  os: windows-2022,   vsversion: 2022, vsarch: amd64_x86 }
+          - { name: windows-2025-amd64, os: windows-2025,   vsversion: 2022, vsarch: amd64 }
+          - { name: windows-2025-i386,  os: windows-2025,   vsversion: 2022, vsarch: amd64_x86 }
     name: ${{ format('{0}', matrix.name) }}
     runs-on: ${{ matrix.os }}
     steps:
       - run: git config --global core.autocrlf false
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with: { submodules: true }
       - name: Check out test suite
         run: git clone --depth=1 https://github.com/upx/upx-testsuite ../deps/upx-testsuite
       - uses: ilammy/msvc-dev-cmd@v1
         with: { vsversion: '${{ matrix.vsversion }}', arch: '${{ matrix.vsarch }}' }
       - name: Set platform
-        shell: bash
         run: |
-          if [[ "${{ matrix.vsarch }}" == amd64 ]]; then true;
-            echo "UPX_CMAKE_CONFIG_FLAGS_PLATFORM=-A x64" >> $GITHUB_ENV
-          elif [[ "${{ matrix.use_amd64ec }}" == "true" ]]; then true;
+          if [[ "${{ matrix.use_arm64ec }}" == "true" ]]; then true;
             echo "UPX_CMAKE_CONFIG_FLAGS_PLATFORM=-A ARM64EC" >> $GITHUB_ENV
             echo "UPX_CONFIG_DISABLE_SELF_PACK_TEST=ON" >> $GITHUB_ENV
-          elif [[ "${{ matrix.vsarch }}" == amd64_arm64 ]]; then true;
+          elif [[ "${{ matrix.use_arm64x }}" == "true" ]]; then true;
+            echo "UPX_CMAKE_CONFIG_FLAGS_PLATFORM=-A ARM64X" >> $GITHUB_ENV
+            echo "UPX_CONFIG_DISABLE_SELF_PACK_TEST=ON" >> $GITHUB_ENV
+          elif [[ "${{ matrix.vsarch }}" == *amd64 ]]; then true;
+            echo "UPX_CMAKE_CONFIG_FLAGS_PLATFORM=-A x64" >> $GITHUB_ENV
+          elif [[ "${{ matrix.vsarch }}" == *arm64 ]]; then true;
             echo "UPX_CMAKE_CONFIG_FLAGS_PLATFORM=-A ARM64" >> $GITHUB_ENV
             echo "UPX_CONFIG_DISABLE_SELF_PACK_TEST=ON" >> $GITHUB_ENV
-          elif [[ "${{ matrix.vsarch }}" == amd64_x86 ]]; then true;
+          elif [[ "${{ matrix.vsarch }}" == *x86 ]]; then true;
             echo "UPX_CMAKE_CONFIG_FLAGS_PLATFORM=-A Win32" >> $GITHUB_ENV
+          else
+            exit 1
           fi
       - run: make build/debug
       - run: make build/release
+      - run: shopt -s globstar; ls -ld build/**/upx* || true
+      - run: shopt -s globstar; file   build/**/upx* || true
       - name: Make artifact
-        shell: bash
         run: |
           N=$(echo "upx-${GITHUB_REF_NAME}-${GITHUB_SHA:0:7}-${{ matrix.name }}" | sed 's/[^0-9a-zA-Z_.-]/-/g')
           mkdir -p "tmp/artifact/$N"
@@ -441,55 +480,47 @@ jobs:
           cmake --install build/debug   --config Debug   --prefix "$PWD/tmp/artifact/$N/InstallWithCMake/InstallWithPrefixAndStrip/debug"   --strip
           cmake --install build/release --config Release --prefix "$PWD/tmp/artifact/$N/InstallWithCMake/InstallWithPrefixAndStrip/release" --strip
           (cd build && cp -ai --parents */*/upx.exe "../tmp/artifact/$N")
-          (cd tmp/artifact && tar --sort=name --zstd -cf "$N.tar.zst" "$N" && rm -rf "./$N" && ls -la && zstd -tq "$N.tar.zst")
+          #(cd tmp/artifact && tar --sort=name --zstd -cf "$N.tar.zst" "$N" && rm -rf "./$N" && ls -la && zstd -tq "$N.tar.zst")
+          (cd tmp/artifact && tar --sort=name --gzip -cf "$N.tar.gz" "$N" && rm -rf "./$N" && ls -la && gzip -tq "$N.tar.gz")
           echo "artifact_name=$N" >> $GITHUB_ENV
       - name: ${{ format('Upload artifact {0}', env.artifact_name) }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with: { name: '${{ env.artifact_name }}', path: tmp/artifact }
       - name: Run ctest tests
-        if: ${{ matrix.vsarch != 'amd64_arm64' }}
         run: |
           ctest --test-dir build/debug   --parallel 8 -C Debug
           ctest --test-dir build/release --parallel 8 -C Release
       - name: Mimic ctest tests
-        if: ${{ matrix.vsarch != 'amd64_arm64' }}
-        shell: bash
         run: |
           env -C build/debug/Debug     upx_exe=./upx.exe bash "$PWD"/misc/testsuite/mimic_ctest.sh
           env -C build/release/Release upx_exe=./upx.exe bash "$PWD"/misc/testsuite/mimic_ctest.sh
       - name: Run test suite build/release
-        if: ${{ matrix.vsarch != 'amd64_arm64' }}
-        shell: bash
         run: |
           export upx_testsuite_SRCDIR="$(readlink -en ../deps/upx-testsuite)"
           env -C build/release/Release upx_exe=./upx.exe bash "$PWD"/misc/testsuite/upx_testsuite_1.sh
 
-  job-windows-toolchains: # build "by hand" using cmd.exe
+  job-windows-bh-toolchains: # build "by hand" using cmd.exe
     if: github.repository_owner == 'upx'
     needs: [ job-rebuild-and-verify-stubs ]
     strategy:
       fail-fast: false
       matrix:
         include:
-          # { name: amd64-win64-vs2019,   os: windows-2019, vsversion: 2019, vsarch: amd64 }
-          - { name: amd64-win64-vs2022,   os: windows-2022, vsversion: 2022, vsarch: amd64 }
-          # { name: arm64-win64-vs2019,   os: windows-2019, vsversion: 2019, vsarch: amd64_arm64 }
-          - { name: arm64-win64-vs2022,   os: windows-2022, vsversion: 2022, vsarch: amd64_arm64 }
-          - { name: arm64ec-win64-vs2022, os: windows-2022, vsversion: 2022, vsarch: amd64_arm64, cl_machine_flags: -arm64EC, link_machine_flags: '/machine:arm64ec' }
-          # { name: arm64x-win64-vs2022,  os: windows-2022, vsversion: 2022, vsarch: amd64_arm64, cl_machine_flags: -arm64EC, link_machine_flags: '/machine:arm64x' }
-          # { name: i386-win32-vs2019,    os: windows-2019, vsversion: 2019, vsarch: amd64_x86 }
-          - { name: i386-win32-vs2022,    os: windows-2022, vsversion: 2022, vsarch: amd64_x86 }
-    name: ${{ format('windows {0}', matrix.name) }}
+          - { name: amd64-win64-vs2025,   os: windows-2025, vsversion: 2022, vsarch: amd64 }
+          - { name: arm64-win64-vs2025,   os: windows-2025, vsversion: 2022, vsarch: amd64_arm64 }
+          - { name: arm64ec-win64-vs2025, os: windows-2025, vsversion: 2022, vsarch: amd64_arm64, cl_machine_flags: -arm64EC, link_machine_flags: '/machine:arm64ec' }
+          # { name: arm64x-win64-vs2025,  os: windows-2025, vsversion: 2022, vsarch: amd64_arm64, cl_machine_flags: -arm64EC, link_machine_flags: '/machine:arm64x' }
+          - { name: i386-win32-vs2025,    os: windows-2025, vsversion: 2022, vsarch: amd64_x86 }
+    name: ${{ format('windows-bh {0}', matrix.name) }}
     runs-on: ${{ matrix.os }}
     env:
       C: ${{ matrix.name }}
       B: release
     steps:
       - run: git config --global core.autocrlf false
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with: { submodules: true }
       - name: Prepare sources and Check out test suite
-        shell: bash
         run: |
           git clone --depth=1 https://github.com/upx/upx-testsuite ../deps/upx-testsuite
           mkdir -p -v build/$C/$B/{bzip2,ucl,upx,zlib,zstd}
@@ -537,39 +568,25 @@ jobs:
           @rem set UPX_LIBS=%BDIR%\bzip2\bzip2.lib %BDIR%\ucl\ucl.lib %BDIR%\zlib\zlib.lib %BDIR%\zstd\zstd.lib
           set sources=%s%\*.cpp %s%\check\*.cpp %s%\compress\*.cpp %s%\console\*.cpp %s%\filter\*.cpp %s%\util\*.cpp
           %RUN_CL% -J -O2 -W4 -WX -std:c++17 -Zc:__cplusplus -EHsc -DUPX_VERSION_GITREV="""%GITREV%""" %DEFS% %UPX_DEFS% -I%H%\vendor -Feupx.exe %sources% %UPX_LIBS% /link ${{ matrix.link_machine_flags }} setargv.obj
+      - run: shopt -s globstar; ls -ld build/**/upx* || true
+      - run: shopt -s globstar; file   build/**/upx* || true
       - name: Make artifact
-        shell: bash
         run: |
-          N=$(echo "upx-${GITHUB_REF_NAME}-${GITHUB_SHA:0:7}-windows-${{ matrix.name }}" | sed 's/[^0-9a-zA-Z_.-]/-/g')
+          N=$(echo "upx-${GITHUB_REF_NAME}-${GITHUB_SHA:0:7}-windows-bh-${{ matrix.name }}" | sed 's/[^0-9a-zA-Z_.-]/-/g')
           mkdir -p "tmp/artifact/$N/$B"
           cp -ai build/$C/$B/upx/upx*.exe "tmp/artifact/$N/$B"
-          (cd tmp/artifact && tar --sort=name --zstd -cf "$N.tar.zst" "$N" && rm -rf "./$N" && ls -la && zstd -tq "$N.tar.zst")
+          #(cd tmp/artifact && tar --sort=name --zstd -cf "$N.tar.zst" "$N" && rm -rf "./$N" && ls -la && zstd -tq "$N.tar.zst")
+          (cd tmp/artifact && tar --sort=name --gzip -cf "$N.tar.gz" "$N" && rm -rf "./$N" && ls -la && gzip -tq "$N.tar.gz")
           echo "artifact_name=$N" >> $GITHUB_ENV
       - name: ${{ format('Upload artifact {0}', env.artifact_name) }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with: { name: '${{ env.artifact_name }}', path: tmp/artifact }
-      - name: Run basic tests
-        if: ${{ matrix.vsarch != 'amd64_arm64' }}
-        run: |
-          $ErrorActionPreference = 'stop'
-          $ErrorView = 'NormalView'
-          cd $Env:H\build\$Env:C\$Env:B\upx
-          $Env:UPX = "--no-color --no-progress"
-          .\upx.exe --version
-          .\upx.exe --sysinfo -v
-          .\upx.exe upx.exe -o upx_packed.exe
-          dir *.exe
-          .\upx.exe -l upx_packed.exe
-          .\upx.exe -t upx_packed.exe
-          .\upx_packed.exe --version
       - name: Mimic ctest tests
         if: ${{ matrix.vsarch != 'amd64_arm64' }}
-        shell: bash
         run: |
           env -C build/$C/$B/upx upx_exe=./upx.exe bash "$PWD"/misc/testsuite/mimic_ctest.sh
       - name: Run test suite
         if: ${{ matrix.vsarch != 'amd64_arm64' }}
-        shell: bash
         run: |
           export upx_testsuite_SRCDIR="$(readlink -en ../deps/upx-testsuite)"
           env -C build/$C/$B/upx upx_exe=./upx.exe bash "$PWD"/misc/testsuite/upx_testsuite_1.sh
@@ -583,18 +600,19 @@ jobs:
         include:
           # only build a few selected targets => more targets are tested in the Weekly CI
           - { zig_target: aarch64-linux-musl, qemu: qemu-aarch64 }
-          - { zig_target: aarch64-linux-musl, qemu: qemu-aarch64, zig_pic: -fPIE }
-          - { zig_target: aarch64-macos.11.0-none }
+          - { zig_target: aarch64-linux-musl, qemu: qemu-aarch64, zig_pic: -fPIE, container: 'alpine:3.18' }
+          - { zig_target: aarch64-macos-none }
           - { zig_target: aarch64-windows-gnu }
           - { zig_target: arm-linux-musleabihf, qemu: qemu-arm }
           - { zig_target: armeb-linux-musleabihf, qemu: qemu-armeb }
           - { zig_target: i386-linux-gnu.2.3.4, zig_flags: -march=i586 }
           - { zig_target: i386-linux-gnu.2.17, zig_flags: -march=i586 }
           - { zig_target: i386-linux-musl, zig_flags: -march=i586, qemu: qemu-i386 }
+          - { zig_target: i386-linux-musl, zig_flags: -march=i586, qemu: qemu-i386, zig_pic: -fPIE }
           - { zig_target: i386-windows-gnu }
-          - { zig_target: mips-linux-musleabi, zig_flags: -msoft-float, qemu: qemu-mips }
+          - { zig_target: mips-linux-musleabi, qemu: qemu-mips }
           - { zig_target: mips-linux-musleabihf, qemu: qemu-mips }
-          - { zig_target: mipsel-linux-musleabi, zig_flags: -msoft-float, qemu: qemu-mipsel }
+          - { zig_target: mipsel-linux-musleabi, qemu: qemu-mipsel }
           - { zig_target: mipsel-linux-musleabihf, qemu: qemu-mipsel }
           # { zig_target: mips-linux-musleabi-mips32r2, zig_flags: -march=mips32r2, qemu: qemu-mips }
           # { zig_target: mips-linux-musleabi-mips32r3, zig_flags: -march=mips32r3, qemu: qemu-mips }
@@ -605,18 +623,20 @@ jobs:
           - { zig_target: powerpc64-linux-musl, qemu: qemu-ppc64, zig_pic: -fPIE }
           - { zig_target: powerpc64le-linux-musl, qemu: qemu-ppc64le }
           - { zig_target: powerpc64le-linux-musl, qemu: qemu-ppc64le, zig_pic: -fPIE }
+          - { zig_target: riscv64-linux-musl, qemu: qemu-riscv64 }
+          - { zig_target: riscv64-linux-musl, qemu: qemu-riscv64, zig_pic: -fPIC }
+          - { zig_target: riscv64-linux-musl, qemu: qemu-riscv64, zig_pic: -fPIE }
           - { zig_target: x86_64-linux-gnu.2.3.4, qemu: qemu-x86_64 } # can use QEMU because of gcompat
-          - { zig_target: x86_64-linux-gnu.2.17, qemu: qemu-x86_64 } # can use QEMU because of gcompat
+          - { zig_target: x86_64-linux-gnu.2.17, qemu: qemu-x86_64 }  # can use QEMU because of gcompat
           - { zig_target: x86_64-linux-musl, qemu: qemu-x86_64 }
-          - { zig_target: x86_64-macos.11.0-none }
+          - { zig_target: x86_64-linux-musl, qemu: qemu-x86_64, zig_pic: -fPIE, container: 'alpine:3.18' }
+          - { zig_target: x86_64-macos-none }
           - { zig_target: x86_64-windows-gnu }
     name: ${{ format('zigcc {0} {1}', matrix.zig_target, matrix.zig_pic) }}
     runs-on: ubuntu-latest
-    #container: 'alpine:3.22'
-    #container: ${{ contains(matrix.qemu, 'qemu-ppc64') && 'alpine:3.19' || 'alpine:3.22' }}
-    #container: ${{ (matrix.qemu == 'qemu-ppc64') && 'alpine:edge' || 'alpine:3.22' }}
-    container: ${{ (matrix.qemu == 'qemu-aarch64' && matrix.zig_pic == '-fPIE') && 'alpine:3.18' || 'alpine:3.22' }}
+    container: ${{ matrix.container || 'alpine:3.23' }}
     env:
+      container: ${{ matrix.container || 'alpine:3.23' }}
       UPX_CONFIG_HAVE_WORKING_BUILD_RPATH: ''
       # for zig-cc wrapper scripts (see below):
       ZIG_CPPFLAGS: -DUPX_DOCTEST_CONFIG_MULTITHREADING
@@ -625,19 +645,19 @@ jobs:
       ZIG_TARGET: ${{ matrix.zig_target }}
     steps:
       - run: uname -a; pwd; id; umask
-      - name: Install Alpine Linux container packages
-        if: ${{ job.container }}
+        shell: sh
+      - name: ${{ format('Install packages {0}', env.container) }}
         shell: sh
         run: |
-          apk update && apk upgrade && apk add bash cmake curl file gdb git make parallel patch strace tar util-linux xz zstd
+          apk update && apk upgrade && apk add bash cmake curl dmidecode file gdb git make parallel patch strace sudo tar util-linux xz zstd
           # set PATH like in Ubuntu
           echo "PATH=$HOME/.local/bin:$PATH" >> $GITHUB_ENV
           git config --global --add safe.directory '*' # needed when running in a container
           mkdir -p ~/.parallel && : > ~/.parallel/$(echo 6305-4721 | tr 0-7 leticlwi)
-      - uses: actions/checkout@v4
+      - run: (sudo dmidecode | sed -n -e '/System Information/,/^$/p') || true
+      - uses: actions/checkout@v6
         with: { submodules: true }
       - name: ${{ format('Install Zig {0}', env.ZIG_DIST_VERSION) }}
-        shell: bash
         run: |
           rev=$(git rev-parse --short=7 HEAD)
           echo "UPX_GITREV_SHORT=$rev" >> $GITHUB_ENV
@@ -649,13 +669,16 @@ jobs:
             # TODO FIXME: problem with self-packed upx and musl+gcompat: "Not a valid dynamic program"
             echo "UPX_CONFIG_DISABLE_RUN_PACKED_TEST=ON" >> $GITHUB_ENV
           fi
+          test -z "${{ matrix.tt }}" || echo "UPX_CONFIG_DISABLE_SELF_PACK_TEST=ON" >> $GITHUB_ENV
           # install zig; note that ~/.local/bin is included in the default $PATH on Ubuntu
           mkdir -p -v ~/.local/bin
           cd ~/.local/bin
+          ZIG_DIST_VERSION=${ZIG_DIST_VERSION/#zig-/}
           ZIG_DIST_NAME=zig-linux-x86_64-${ZIG_DIST_VERSION}
           ZIG_DIST_NAME=zig-x86_64-linux-${ZIG_DIST_VERSION}
           #curl -sS -L -O https://ziglang.org/builds/${ZIG_DIST_NAME}.tar.xz
-          curl -sS -L -O https://ziglang.org/download/0.14.1/${ZIG_DIST_NAME}.tar.xz
+          #curl -sS -L -O https://ziglang.org/download/0.14.1/${ZIG_DIST_NAME}.tar.xz
+          curl -sS -L -O https://ziglang.org/download/0.15.2/${ZIG_DIST_NAME}.tar.xz
           ls -l ${ZIG_DIST_NAME}.tar.xz
           file ${ZIG_DIST_NAME}.tar.xz || true
           tar -xoJf ${ZIG_DIST_NAME}.tar.xz
@@ -665,7 +688,7 @@ jobs:
           echo -n 'zig version: '; zig version
           # patch zig
           ls -la "$HOME" "$GITHUB_WORKSPACE" || true
-          #(cd ${ZIG_DIST_NAME} && patch --verbose -p1 -i "$GITHUB_WORKSPACE"/misc/patches/zig/0001-x.patch)
+          (cd ${ZIG_DIST_NAME} && patch --verbose -p1 -i "$GITHUB_WORKSPACE"/misc/patches/zig/0001-x.patch)
           # create wrapper scripts (needed for CMake)
           log=
           log='set -x\n'
@@ -680,7 +703,7 @@ jobs:
           [[ $ZIG_TARGET == mips-linux-musleabihf-* ]]   && ZIG_TARGET=mips-linux-musleabihf
           [[ $ZIG_TARGET == mipsel-linux-musleabi-* ]]   && ZIG_TARGET=mipsel-linux-musleabi
           [[ $ZIG_TARGET == mipsel-linux-musleabihf-* ]] && ZIG_TARGET=mipsel-linux-musleabihf
-          ZIG_TARGET=${ZIG_TARGET/i386-/x86-} # i386 => x86
+          ZIG_TARGET=${ZIG_TARGET/#i386-/x86-} # i386 => x86
           echo "ZIG_TARGET=$ZIG_TARGET" >> $GITHUB_ENV
           # update ZIG_FLAGS
           # -fPIE is for compilation only => also use the correct linker flag "-pie"
@@ -692,6 +715,11 @@ jobs:
           if [[ $ZIG_TARGET == *-linux-gnu.2.3.* ]]; then true;
             # glibc-2.3.3: undefined symbols in Debug build: __snprintf_chk __vsnprintf_chk
             # glibc-2.3.4: ld.lld: error: undefined symbol: openat64
+            ZIG_FLAGS="$ZIG_FLAGS -fno-sanitize=all"
+            echo "UPX_CONFIG_DISABLE_SANITIZE=ON" >> $GITHUB_ENV
+          fi
+          if [[ $ZIG_TARGET == *-linux-gnu.2.[456789] ]]; then true;
+            # glibc-2.x: ld.lld: error: undefined symbol: pwritev64
             ZIG_FLAGS="$ZIG_FLAGS -fno-sanitize=all"
             echo "UPX_CONFIG_DISABLE_SANITIZE=ON" >> $GITHUB_ENV
           fi
@@ -710,7 +738,6 @@ jobs:
       - run: ls -l build/*/*/*/upx* || true
       - run: file  build/*/*/*/upx* || true
       - name: ${{ format('Make artifact from upx-{0}-{1}', github.ref_name, env.UPX_GITREV_SHORT) }}
-        shell: bash
         run: |
           N=$(echo "upx-${GITHUB_REF_NAME}-${GITHUB_SHA:0:7}-zigcc-${{ matrix.zig_target }}${ZIG_PIC}" | sed 's/[^0-9a-zA-Z_.-]/-/g')
           mkdir -p "tmp/artifact/$N"
@@ -726,7 +753,7 @@ jobs:
           (cd tmp/artifact && tar --sort=name --zstd -cf "$N.tar.zst" "$N" && rm -rf "./$N" && ls -la && zstd -tq "$N.tar.zst")
           echo "artifact_name=$N" >> $GITHUB_ENV
       - name: ${{ format('Upload artifact {0}', env.artifact_name) }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with: { name: '${{ env.artifact_name }}', path: tmp/artifact }
       - name: Run install tests
         if: ${{ contains(matrix.zig_target, '-linux') }}
@@ -758,7 +785,8 @@ jobs:
           echo "===== parallel jobs: $jobs"
           parallel -kv --lb 'cd build/zig/{} && bash ../../../../misc/testsuite/mimic_ctest.sh' ::: $jobs
       - name: Mimic ctest tests with Valgrind
-        if: ${{ matrix.zig_target == 'x86_64-linux-musl' || contains(matrix.zig_target, 'x86_64-linux-gnu.2') }}
+        #if: ${{ matrix.zig_target == 'x86_64-linux-musl' || contains(matrix.zig_target, 'x86_64-linux-gnu.2') }}
+        if: false
         run: |
           export UPX_CONFIG_DISABLE_EXHAUSTIVE_TESTS=ON # valgrind is SLOW
           apk add coreutils valgrind

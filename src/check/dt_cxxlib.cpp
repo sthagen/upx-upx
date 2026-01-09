@@ -2,7 +2,7 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -770,7 +770,7 @@ static_assert(sizeof(TestCT) == 8);
 static_assert(alignof(TestCT) == 1);
 } // namespace
 
-TEST_CASE("upx::compile_time") {
+TEST_CASE("upx::compile_time 1") {
     constexpr upx_uint16_t v16 = 0x0201;
     constexpr upx_uint32_t v24 = 0x030201;
     constexpr upx_uint32_t v32 = 0x04030201;
@@ -867,7 +867,7 @@ TEST_CASE("upx::compile_time") {
         constexpr auto le64 = TestCT::makeLE64(v64);
         static_assert(upx::compile_time::get_le64(le64.d) == v64);
         static_assert(mem_eq(le64.d, "\x01\x02\x03\x04\x05\x06\x07\x08", 8));
-        memset(buf, 0, 8);
+        upx::compile_time::mem_clear(buf, 8);
         TestCT::noinline_set_le64(buf, v64);
         assert_noexcept(TestCT::noinline_get_le64(buf) == v64);
         assert_noexcept(upx::compile_time::get_le64(buf) == v64);
@@ -888,7 +888,7 @@ TEST_CASE("upx::compile_time") {
     }
 }
 
-TEST_CASE("upx::compile_time") {
+TEST_CASE("upx::compile_time 2") {
     constexpr upx_uint16_t v16 = 0xf2f1;
     constexpr upx_uint32_t v24 = 0xf3f2f1;
     constexpr upx_uint32_t v32 = 0xf4f3f2f1;

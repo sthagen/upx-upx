@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2025 Laszlo Molnar
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -67,12 +67,9 @@ static void handle_opterr(acc_getopt_p g, const char *f, void *v) {
 static int exit_code = EXIT_OK;
 
 #if (WITH_GUI)
-static noinline void do_exit(void) { throw exit_code; }
+static noreturn void do_exit() { throw exit_code; }
 #else
-#if defined(__GNUC__)
-static void do_exit(void) __attribute__((__noreturn__));
-#endif
-static void do_exit(void) {
+static noreturn void do_exit() {
     static bool in_exit = false;
 
     if (in_exit)
@@ -115,7 +112,7 @@ static noinline void e_exit(int ec) {
     do_exit();
 }
 
-static noinline void e_usage(void) {
+static noinline void e_usage() {
     if (opt->debug.getopt_throw_instead_of_exit)
         throw EXIT_USAGE;
     show_usage();
@@ -217,7 +214,7 @@ static void check_and_update_options(int i, int argc) {
 // misc
 **************************************************************************/
 
-static void e_help(void) {
+static void e_help() {
     show_help(0);
     e_exit(EXIT_USAGE);
 }
@@ -742,6 +739,9 @@ static int do_option(int optc, const char *arg) {
     case 678:
         opt->o_unix.android_old = true;
         break;
+    case 679:
+        opt->o_unix.catch_sigsegv = true;
+        break;
     // ps1/exe
     case 670:
         opt->ps1_exe.boot_only = true;
@@ -957,6 +957,7 @@ int main_get_options(int argc, char **argv) {
         {"android-shlib", 0, N, 676},
         {"force-pie", 0x90, N, 677},
         {"android-old", 0, N, 678},
+        {"catch-sigsegv", 0, N, 679},
         // ps1/exe
         {"boot-only", 0x90, N, 670},
         {"no-align", 0x90, N, 671},
@@ -1099,7 +1100,8 @@ void main_get_envoptions() {
     var = upx_getenv(OPTIONS_VAR);
     if (var == nullptr || !var[0])
         return;
-    env = strdup(var);
+    env = ::strdup(var);
+    assert_noexcept(env != nullptr);
     if (env == nullptr)
         return;
 

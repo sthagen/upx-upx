@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2025 Laszlo Molnar
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -30,6 +30,8 @@
 #include "filter.h"
 #include "packer.h"
 #include "p_tmt.h"
+#define WANT_EHDR_ENUM 1
+#include "p_elf_enum.h"
 #include "linker.h"
 
 static const CLANG_FORMAT_DUMMY_STATEMENT
@@ -66,7 +68,7 @@ unsigned PackTmt::findOverlapOverhead(const byte *buf, const byte *tbuf, unsigne
 
 void PackTmt::buildLoader(const Filter *ft) {
     // prepare loader
-    initLoader(stub_i386_dos32_tmt, sizeof(stub_i386_dos32_tmt));
+    initLoader(EM_386, stub_i386_dos32_tmt, sizeof(stub_i386_dos32_tmt));
     addLoader("IDENTSTR,TMTMAIN1", ph.first_offset_found == 1 ? "TMTMAIN1A" : "", "TMTMAIN1B",
               ft->id ? "TMTCALT1" : "", "TMTMAIN2,UPX1HEAD,TMTCUTPO");
 

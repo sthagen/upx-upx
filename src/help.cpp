@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2025 Laszlo Molnar
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -49,7 +49,7 @@ const char gitrev[] = UPX_VERSION_GITREV;
 const char gitrev[1] = {0};
 #endif
 
-void show_header(void) {
+void show_header() {
     FILE *f = con_term;
     int fg;
 
@@ -85,7 +85,7 @@ void show_header(void) {
 // usage
 **************************************************************************/
 
-void show_usage(void) {
+void show_usage() {
     FILE *f = con_term;
 
     con_fprintf(f, "Usage: %s [-123456789dlthVL] [-qvfk] [-o file] %sfile..\n", progname,
@@ -342,6 +342,7 @@ void show_help(int verbose) {
         fg = con_fg(f, fg);
         con_fprintf(f,
                     "  --preserve-build-id     copy .gnu.note.build-id to compressed output\n"
+                    "  --catch-sigsegv         debug errors in hardware or de-compressor\n"
                     "\n");
     }
     // clang-format on
@@ -380,7 +381,7 @@ void show_help(int verbose) {
 // license
 **************************************************************************/
 
-void show_license(void) {
+void show_license() {
     FILE *f = con_term;
 
     show_header();
@@ -468,9 +469,9 @@ void show_version(bool one_line) {
     fprintf(f, "doctest C++ testing framework version %s\n", DOCTEST_VERSION_STR);
 #endif
     // clang-format off
-    fprintf(f, "Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer\n");
-    fprintf(f, "Copyright (C) 1996-2025 Laszlo Molnar\n");
-    fprintf(f, "Copyright (C) 2000-2025 John F. Reiser\n");
+    fprintf(f, "Copyright (C) 1996-2026 Markus Franz Xaver Johannes Oberhumer\n");
+    fprintf(f, "Copyright (C) 1996-2026 Laszlo Molnar\n");
+    fprintf(f, "Copyright (C) 2000-2026 John F. Reiser\n");
 #if (WITH_ZLIB)
     // see vendor/zlib/LICENSE
     fprintf(f, "Copyright (C) 1995" "-2024 Jean-loup Gailly and Mark Adler\n");

@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2025 Laszlo Molnar
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -31,6 +31,8 @@
 #include "packer.h"
 #include "lefile.h"
 #include "p_wcle.h"
+#define WANT_EHDR_ENUM 1
+#include "p_elf_enum.h"
 #include "linker.h"
 
 static const CLANG_FORMAT_DUMMY_STATEMENT
@@ -83,7 +85,7 @@ Linker *PackWcle::newLinker() const { return new ElfLinkerX86; }
 
 void PackWcle::buildLoader(const Filter *ft) {
     // prepare loader
-    initLoader(stub_i386_dos32_watcom_le, sizeof(stub_i386_dos32_watcom_le));
+    initLoader(EM_386, stub_i386_dos32_watcom_le, sizeof(stub_i386_dos32_watcom_le));
     addLoader("IDENTSTR,WCLEMAIN", ph.first_offset_found == 1 ? "WCLEMAIN02" : "",
               "WCLEMAIN03,UPX1HEAD,WCLECUTP");
 

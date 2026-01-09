@@ -25,11 +25,11 @@ endif
 .SECONDEXPANSION:
 .SUFFIXES:
 
-build/debug build/release build/all:                PHONY; $(MAKE) -C $(top_srcdir) $@
-build/debug+test build/release+test build/all+test: PHONY; $(MAKE) -C $(top_srcdir) $@
+build/debug build/release build/all:                PHONY; $(MAKE) -C "$(top_srcdir)" $@
+build/debug+test build/release+test build/all+test: PHONY; $(MAKE) -C "$(top_srcdir)" $@
 # shortcuts
-debug release all:                                  PHONY; $(MAKE) -C $(top_srcdir) $@
-debug+test release+test all+test:                   PHONY; $(MAKE) -C $(top_srcdir) $@
+debug release all:                                  PHONY; $(MAKE) -C "$(top_srcdir)" $@
+debug+test release+test all+test:                   PHONY; $(MAKE) -C "$(top_srcdir)" $@
 
 test: $$(patsubst %+test,%,$$(.DEFAULT_GOAL))+test PHONY
 
@@ -61,11 +61,11 @@ run-testsuite-%: export upx_testsuite_SRCDIR := $(upx_testsuite_SRCDIR)
 run-testsuite-debug: export upx_testsuite_BUILDDIR := ./tmp-upx-testsuite-debug
 run-testsuite-debug: export upx_exe := $(top_srcdir)/build/debug/upx
 run-testsuite-debug: build/debug PHONY
-	time -p bash $(top_srcdir)/misc/testsuite/upx_testsuite_1.sh
+	time -p bash "$(top_srcdir)/misc/testsuite/upx_testsuite_1.sh"
 run-testsuite-release: export upx_testsuite_BUILDDIR := ./tmp-upx-testsuite-release
 run-testsuite-release: export upx_exe := $(top_srcdir)/build/release/upx
 run-testsuite-release: build/release PHONY
-	time -p bash $(top_srcdir)/misc/testsuite/upx_testsuite_1.sh
+	time -p bash "$(top_srcdir)/misc/testsuite/upx_testsuite_1.sh"
 endif
 endif
 
@@ -75,9 +75,9 @@ endif
 
 ifneq ($(wildcard /usr/bin/env),) # need Unix utils like bash, perl, sed, xargs, etc.
 
-CHECK_WHITESPACE = bash $(top_srcdir)/misc/scripts/check_whitespace.sh $(top_srcdir)
+CHECK_WHITESPACE = bash "$(top_srcdir)/misc/scripts/check_whitespace.sh" "$(top_srcdir)"
 ifneq ($(wildcard $(top_srcdir)/.git/.),)
-CHECK_WHITESPACE = bash $(top_srcdir)/misc/scripts/check_whitespace_git.sh $(top_srcdir)
+CHECK_WHITESPACE = bash "$(top_srcdir)/misc/scripts/check_whitespace_git.sh" "$(top_srcdir)"
 endif
 check-whitespace: PHONY; $(CHECK_WHITESPACE)
 
@@ -92,7 +92,7 @@ ifneq ($(wildcard /usr/bin/env),)
 ifeq ($(shell uname),Linux)
 
 # Markus loves clang-format, but John hates it; find a compromise
-CLANG_FORMAT_EXCLUDE_FILES += stub/%.h util/miniacc.h
+CLANG_FORMAT_EXCLUDE_FILES += stub/%.h util/miniacc.h filter/auipc.h
 CLANG_FORMAT_EXCLUDE_FILES += p_lx_% p_mach% p_unix% p_vmlin%
 CLANG_FORMAT_FILES := $(sort $(wildcard *.[ch]* ../maint/src/*.[ch]* */*.[ch]*))
 CLANG_FORMAT_FILES += $(sort $(wildcard stub/tools/*/*.[ch]*))
@@ -100,7 +100,7 @@ CLANG_FORMAT_FILES += $(sort $(wildcard ../misc/cmake/try_compile/*.[ch]*))
 CLANG_FORMAT_FILES := $(sort $(filter-out $(CLANG_FORMAT_EXCLUDE_FILES),$(CLANG_FORMAT_FILES)))
 clang-format: $(CLANG_FORMAT_FILES) PHONY
 	@echo "running upx-clang-format"
-	@bash $(top_srcdir)/misc/scripts/upx-clang-format.sh -i $(CLANG_FORMAT_FILES)
+	@bash "$(top_srcdir)/misc/scripts/upx-clang-format.sh" -i $(CLANG_FORMAT_FILES)
 
 endif # Linux
 endif # /usr/bin/env

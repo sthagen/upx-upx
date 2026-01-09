@@ -264,7 +264,7 @@ build/analyze/clang-analyzer/%: export CCC_CXX ?= clang++
 # run clang-tidy: uses file compile_commands.json from an existing clang build;
 #   does not create any actual files, so purely PHONY
 CLANG_TIDY_BUILD_BASE = build/extra/clang
-RUN_CLANG_TIDY = time python3 ./misc/analyze/clang-tidy/run-clang-tidy.py -p $<
+RUN_CLANG_TIDY = time python3 ./misc/analyze/clang-tidy/run-clang-tidy.py -p "$<"
 RUN_CLANG_TIDY_WERROR = $(RUN_CLANG_TIDY) '-warnings-as-errors=*'
 build/analyze/clang-tidy-upx/debug build/analyze/clang-tidy-upx/release: $$(CLANG_TIDY_BUILD_BASE)/$$(notdir $$@) PHONY
 	$(RUN_CLANG_TIDY_WERROR) -config-file ./.clang-tidy '/src/.*\.cpp'
@@ -281,6 +281,7 @@ build/analyze/clang-tidy/debug build/analyze/clang-tidy/release: build/analyze/c
 build/analyze/clang-tidy/debug build/analyze/clang-tidy/release: build/analyze/clang-tidy-ucl/$$(notdir $$@)
 build/analyze/clang-tidy/debug build/analyze/clang-tidy/release: build/analyze/clang-tidy-zlib/$$(notdir $$@)
 build/analyze/clang-tidy/debug build/analyze/clang-tidy/release: build/analyze/clang-tidy-zstd/$$(notdir $$@)
+build/analyze/clang-tidy/debug build/analyze/clang-tidy/release: PHONY
 
 # OLD names [deprecated]
 build/extra/scan-build/debug:   build/analyze/clang-analyzer/debug PHONY
@@ -333,6 +334,7 @@ $(call check_undefined,__add_cmake_config)
 __add_cmake_config = $(and $($1),-D$1="$($1)")
 
 # pass common CMake settings
+UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,CMAKE_INSTALL_PREFIX)
 UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,CMAKE_VERBOSE_MAKEFILE)
 # pass common CMake toolchain settings
 UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,CMAKE_ADDR2LINE)
@@ -376,6 +378,8 @@ UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,UPX_CONFIG_EXTRA_COMPILE_OPT
 SUBMODULES = doctest lzma-sdk ucl valgrind zlib
 
 $(foreach 1,$(SUBMODULES),$(if $(wildcard vendor/$1/[CL]*),,\
-    $(error ERROR: missing git submodule '$1'; run 'git submodule update --init')))
+  $(error ERROR: missing git submodule '$1'; run 'git submodule update --init')))
 
 endif # UPX_MAKEFILE_EXTRA_MK_INCLUDED
+
+# vim:set ts=8 sw=8 noet:

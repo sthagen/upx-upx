@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2025 Laszlo Molnar
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -33,6 +33,8 @@
 #include "filter.h"
 #include "packer.h"
 #include "p_tos.h"
+#define WANT_EHDR_ENUM 1
+#include "p_elf_enum.h"
 #include "linker.h"
 
 static const CLANG_FORMAT_DUMMY_STATEMENT
@@ -94,7 +96,7 @@ unsigned PackTos::getDecomprOffset(int method, int small) const {
 void PackTos::buildLoader(const Filter *ft) {
     assert(ft->id == 0);
 
-    initLoader(stub_m68k_atari_tos, sizeof(stub_m68k_atari_tos));
+    initLoader(0, stub_m68k_atari_tos, sizeof(stub_m68k_atari_tos));
     // linker->dumpSymbols();
 
     //

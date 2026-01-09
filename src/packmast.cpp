@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2025 Laszlo Molnar
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -24,6 +24,8 @@
    Markus F.X.J. Oberhumer              Laszlo Molnar
    <markus@oberhumer.com>               <ezerotven+github@gmail.com>
  */
+
+// dispatch to a concrete subclass of class PackerBase; see work.cpp
 
 #include "conf.h"
 #include "file.h"
@@ -199,6 +201,7 @@ PackerBase *PackMaster::visitAllPackers(visit_func_t func, InputFile *f, const O
         VISIT(PackLinuxElf32armLe);
         VISIT(PackLinuxElf32armBe);
         VISIT(PackLinuxElf64arm);
+        VISIT(PackLinuxElf64riscv64);
         VISIT(PackLinuxElf32ppc);
         VISIT(PackLinuxElf64ppc);
         VISIT(PackLinuxElf64ppcle);
@@ -210,7 +213,9 @@ PackerBase *PackMaster::visitAllPackers(visit_func_t func, InputFile *f, const O
     VISIT(PackMachFat);   // cafebabe conflict
     VISIT(PackLinuxI386); // cafebabe conflict
 
+    //
     // Mach (Darwin / macOS)
+    //
     VISIT(PackDylibAMD64);
     VISIT(PackMachPPC32); // TODO: this works with upx 3.91..3.94 but got broken in 3.95; FIXME
     VISIT(PackMachI386);
@@ -284,7 +289,7 @@ void PackMaster::fileInfo() may_throw {
     if (!packer)
         packer = visitAllPackers(try_can_pack, fi, opt, fi);
     if (!packer)
-        throwUnknownExecutableFormat(nullptr, 1); // make a warning here
+        throwUnknownExecutableFormat(nullptr, true); // make a warning here
     packer->doFileInfo();
 }
 

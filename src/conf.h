@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2025 Laszlo Molnar
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -75,6 +75,9 @@ static_assert((char) (-1) == 255);             // -funsigned-char
 #if defined(__clang__) && __has_warning("-Wunnecessary-virtual-specifier")
 #pragma clang diagnostic ignored "-Wunnecessary-virtual-specifier"
 #endif
+#if (ACC_CC_GNUC && ACC_CC_GNUC < 0x090000)
+#pragma GCC diagnostic ignored "-Wattributes"
+#endif
 // enable some more strict warnings for Git developer builds
 #if defined(UPX_CONFIG_DISABLE_WSTRICT) && (UPX_CONFIG_DISABLE_WSTRICT + 0 == 0)
 #if defined(UPX_CONFIG_DISABLE_WERROR) && (UPX_CONFIG_DISABLE_WERROR + 0 == 0)
@@ -100,6 +103,7 @@ static_assert((char) (-1) == 255);             // -funsigned-char
 #endif // UPX_CONFIG_DISABLE_WERROR
 #endif // UPX_CONFIG_DISABLE_WSTRICT
 
+// upx_is_constant_evaluated
 #if __cplusplus >= 202002L // C++20
 #define upx_is_constant_evaluated std::is_constant_evaluated
 #elif __has_builtin(__builtin_is_constant_evaluated) // clang-9, gcc-10
@@ -107,6 +111,10 @@ static_assert((char) (-1) == 255);             // -funsigned-char
 #elif (ACC_CC_GNUC >= 0x090000) && 1 // gcc-9
 #define upx_is_constant_evaluated __builtin_is_constant_evaluated
 #endif
+
+// cosmetic: explicitly annotate some functions which may throw exceptions;
+//   note that noexcept(false) is the default for all C++ functions anyway
+#define may_throw noexcept(false)
 
 // multithreading (UPX currently does not use multithreading)
 #if (WITH_THREADS)
@@ -119,7 +127,7 @@ static_assert((char) (-1) == 255);             // -funsigned-char
 #define upx_std_atomic(Type) Type
 #define upx_std_once_flag    upx_std_atomic(size_t)
 template <class NoexceptCallable>
-inline void upx_std_call_once(upx_std_once_flag &flag, NoexceptCallable &&f) {
+inline void upx_std_call_once(upx_std_once_flag &flag, NoexceptCallable &&f) noexcept {
     if (__acc_unlikely(!flag)) {
         flag = 1;
         f();
@@ -141,7 +149,7 @@ inline constexpr bool upx_is_integral_v = upx_is_integral<T>::value;
 #define upx_fake_alignas_16   __attribute__((__aligned__(2))) // object file maximum 2 ???
 #define upx_fake_alignas__(x) upx_fake_alignas_##x
 #define alignas(x)            upx_fake_alignas__(x)
-#define upx_alignas_max       upx_fake_alignas_4
+#define upx_alignas_max       upx_fake_alignas_2
 #endif
 #ifndef upx_alignas_max
 #define upx_alignas_max alignas(std::max_align_t)
@@ -197,11 +205,7 @@ struct alignas(1) upx_charptr_unit_type final { char hidden__; };
 static_assert(sizeof(upx_charptr_unit_type) == 1);
 
 // using the system off_t was a bad idea even back in 199x...
-#if (__SIZEOF_INT128__ == 16) && 0
-typedef upx_int128_t upx_off_t;
-#else
 typedef long long upx_off_t;
-#endif
 #undef off_t
 #if 0
 // TODO later cleanup: at some future point we can do this:
@@ -228,15 +232,12 @@ typedef long long upx_off_t;
 #else
 #define noreturn noinline
 #endif
+
 #define forceinline_constexpr forceinline constexpr
 #define likely                __acc_likely
 #define unlikely              __acc_unlikely
 #define very_likely           __acc_very_likely
 #define very_unlikely         __acc_very_unlikely
-
-// cosmetic: explicitly annotate some functions which may throw exceptions
-//   note that noexcept(false) is the default for all C++ functions anyway
-#define may_throw noexcept(false)
 
 #define COMPILE_TIME_ASSERT(e) ACC_COMPILE_TIME_ASSERT(e)
 #define DELETED_FUNCTION       = delete
@@ -380,6 +381,7 @@ inline void NO_printf(const char *, ...) noexcept {}
 inline void NO_fprintf(FILE *, const char *, ...) noexcept attribute_format(2, 3);
 inline void NO_fprintf(FILE *, const char *, ...) noexcept {}
 
+// upx_memcmp_inline
 #if __has_builtin(__builtin_memcmp)
 #define upx_memcmp_inline __builtin_memcmp
 #elif defined(__clang__) || defined(__GNUC__)
@@ -387,6 +389,8 @@ inline void NO_fprintf(FILE *, const char *, ...) noexcept {}
 #else
 #define upx_memcmp_inline memcmp
 #endif
+
+// upx_memcpy_inline
 #if __has_builtin(__builtin_memcpy_inline) && 0 // TODO later: clang constexpr limitation?
 #define upx_memcpy_inline __builtin_memcpy_inline
 #elif __has_builtin(__builtin_memcpy)
@@ -397,6 +401,7 @@ inline void NO_fprintf(FILE *, const char *, ...) noexcept {}
 #define upx_memcpy_inline memcpy
 #endif
 
+// upx_return_address()
 #if defined(__wasi__)
 #define upx_return_address() nullptr
 #elif __has_builtin(__builtin_return_address)
@@ -437,6 +442,7 @@ inline void NO_fprintf(FILE *, const char *, ...) noexcept {}
 
 #define TABLESIZE(table) ((sizeof(table) / sizeof((table)[0])))
 
+// mem_clear()
 template <class T>
 inline void mem_clear(T *object) noexcept {
     static_assert(std::is_class_v<T>); // UPX convention
@@ -571,6 +577,7 @@ using upx::tribool;
 #define UPX_F_LINUX_ELF64_ARM64   42
 #define UPX_F_W64PE_ARM64         43 // NOT YET IMPLEMENTED
 #define UPX_F_W64PE_ARM64EC       44 // NOT YET IMPLEMENTED
+#define UPX_F_LINUX_ELF64_RISCV64 45
 
 #define UPX_F_ATARI_TOS         129
 // #define UPX_F_SOLARIS_SPARC     130 // NOT IMPLEMENTED
@@ -806,14 +813,15 @@ int upx_doctest_check();
 // util/membuffer.h
 class MemBuffer;
 void *membuffer_get_void_ptr(MemBuffer &mb) noexcept;
-unsigned membuffer_get_size(MemBuffer &mb) noexcept;
+const void *membuffer_get_void_ptr(const MemBuffer &mb) noexcept;
+unsigned membuffer_get_size_in_bytes(const MemBuffer &mb) noexcept;
 
 // main.cpp
 extern const char *progname;
 bool main_set_exit_code(int ec);
 int main_get_options(int argc, char **argv);
 void main_get_envoptions();
-int upx_main(int argc, char *argv[]) may_throw;
+noinline int upx_main(int argc, char *argv[]) may_throw;
 
 // msg.cpp
 void printSetNl(int need_nl) noexcept;
@@ -830,8 +838,8 @@ void infoHeader();
 void infoWriting(const char *what, upx_int64_t size);
 
 // work.cpp
-void do_one_file(const char *iname, char *oname) may_throw;
-int do_files(int i, int argc, char *argv[]) may_throw;
+noinline void do_one_file(const char *iname, char *oname) may_throw;
+noinline int do_files(int i, int argc, char *argv[]) may_throw;
 
 // help.cpp
 extern const char gitrev[];

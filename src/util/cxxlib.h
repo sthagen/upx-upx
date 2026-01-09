@@ -2,7 +2,7 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -32,353 +32,6 @@
 // #include <type_traits>
 
 namespace upx {
-
-/*************************************************************************
-// core util
-**************************************************************************/
-
-// disable taking the address => force passing by reference (instead of pointer)
-#define UPX_CXX_DISABLE_ADDRESS(Klass)                                                             \
-private:                                                                                           \
-    Klass *operator&() const noexcept DELETED_FUNCTION;
-
-// disable copy and move
-#define UPX_CXX_DISABLE_COPY(KlassName)                                                            \
-private:                                                                                           \
-    KlassName(const KlassName &) noexcept DELETED_FUNCTION;            /* copy constructor */      \
-    KlassName &operator=(const KlassName &) noexcept DELETED_FUNCTION; /* copy assignment */
-#define UPX_CXX_DISABLE_MOVE(KlassName)                                                            \
-private:                                                                                           \
-    KlassName(KlassName &&) noexcept DELETED_FUNCTION;            /* move constructor */           \
-    KlassName &operator=(KlassName &&) noexcept DELETED_FUNCTION; /* move assignment */
-#define UPX_CXX_DISABLE_COPY_MOVE(KlassName)                                                       \
-    UPX_CXX_DISABLE_COPY(KlassName)                                                                \
-    UPX_CXX_DISABLE_MOVE(KlassName)
-
-// fun with C++: disable common "new" and ALL "delete" operators
-// https://en.cppreference.com/w/cpp/memory/new/operator_delete
-#define UPX_CXX_DISABLE_NEW_DELETE_IMPL__(Klass)                                                   \
-private:                                                                                           \
-    /* common allocation functions (4) */                                                          \
-    static void *operator new(std::size_t) DELETED_FUNCTION;                                       \
-    static void *operator new[](std::size_t) DELETED_FUNCTION;                                     \
-    static void *operator new(std::size_t, void *) DELETED_FUNCTION;                               \
-    static void *operator new[](std::size_t, void *) DELETED_FUNCTION;                             \
-    /* replaceable placement deallocation functions (4) */                                         \
-    static void operator delete(void *, const std::nothrow_t &) noexcept DELETED_FUNCTION;         \
-    static void operator delete[](void *, const std::nothrow_t &) noexcept DELETED_FUNCTION;       \
-    static void operator delete(void *, std::align_val_t, const std::nothrow_t &)                  \
-        noexcept DELETED_FUNCTION;                                                                 \
-    static void operator delete[](void *, std::align_val_t, const std::nothrow_t &)                \
-        noexcept DELETED_FUNCTION;                                                                 \
-    /* non-allocating placement deallocation functions (2) */                                      \
-    static void operator delete(void *, void *) noexcept DELETED_FUNCTION;                         \
-    static void operator delete[](void *, void *) noexcept DELETED_FUNCTION;
-
-/* class-specific usual deallocation functions (8) */
-#define UPX_CXX_DISABLE_NEW_DELETE_IMPL_CSUDF_A__(Klass)                                           \
-protected:                                                                                         \
-    static void operator delete(void *) noexcept {}                                                \
-    static void operator delete(void *, std::align_val_t) noexcept {}                              \
-    static void operator delete(void *, std::size_t) noexcept {}                                   \
-    static void operator delete(void *, std::size_t, std::align_val_t) noexcept {}                 \
-private:                                                                                           \
-    static void operator delete[](void *) noexcept DELETED_FUNCTION;                               \
-    static void operator delete[](void *, std::align_val_t) noexcept DELETED_FUNCTION;             \
-    static void operator delete[](void *, std::size_t) noexcept DELETED_FUNCTION;                  \
-    static void operator delete[](void *, std::size_t, std::align_val_t) noexcept DELETED_FUNCTION;
-#define UPX_CXX_DISABLE_NEW_DELETE_IMPL_CSUDF_B__(Klass)                                           \
-private:                                                                                           \
-    static void operator delete(void *) noexcept DELETED_FUNCTION;                                 \
-    static void operator delete[](void *) noexcept DELETED_FUNCTION;                               \
-    static void operator delete(void *, std::align_val_t) noexcept DELETED_FUNCTION;               \
-    static void operator delete[](void *, std::align_val_t) noexcept DELETED_FUNCTION;             \
-    static void operator delete(void *, std::size_t) noexcept DELETED_FUNCTION;                    \
-    static void operator delete[](void *, std::size_t) noexcept DELETED_FUNCTION;                  \
-    static void operator delete(void *, std::size_t, std::align_val_t) noexcept DELETED_FUNCTION;  \
-    static void operator delete[](void *, std::size_t, std::align_val_t) noexcept DELETED_FUNCTION;
-
-/* class-specific usual destroying deallocation functions (4) */
-#if __cplusplus >= 202002L
-#define UPX_CXX_DISABLE_NEW_DELETE_IMPL_CSUDDF_A__(Klass)                                          \
-protected:                                                                                         \
-    static void operator delete(Klass *, std::destroying_delete_t) noexcept {}                     \
-    static void operator delete(Klass *, std::destroying_delete_t, std::align_val_t) noexcept {}   \
-    static void operator delete(Klass *, std::destroying_delete_t, std::size_t) noexcept {}        \
-    static void operator delete(Klass *, std::destroying_delete_t, std::size_t, std::align_val_t)  \
-        noexcept {}                                                                                \
-private:
-#define UPX_CXX_DISABLE_NEW_DELETE_IMPL_CSUDDF_B__(Klass)                                          \
-private:                                                                                           \
-    static void operator delete(Klass *, std::destroying_delete_t) noexcept DELETED_FUNCTION;      \
-    static void operator delete(Klass *, std::destroying_delete_t, std::align_val_t)               \
-        noexcept DELETED_FUNCTION;                                                                 \
-    static void operator delete(Klass *, std::destroying_delete_t, std::size_t)                    \
-        noexcept DELETED_FUNCTION;                                                                 \
-    static void operator delete(Klass *, std::destroying_delete_t, std::size_t, std::align_val_t)  \
-        noexcept DELETED_FUNCTION;
-#else
-#define UPX_CXX_DISABLE_NEW_DELETE_IMPL_CSUDDF_A__(Klass) private:
-#define UPX_CXX_DISABLE_NEW_DELETE_IMPL_CSUDDF_B__(Klass) private:
-#endif
-
-// for classes which may have virtual methods
-#define UPX_CXX_DISABLE_NEW_DELETE(Klass)                                                          \
-    UPX_CXX_DISABLE_NEW_DELETE_IMPL__(Klass)                                                       \
-    UPX_CXX_DISABLE_NEW_DELETE_IMPL_CSUDF_A__(Klass)                                               \
-    UPX_CXX_DISABLE_NEW_DELETE_IMPL_CSUDDF_A__(Klass)
-
-// this only works for classes WITHOUT any virtual methods
-#define UPX_CXX_DISABLE_NEW_DELETE_NO_VIRTUAL(Klass)                                               \
-    UPX_CXX_DISABLE_NEW_DELETE_IMPL__(Klass)                                                       \
-    UPX_CXX_DISABLE_NEW_DELETE_IMPL_CSUDF_B__(Klass)                                               \
-    UPX_CXX_DISABLE_NEW_DELETE_IMPL_CSUDDF_B__(Klass)
-
-#if defined(_LIBCPP_HAS_NO_LIBRARY_ALIGNED_ALLOCATION) // do not use std::align_val_t
-#undef UPX_CXX_DISABLE_NEW_DELETE
-#undef UPX_CXX_DISABLE_NEW_DELETE_NO_VIRTUAL
-#define UPX_CXX_DISABLE_NEW_DELETE(Klass)            private:
-#define UPX_CXX_DISABLE_NEW_DELETE_NO_VIRTUAL(Klass) private:
-#endif
-
-class noncopyable {
-protected:
-    forceinline constexpr noncopyable() noexcept {}
-#if __cplusplus >= 202002L
-    forceinline constexpr ~noncopyable() noexcept = default;
-#else
-    forceinline ~noncopyable() noexcept = default;
-#endif
-    UPX_CXX_DISABLE_COPY_MOVE(noncopyable)
-};
-
-/*************************************************************************
-// <type_traits>
-**************************************************************************/
-
-// is_bounded_array from C++20
-template <class T>
-struct is_bounded_array : public std::false_type {};
-template <class T, std::size_t N>
-struct is_bounded_array<T[N]> : public std::true_type {};
-template <class T>
-inline constexpr bool is_bounded_array_v = is_bounded_array<T>::value;
-
-// is_same_all and is_same_any: std::is_same for multiple types
-template <class T, class... Ts>
-struct is_same_all : public std::conjunction<std::is_same<T, Ts>...> {};
-template <class T, class... Ts>
-inline constexpr bool is_same_all_v = is_same_all<T, Ts...>::value;
-template <class T, class... Ts>
-struct is_same_any : public std::disjunction<std::is_same<T, Ts>...> {};
-template <class T, class... Ts>
-inline constexpr bool is_same_any_v = is_same_any<T, Ts...>::value;
-
-// remove_cvref from C++20
-template <class T>
-struct remove_cvref {
-    typedef typename std::remove_cv<typename std::remove_reference<T>::type>::type type;
-};
-template <class T>
-using remove_cvref_t = typename remove_cvref<T>::type;
-
-// type_identity from C++20
-template <class T>
-struct type_identity {
-    typedef T type;
-};
-template <class T>
-using type_identity_t = typename type_identity<T>::type;
-
-/*************************************************************************
-// <bit> C++20
-**************************************************************************/
-
-template <class T>
-forceinline constexpr bool has_single_bit(T x) noexcept {
-    return !(x == 0) && (x & (x - 1)) == 0;
-}
-
-/*************************************************************************
-// <algorithm>
-**************************************************************************/
-
-template <class T>
-inline constexpr T align_down(const T &x, const T &alignment) noexcept {
-    // assert_noexcept(has_single_bit(alignment)); // (not constexpr)
-    T r = {};
-    r = x - (x & (alignment - 1));
-    return r;
-}
-template <class T>
-inline constexpr T align_down_gap(const T &x, const T &alignment) noexcept {
-    // assert_noexcept(has_single_bit(alignment)); // (not constexpr)
-    T r = {};
-    r = x & (alignment - 1);
-    return r;
-}
-template <class T>
-inline constexpr T align_up(const T &x, const T &alignment) noexcept {
-    // assert_noexcept(has_single_bit(alignment)); // (not constexpr)
-    T r = {};
-    constexpr T zero = {};
-    r = x + ((zero - x) & (alignment - 1));
-    return r;
-}
-template <class T>
-inline constexpr T align_up_gap(const T &x, const T &alignment) noexcept {
-    // assert_noexcept(has_single_bit(alignment)); // (not constexpr)
-    T r = {};
-    constexpr T zero = {};
-    r = (zero - x) & (alignment - 1);
-    return r;
-}
-
-template <class T>
-forceinline constexpr T min(const T &a, const T &b) noexcept {
-    return b < a ? b : a;
-}
-template <class T>
-forceinline constexpr T max(const T &a, const T &b) noexcept {
-    return a < b ? b : a;
-}
-
-template <class T>
-inline constexpr bool is_uminmax_type = std::is_integral_v<T> && std::is_unsigned_v<T>;
-
-template <class T, class = std::enable_if_t<is_uminmax_type<T>, T> >
-forceinline constexpr T umin(const T &a, const T &b) noexcept {
-    return b < a ? b : a;
-}
-template <class T, class = std::enable_if_t<is_uminmax_type<T>, T> >
-forceinline constexpr T umax(const T &a, const T &b) noexcept {
-    return a < b ? b : a;
-}
-
-template <class T>
-forceinline constexpr T wrapping_add(const T &a, const T &b) noexcept {
-    static_assert(std::is_integral_v<T>);
-    typedef std::make_unsigned_t<T> U;
-    return T(U(a) + U(b));
-}
-
-template <class T>
-forceinline constexpr T wrapping_sub(const T &a, const T &b) noexcept {
-    static_assert(std::is_integral_v<T>);
-    typedef std::make_unsigned_t<T> U;
-    return T(U(a) - U(b));
-}
-
-/*************************************************************************
-// util
-**************************************************************************/
-
-template <std::size_t Size>
-struct UnsignedSizeOf final {
-    static_assert(Size >= 1 && Size <= UPX_RSIZE_MAX_MEM);
-    static constexpr unsigned value = unsigned(Size);
-};
-
-// a static_cast that does not trigger -Wcast-align warnings
-template <class Result, class From>
-forceinline constexpr Result ptr_static_cast(From *ptr) noexcept {
-    static_assert(std::is_pointer_v<Result>);
-    // don't cast through "void *" if type is convertible
-    typedef std::conditional_t<std::is_convertible_v<decltype(ptr), Result>, Result, void *>
-        VoidPtr;
-    // NOLINTNEXTLINE(bugprone-multi-level-implicit-pointer-conversion)
-    return static_cast<Result>(static_cast<VoidPtr>(ptr));
-}
-template <class Result, class From>
-forceinline constexpr Result ptr_static_cast(const From *ptr) noexcept {
-    static_assert(std::is_pointer_v<Result>);
-    static_assert(std::is_const_v<std::remove_pointer_t<Result> >); // required
-    // don't cast through "const void *" if type is convertible
-    typedef std::conditional_t<std::is_convertible_v<decltype(ptr), Result>, Result, const void *>
-        VoidPtr;
-    // NOLINTNEXTLINE(bugprone-multi-level-implicit-pointer-conversion)
-    return static_cast<Result>(static_cast<VoidPtr>(ptr));
-}
-
-#if WITH_THREADS
-// cast "T *" to "std::atomic<T> *"
-template <class T>
-forceinline std::atomic<T> *ptr_std_atomic_cast(T *ptr) noexcept {
-    // TODO later: make sure that this cast is indeed legal
-    std::atomic<T> *result = ptr_static_cast<std::atomic<T> *>(ptr);
-    static_assert(sizeof(*result) == sizeof(*ptr));
-    static_assert(alignof(decltype(*result)) == alignof(decltype(*ptr)));
-    return result;
-}
-#endif // WITH_THREADS
-
-// atomic_exchange
-template <class T>
-forceinline T atomic_exchange(T *ptr, T new_value) noexcept {
-#if 1
-    static_assert(sizeof(T) == sizeof(void *)); // UPX convention: restrict to pointer-size for now
-#endif
-    static_assert(std::is_standard_layout_v<T>);
-    static_assert(std::is_trivially_copyable_v<T>);
-#if !(WITH_THREADS)
-    T old_value = *ptr;
-    *ptr = new_value;
-    return old_value;
-#else
-    static_assert(sizeof(T) <= sizeof(void *)); // UPX convention: restrict to fundamental types
-    static_assert(alignof(T) == sizeof(T));     // UPX convention: require proper alignment
-#if __has_builtin(__atomic_exchange_n) && defined(__ATOMIC_SEQ_CST)
-    return __atomic_exchange_n(ptr, new_value, __ATOMIC_SEQ_CST);
-#elif __has_builtin(__sync_swap)
-    return __sync_swap(ptr, new_value);
-#else
-    return std::atomic_exchange(ptr_std_atomic_cast(ptr), new_value);
-#endif
-#endif
-}
-
-// helper classes so we don't leak memory on exceptions
-template <class T>
-struct ObjectDeleter final {
-    T **items;         // public
-    std::size_t count; // public
-    explicit ObjectDeleter(T **p, std::size_t n) noexcept : items(p), count(n) {}
-    ~ObjectDeleter() noexcept { delete_items(); }
-    void delete_items() noexcept {
-        for (std::size_t i = 0; i < count; i++) {
-            T *item = atomic_exchange(&items[i], (T *) nullptr);
-            delete item; // single object delete
-        }
-    }
-    static_assert(std::is_nothrow_destructible_v<T>);
-};
-template <class T>
-struct ArrayDeleter final {
-    T **items;         // public
-    std::size_t count; // public
-    explicit ArrayDeleter(T **p, std::size_t n) noexcept : items(p), count(n) {}
-    ~ArrayDeleter() noexcept { delete_items(); }
-    void delete_items() noexcept {
-        for (std::size_t i = 0; i < count; i++) {
-            T *item = atomic_exchange(&items[i], (T *) nullptr);
-            delete[] item; // array delete
-        }
-    }
-    static_assert(std::is_nothrow_destructible_v<T>);
-};
-template <class T>
-struct MallocDeleter final {
-    T **items;         // public
-    std::size_t count; // public
-    explicit MallocDeleter(T **p, std::size_t n) noexcept : items(p), count(n) {}
-    ~MallocDeleter() noexcept { delete_items(); }
-    void delete_items() noexcept {
-        for (std::size_t i = 0; i < count; i++) {
-            T *item = atomic_exchange(&items[i], (T *) nullptr);
-            ::free(item); // free memory from malloc()
-        }
-    }
-};
 
 /*************************************************************************
 // compile_time
@@ -539,62 +192,425 @@ forceinline constexpr void set_le64(byte *p, upx_uint64_t v) noexcept {
 forceinline constexpr upx_uint16_t get_ne16(const byte *p) noexcept {
 #if (ACC_ABI_BIG_ENDIAN)
     return get_be16(p);
-#else
+#elif (ACC_ABI_LITTLE_ENDIAN)
     return get_le16(p);
+#else
+#error "ACC_ABI_ENDIAN"
 #endif
 }
 forceinline constexpr upx_uint32_t get_ne24(const byte *p) noexcept {
 #if (ACC_ABI_BIG_ENDIAN)
     return get_be24(p);
-#else
+#elif (ACC_ABI_LITTLE_ENDIAN)
     return get_le24(p);
+#else
+#error "ACC_ABI_ENDIAN"
 #endif
 }
 forceinline constexpr upx_uint32_t get_ne32(const byte *p) noexcept {
 #if (ACC_ABI_BIG_ENDIAN)
     return get_be32(p);
-#else
+#elif (ACC_ABI_LITTLE_ENDIAN)
     return get_le32(p);
+#else
+#error "ACC_ABI_ENDIAN"
 #endif
 }
 forceinline constexpr upx_uint64_t get_ne64(const byte *p) noexcept {
 #if (ACC_ABI_BIG_ENDIAN)
     return get_be64(p);
-#else
+#elif (ACC_ABI_LITTLE_ENDIAN)
     return get_le64(p);
+#else
+#error "ACC_ABI_ENDIAN"
 #endif
 }
 
 forceinline constexpr void set_ne16(byte *p, upx_uint16_t v) noexcept {
 #if (ACC_ABI_BIG_ENDIAN)
     set_be16(p, v);
-#else
+#elif (ACC_ABI_LITTLE_ENDIAN)
     set_le16(p, v);
+#else
+#error "ACC_ABI_ENDIAN"
 #endif
 }
 forceinline constexpr void set_ne24(byte *p, upx_uint32_t v) noexcept {
 #if (ACC_ABI_BIG_ENDIAN)
     set_be24(p, v);
-#else
+#elif (ACC_ABI_LITTLE_ENDIAN)
     set_le24(p, v);
+#else
+#error "ACC_ABI_ENDIAN"
 #endif
 }
 forceinline constexpr void set_ne32(byte *p, upx_uint32_t v) noexcept {
 #if (ACC_ABI_BIG_ENDIAN)
     set_be32(p, v);
-#else
+#elif (ACC_ABI_LITTLE_ENDIAN)
     set_le32(p, v);
+#else
+#error "ACC_ABI_ENDIAN"
 #endif
 }
 forceinline constexpr void set_ne64(byte *p, upx_uint64_t v) noexcept {
 #if (ACC_ABI_BIG_ENDIAN)
     set_be64(p, v);
-#else
+#elif (ACC_ABI_LITTLE_ENDIAN)
     set_le64(p, v);
+#else
+#error "ACC_ABI_ENDIAN"
 #endif
 }
 
 } // namespace compile_time
+
+/*************************************************************************
+// core util
+**************************************************************************/
+
+// disable taking the address => force passing by reference (instead of pointer)
+#define UPX_CXX_DISABLE_ADDRESS(Klass)                                                             \
+private:                                                                                           \
+    Klass *operator&() const noexcept DELETED_FUNCTION;
+
+// disable copy and move
+#define UPX_CXX_DISABLE_COPY(KlassName)                                                            \
+private:                                                                                           \
+    KlassName(const KlassName &) noexcept DELETED_FUNCTION;            /* copy constructor */      \
+    KlassName &operator=(const KlassName &) noexcept DELETED_FUNCTION; /* copy assignment */
+#define UPX_CXX_DISABLE_MOVE(KlassName)                                                            \
+private:                                                                                           \
+    KlassName(KlassName &&) noexcept DELETED_FUNCTION;            /* move constructor */           \
+    KlassName &operator=(KlassName &&) noexcept DELETED_FUNCTION; /* move assignment */
+#define UPX_CXX_DISABLE_COPY_MOVE(KlassName)                                                       \
+    UPX_CXX_DISABLE_COPY(KlassName)                                                                \
+    UPX_CXX_DISABLE_MOVE(KlassName)
+
+// fun with C++: disable common "new" and ALL "delete" operators
+// https://en.cppreference.com/w/cpp/memory/new/operator_delete
+#define UPX_CXX_DISABLE_NEW_DELETE_IMPL__(Klass)                                                   \
+private:                                                                                           \
+    /* common allocation functions (4) */                                                          \
+    static void *operator new(std::size_t) DELETED_FUNCTION;                                       \
+    static void *operator new[](std::size_t) DELETED_FUNCTION;                                     \
+    static void *operator new(std::size_t, void *) DELETED_FUNCTION;                               \
+    static void *operator new[](std::size_t, void *) DELETED_FUNCTION;                             \
+    /* replaceable placement deallocation functions (4) */                                         \
+    static void operator delete(void *, const std::nothrow_t &) noexcept DELETED_FUNCTION;         \
+    static void operator delete[](void *, const std::nothrow_t &) noexcept DELETED_FUNCTION;       \
+    static void operator delete(void *, std::align_val_t, const std::nothrow_t &)                  \
+        noexcept DELETED_FUNCTION;                                                                 \
+    static void operator delete[](void *, std::align_val_t, const std::nothrow_t &)                \
+        noexcept DELETED_FUNCTION;                                                                 \
+    /* non-allocating placement deallocation functions (2) */                                      \
+    static void operator delete(void *, void *) noexcept DELETED_FUNCTION;                         \
+    static void operator delete[](void *, void *) noexcept DELETED_FUNCTION;
+
+/* class-specific usual deallocation functions (8) */
+#define UPX_CXX_DISABLE_NEW_DELETE_IMPL_CSUDF_A__(Klass)                                           \
+protected:                                                                                         \
+    static void operator delete(void *) noexcept {}                                                \
+    static void operator delete(void *, std::align_val_t) noexcept {}                              \
+    static void operator delete(void *, std::size_t) noexcept {}                                   \
+    static void operator delete(void *, std::size_t, std::align_val_t) noexcept {}                 \
+private:                                                                                           \
+    static void operator delete[](void *) noexcept DELETED_FUNCTION;                               \
+    static void operator delete[](void *, std::align_val_t) noexcept DELETED_FUNCTION;             \
+    static void operator delete[](void *, std::size_t) noexcept DELETED_FUNCTION;                  \
+    static void operator delete[](void *, std::size_t, std::align_val_t) noexcept DELETED_FUNCTION;
+#define UPX_CXX_DISABLE_NEW_DELETE_IMPL_CSUDF_B__(Klass)                                           \
+private:                                                                                           \
+    static void operator delete(void *) noexcept DELETED_FUNCTION;                                 \
+    static void operator delete[](void *) noexcept DELETED_FUNCTION;                               \
+    static void operator delete(void *, std::align_val_t) noexcept DELETED_FUNCTION;               \
+    static void operator delete[](void *, std::align_val_t) noexcept DELETED_FUNCTION;             \
+    static void operator delete(void *, std::size_t) noexcept DELETED_FUNCTION;                    \
+    static void operator delete[](void *, std::size_t) noexcept DELETED_FUNCTION;                  \
+    static void operator delete(void *, std::size_t, std::align_val_t) noexcept DELETED_FUNCTION;  \
+    static void operator delete[](void *, std::size_t, std::align_val_t) noexcept DELETED_FUNCTION;
+
+/* class-specific usual destroying deallocation functions (4) */
+#if __cplusplus >= 202002L
+#define UPX_CXX_DISABLE_NEW_DELETE_IMPL_CSUDDF_A__(Klass)                                          \
+protected:                                                                                         \
+    static void operator delete(Klass *, std::destroying_delete_t) noexcept {}                     \
+    static void operator delete(Klass *, std::destroying_delete_t, std::align_val_t) noexcept {}   \
+    static void operator delete(Klass *, std::destroying_delete_t, std::size_t) noexcept {}        \
+    static void operator delete(Klass *, std::destroying_delete_t, std::size_t, std::align_val_t)  \
+        noexcept {}                                                                                \
+private:
+#define UPX_CXX_DISABLE_NEW_DELETE_IMPL_CSUDDF_B__(Klass)                                          \
+private:                                                                                           \
+    static void operator delete(Klass *, std::destroying_delete_t) noexcept DELETED_FUNCTION;      \
+    static void operator delete(Klass *, std::destroying_delete_t, std::align_val_t)               \
+        noexcept DELETED_FUNCTION;                                                                 \
+    static void operator delete(Klass *, std::destroying_delete_t, std::size_t)                    \
+        noexcept DELETED_FUNCTION;                                                                 \
+    static void operator delete(Klass *, std::destroying_delete_t, std::size_t, std::align_val_t)  \
+        noexcept DELETED_FUNCTION;
+#else
+#define UPX_CXX_DISABLE_NEW_DELETE_IMPL_CSUDDF_A__(Klass) private:
+#define UPX_CXX_DISABLE_NEW_DELETE_IMPL_CSUDDF_B__(Klass) private:
+#endif
+
+// for classes which may have virtual methods
+#define UPX_CXX_DISABLE_NEW_DELETE(Klass)                                                          \
+    UPX_CXX_DISABLE_NEW_DELETE_IMPL__(Klass)                                                       \
+    UPX_CXX_DISABLE_NEW_DELETE_IMPL_CSUDF_A__(Klass)                                               \
+    UPX_CXX_DISABLE_NEW_DELETE_IMPL_CSUDDF_A__(Klass)
+
+// this only works for classes WITHOUT any virtual methods
+#define UPX_CXX_DISABLE_NEW_DELETE_NO_VIRTUAL(Klass)                                               \
+    UPX_CXX_DISABLE_NEW_DELETE_IMPL__(Klass)                                                       \
+    UPX_CXX_DISABLE_NEW_DELETE_IMPL_CSUDF_B__(Klass)                                               \
+    UPX_CXX_DISABLE_NEW_DELETE_IMPL_CSUDDF_B__(Klass)
+
+#if defined(_LIBCPP_HAS_NO_LIBRARY_ALIGNED_ALLOCATION) // do not use std::align_val_t
+#undef UPX_CXX_DISABLE_NEW_DELETE
+#undef UPX_CXX_DISABLE_NEW_DELETE_NO_VIRTUAL
+#define UPX_CXX_DISABLE_NEW_DELETE(Klass)            private:
+#define UPX_CXX_DISABLE_NEW_DELETE_NO_VIRTUAL(Klass) private:
+#endif
+
+class NonCopyAble {
+protected:
+    forceinline constexpr NonCopyAble() noexcept {}
+#if __cplusplus >= 202002L
+    forceinline constexpr ~NonCopyAble() noexcept = default;
+#else
+    forceinline ~NonCopyAble() noexcept = default;
+#endif
+    UPX_CXX_DISABLE_COPY_MOVE(NonCopyAble)
+};
+typedef NonCopyAble noncopyable;
+
+/*************************************************************************
+// <type_traits>
+**************************************************************************/
+
+// is_bounded_array from C++20
+template <class T>
+struct is_bounded_array : public std::false_type {};
+template <class T, std::size_t N>
+struct is_bounded_array<T[N]> : public std::true_type {};
+template <class T>
+inline constexpr bool is_bounded_array_v = is_bounded_array<T>::value;
+
+// is_same_all and is_same_any: std::is_same for multiple types
+template <class T, class... Ts>
+struct is_same_all : public std::conjunction<std::is_same<T, Ts>...> {};
+template <class T, class... Ts>
+struct is_same_any : public std::disjunction<std::is_same<T, Ts>...> {};
+template <class T, class... Ts>
+inline constexpr bool is_same_all_v = is_same_all<T, Ts...>::value;
+template <class T, class... Ts>
+inline constexpr bool is_same_any_v = is_same_any<T, Ts...>::value;
+
+// remove_cvref from C++20
+template <class T>
+struct remove_cvref {
+    typedef typename std::remove_cv<typename std::remove_reference<T>::type>::type type;
+};
+template <class T>
+using remove_cvref_t = typename remove_cvref<T>::type;
+
+// type_identity from C++20
+template <class T>
+struct type_identity {
+    typedef T type;
+};
+template <class T>
+using type_identity_t = typename type_identity<T>::type;
+
+/*************************************************************************
+// <bit> C++20
+**************************************************************************/
+
+template <class T>
+forceinline constexpr bool has_single_bit(const T &x) noexcept {
+    return !(x == 0) && (x & (x - 1)) == 0;
+}
+
+/*************************************************************************
+// <algorithm>
+**************************************************************************/
+
+template <class T>
+inline constexpr T align_down(const T &x, const T &alignment) noexcept {
+    // assert_noexcept(has_single_bit(alignment)); // (not constexpr)
+    T r = {};
+    r = x - (x & (alignment - 1));
+    return r;
+}
+template <class T>
+inline constexpr T align_down_gap(const T &x, const T &alignment) noexcept {
+    // assert_noexcept(has_single_bit(alignment)); // (not constexpr)
+    T r = {};
+    r = x & (alignment - 1);
+    return r;
+}
+template <class T>
+inline constexpr T align_up(const T &x, const T &alignment) noexcept {
+    // assert_noexcept(has_single_bit(alignment)); // (not constexpr)
+    T r = {};
+    constexpr T zero = {};
+    r = x + ((zero - x) & (alignment - 1));
+    return r;
+}
+template <class T>
+inline constexpr T align_up_gap(const T &x, const T &alignment) noexcept {
+    // assert_noexcept(has_single_bit(alignment)); // (not constexpr)
+    T r = {};
+    constexpr T zero = {};
+    r = (zero - x) & (alignment - 1);
+    return r;
+}
+
+template <class T>
+forceinline constexpr T min(const T &a, const T &b) noexcept {
+    return b < a ? b : a;
+}
+template <class T>
+forceinline constexpr T max(const T &a, const T &b) noexcept {
+    return a < b ? b : a;
+}
+
+template <class T>
+inline constexpr bool is_uminmax_type = std::is_integral_v<T> && std::is_unsigned_v<T>;
+
+template <class T, class = std::enable_if_t<is_uminmax_type<T>, T> >
+forceinline constexpr T umin(const T &a, const T &b) noexcept {
+    return b < a ? b : a;
+}
+template <class T, class = std::enable_if_t<is_uminmax_type<T>, T> >
+forceinline constexpr T umax(const T &a, const T &b) noexcept {
+    return a < b ? b : a;
+}
+
+template <class T>
+forceinline constexpr T wrapping_add(const T &a, const T &b) noexcept {
+    static_assert(std::is_integral_v<T>);
+    typedef std::make_unsigned_t<T> U;
+    return T(U(a) + U(b));
+}
+template <class T>
+forceinline constexpr T wrapping_sub(const T &a, const T &b) noexcept {
+    static_assert(std::is_integral_v<T>);
+    typedef std::make_unsigned_t<T> U;
+    return T(U(a) - U(b));
+}
+
+/*************************************************************************
+// util
+**************************************************************************/
+
+template <std::size_t Size>
+struct UnsignedSizeOf final {
+    static_assert(Size >= 1 && Size <= UPX_RSIZE_MAX_MEM);
+    static constexpr unsigned value = unsigned(Size);
+};
+
+// a static_cast that does not trigger -Wcast-align warnings
+template <class Result, class From>
+forceinline constexpr Result ptr_static_cast(From *ptr) noexcept {
+    static_assert(std::is_pointer_v<Result>);
+    // don't cast through "void *" if type is convertible
+    typedef std::conditional_t<std::is_convertible_v<decltype(ptr), Result>, Result, void *>
+        VoidPtr;
+    // NOLINTNEXTLINE(bugprone-multi-level-implicit-pointer-conversion)
+    return static_cast<Result>(static_cast<VoidPtr>(ptr));
+}
+template <class Result, class From>
+forceinline constexpr Result ptr_static_cast(const From *ptr) noexcept {
+    static_assert(std::is_pointer_v<Result>);
+    static_assert(std::is_const_v<std::remove_pointer_t<Result> >); // required
+    // don't cast through "const void *" if type is convertible
+    typedef std::conditional_t<std::is_convertible_v<decltype(ptr), Result>, Result, const void *>
+        VoidPtr;
+    // NOLINTNEXTLINE(bugprone-multi-level-implicit-pointer-conversion)
+    return static_cast<Result>(static_cast<VoidPtr>(ptr));
+}
+
+#if WITH_THREADS
+// cast "T *" to "std::atomic<T> *"
+template <class T>
+forceinline std::atomic<T> *ptr_std_atomic_cast(T *ptr) noexcept {
+    // TODO later: make sure that this cast is indeed legal
+    std::atomic<T> *result = ptr_static_cast<std::atomic<T> *>(ptr);
+    static_assert(sizeof(*result) == sizeof(*ptr));
+    static_assert(alignof(decltype(*result)) == alignof(decltype(*ptr)));
+    return result;
+}
+#endif // WITH_THREADS
+
+// atomic_exchange
+template <class T>
+forceinline T atomic_exchange(T *ptr, T new_value) noexcept {
+#if 1
+    static_assert(sizeof(T) == sizeof(void *)); // UPX convention: restrict to pointer-size for now
+#endif
+    static_assert(std::is_standard_layout_v<T>);
+    static_assert(std::is_trivially_copyable_v<T>);
+#if !(WITH_THREADS)
+    T old_value = *ptr;
+    *ptr = new_value;
+    return old_value;
+#else
+    static_assert(sizeof(T) <= sizeof(void *)); // UPX convention: restrict to fundamental types
+    static_assert(alignof(T) == sizeof(T));     // UPX convention: require proper alignment
+#if __has_builtin(__atomic_exchange_n) && defined(__ATOMIC_SEQ_CST)
+    return __atomic_exchange_n(ptr, new_value, __ATOMIC_SEQ_CST);
+#elif __has_builtin(__sync_swap)
+    return __sync_swap(ptr, new_value);
+#else
+    return std::atomic_exchange(ptr_std_atomic_cast(ptr), new_value);
+#endif
+#endif
+}
+
+// helper classes so we don't leak memory on exceptions
+template <class T>
+struct ObjectDeleter final {
+    static_assert(std::is_nothrow_destructible_v<T>);
+    T **items;         // public
+    std::size_t count; // public
+    explicit ObjectDeleter(T **p, std::size_t n) noexcept : items(p), count(n) {}
+    ~ObjectDeleter() noexcept { delete_items(); }
+    void delete_items() noexcept {
+        for (std::size_t i = 0; i < count; i++) {
+            T *item = atomic_exchange(&items[i], (T *) nullptr);
+            delete item; // single object delete
+        }
+    }
+};
+template <class T>
+struct ArrayDeleter final {
+    static_assert(std::is_nothrow_destructible_v<T>);
+    T **items;         // public
+    std::size_t count; // public
+    explicit ArrayDeleter(T **p, std::size_t n) noexcept : items(p), count(n) {}
+    ~ArrayDeleter() noexcept { delete_items(); }
+    void delete_items() noexcept {
+        for (std::size_t i = 0; i < count; i++) {
+            T *item = atomic_exchange(&items[i], (T *) nullptr);
+            delete[] item; // array delete
+        }
+    }
+};
+template <class T>
+struct MallocDeleter final {
+    T **items;         // public
+    std::size_t count; // public
+    explicit MallocDeleter(T **p, std::size_t n) noexcept : items(p), count(n) {}
+    ~MallocDeleter() noexcept { delete_items(); }
+    void delete_items() noexcept {
+        for (std::size_t i = 0; i < count; i++) {
+            T *item = atomic_exchange(&items[i], (T *) nullptr);
+            ::free(item); // free memory from malloc()
+        }
+    }
+};
 
 /*************************************************************************
 // TriBool - tri-state bool
@@ -607,10 +623,10 @@ struct TriBool final {
     static constexpr bool is_third_true = IsThirdTrue;
     // types
     typedef T underlying_type;
-    static_assert(std::is_integral_v<underlying_type>);
     typedef decltype(T(0) + T(0)) promoted_type;
-    static_assert(std::is_integral_v<promoted_type>);
     enum value_type : underlying_type { False = 0, True = 1, Third = 2 };
+    static_assert(std::is_integral_v<underlying_type>);
+    static_assert(std::is_integral_v<promoted_type>);
     static_assert(sizeof(value_type) == sizeof(underlying_type));
     static_assert(sizeof(underlying_type) <= sizeof(promoted_type));
     // constructors
@@ -671,6 +687,8 @@ struct OptVar final {
     static constexpr T max_value = max_value_;
     static_assert(min_value <= default_value && default_value <= max_value);
 
+    explicit constexpr OptVar() noexcept {}
+
     // automatic conversion
     constexpr operator T() const noexcept { return value; }
 
@@ -682,7 +700,6 @@ struct OptVar final {
     }
     void assertValue() const noexcept { assertValue(value); }
 
-    constexpr OptVar() noexcept {}
     OptVar &operator=(const T &other) noexcept { // copy constructor
         assertValue(other);
         value = other;

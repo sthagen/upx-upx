@@ -2,7 +2,7 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 2004-2025 John Reiser
+   Copyright (C) John Reiser
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -487,7 +487,7 @@ PackMachBase<T>::buildMachLoader(
     Filter const *ft
 )
 {
-    initLoader(proto, szproto);
+    initLoader(0, proto, szproto);
 
     struct b_info h; memset(&h, 0, sizeof(h));
     unsigned fold_hdrlen = 0;
@@ -1418,6 +1418,7 @@ void PackMachBase<T>::pack1(OutputFile *const fo, Filter &/*ft*/)  // generate e
         unsigned const sz_threado = threado_size();
         MemBuffer space(sz_threado); memset(space, 0, sz_threado);
         fo->write(space, sz_threado);
+        UNUSED(cmdsize);
     }
     else if (my_filetype == Mach_header::MH_DYLIB) {
         Mach_command const *ptr = (Mach_command const *)rawmseg;
@@ -1449,6 +1450,7 @@ void PackMachBase<T>::pack1(OutputFile *const fo, Filter &/*ft*/)  // generate e
         }
         memset(&linkitem, 0, sizeof(linkitem));
         fo->write(&linkitem, sizeof(linkitem));
+        UNUSED(cmdsize);
     }
     sz_mach_headers = fo->getBytesWritten();
     gap = secTEXT.offset - sz_mach_headers;

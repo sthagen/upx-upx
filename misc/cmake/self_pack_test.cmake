@@ -10,6 +10,8 @@
 #   is supported by UPX!
 #***********************************************************************
 
+function(upx_self_pack_test)
+
 set(emu "")
 if(DEFINED CMAKE_CROSSCOMPILING_EMULATOR)
     set(emu "${CMAKE_CROSSCOMPILING_EMULATOR}")
@@ -138,18 +140,18 @@ if(NOT UPX_CONFIG_DISABLE_EXHAUSTIVE_TESTS)
                     set_tests_properties(upx-self-pack-${s} PROPERTIES COST "2${level}")
                 endif()
                 if(NOT UPX_CONFIG_DISABLE_RUN_PACKED_TEST)
-                    upx_add_test(upx-run-packed-${s}        ${emu} ./upx-packed-${s}${exe} --version-short)
-                    upx_test_depends(upx-run-packed-${s}    upx-self-pack-${s})
+                    set(i 0)
+                    while(${i} LESS 20)
+                        math(EXPR i "${i} + 1")
+                        upx_add_test(upx-run-packed-${s}-${i}     ${emu} ./upx-packed-${s}${exe} --version-short)
+                        upx_test_depends(upx-run-packed-${s}-${i} upx-self-pack-${s})
+                    endwhile()
                 endif()
             endforeach()
         endforeach()
     endforeach()
 endif() # UPX_CONFIG_DISABLE_EXHAUSTIVE_TESTS
 
-# clean up
-set(emu "")
-set(exe "")
-set(upx_self_exe "")
-set(fo "")
+endfunction()
 
 # vim:set ft=cmake ts=4 sw=4 tw=0 et:

@@ -2,9 +2,9 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2025 Laszlo Molnar
-   Copyright (C) 2000-2025 John F. Reiser
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Laszlo Molnar
+   Copyright (C) John F. Reiser
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -148,7 +148,7 @@ off_t PackLinuxElf32x86interp::pack3(OutputFile *fo, Filter &/*ft*/)
     }
     elfout.phdr[0].p_paddr = elfout.phdr[0].p_vaddr = base - sz;
     if (opt->o_unix.make_ptinterp) {
-        initLoader(stub_i386_linux_elf_interp_entry, sizeof(stub_i386_linux_elf_interp_entry));
+        initLoader(0, stub_i386_linux_elf_interp_entry, sizeof(stub_i386_linux_elf_interp_entry));
         linker->addSection("FOLDEXEC", stub_i386_linux_elf_interp_fold, sizeof(stub_i386_linux_elf_interp_fold), 0);
 
         addLoader("LXPTI000", nullptr);

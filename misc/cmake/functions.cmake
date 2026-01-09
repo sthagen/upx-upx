@@ -244,7 +244,7 @@ function(upx_cache_bool_vars) # ARGV
     set(default_value "${ARGV0}")
     list(REMOVE_AT ARGV 0)
     foreach(var_name ${ARGV})
-        set(value ${default_value})
+        set(value "${default_value}")
         if(DEFINED UPX_CACHE_VALUE_${var_name})     # check cache
             set(value "${UPX_CACHE_VALUE_${var_name}}")
         elseif(DEFINED ${var_name})                 # defined via "cmake -DXXX=YYY"
