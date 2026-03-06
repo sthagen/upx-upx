@@ -263,20 +263,10 @@ forceinline bele_constexpr upx_uint64_t bswap64(upx_uint64_t v) noexcept {
 #else
 
 forceinline constexpr unsigned bswap16(unsigned v) noexcept {
-#if defined(__riscv) && __riscv_xlen == 64
-    return (unsigned) __builtin_bswap64(upx_uint64_t(v) << 48);
-#else
-    // return __builtin_bswap16(upx_uint16_t(v & 0xffff));
-    return __builtin_bswap32(v << 16);
-#endif
+    // return __builtin_bswap32(v << 16);
+    return __builtin_bswap16(upx_uint16_t(v & 0xffff));
 }
-forceinline constexpr unsigned bswap32(unsigned v) noexcept {
-#if defined(__riscv) && __riscv_xlen == 64
-    return (unsigned) __builtin_bswap64(upx_uint64_t(v) << 32);
-#else
-    return __builtin_bswap32(v);
-#endif
-}
+forceinline constexpr unsigned bswap32(unsigned v) noexcept { return __builtin_bswap32(v); }
 forceinline constexpr upx_uint64_t bswap64(upx_uint64_t v) noexcept { return __builtin_bswap64(v); }
 
 #endif
@@ -427,7 +417,7 @@ inline bele_constexpr void set_le14_5(XE32 *p, unsigned v) noexcept {
 **************************************************************************/
 
 forceinline constexpr int sign_extend32(unsigned v, unsigned bits) noexcept {
-#if (ACC_ARCH_M68K) // no barrel shifter
+#if (ACC_ARCH_M68K || 0) // no barrel shifter
     const unsigned sign_bit = 1u << (bits - 1);
     return ACC_ICAST(int, (v & (sign_bit - 1)) - (v & sign_bit));
 #else
@@ -436,7 +426,7 @@ forceinline constexpr int sign_extend32(unsigned v, unsigned bits) noexcept {
 }
 
 forceinline constexpr upx_int64_t sign_extend64(upx_uint64_t v, unsigned bits) noexcept {
-#if (ACC_ARCH_M68K) // no barrel shifter
+#if (ACC_ARCH_M68K || 0) // no barrel shifter
     const upx_uint64_t sign_bit = upx_uint64_t(1) << (bits - 1);
     return ACC_ICAST(upx_int64_t, (v & (sign_bit - 1)) - (v & sign_bit));
 #else
@@ -908,35 +898,35 @@ struct alignas(1) LE64 final {
 
 template <class T>
 inline bele_constexpr T *operator+(T *ptr, const BE16 &v) noexcept {
-    return ptr + unsigned(v);
+    return ptr + size_t(unsigned(v));
 }
 template <class T>
 inline bele_constexpr T *operator-(T *ptr, const BE16 &v) noexcept {
-    return ptr - unsigned(v);
+    return ptr - size_t(unsigned(v));
 }
 template <class T>
 inline bele_constexpr T *operator+(T *ptr, const BE32 &v) noexcept {
-    return ptr + unsigned(v);
+    return ptr + size_t(unsigned(v));
 }
 template <class T>
 inline bele_constexpr T *operator-(T *ptr, const BE32 &v) noexcept {
-    return ptr - unsigned(v);
+    return ptr - size_t(unsigned(v));
 }
 template <class T>
 inline bele_constexpr T *operator+(T *ptr, const LE16 &v) noexcept {
-    return ptr + unsigned(v);
+    return ptr + size_t(unsigned(v));
 }
 template <class T>
 inline bele_constexpr T *operator-(T *ptr, const LE16 &v) noexcept {
-    return ptr - unsigned(v);
+    return ptr - size_t(unsigned(v));
 }
 template <class T>
 inline bele_constexpr T *operator+(T *ptr, const LE32 &v) noexcept {
-    return ptr + unsigned(v);
+    return ptr + size_t(unsigned(v));
 }
 template <class T>
 inline bele_constexpr T *operator-(T *ptr, const LE32 &v) noexcept {
-    return ptr - unsigned(v);
+    return ptr - size_t(unsigned(v));
 }
 
 // these are not implemented on purpose and will cause errors

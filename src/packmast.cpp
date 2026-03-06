@@ -88,7 +88,7 @@ PackMaster::~PackMaster() noexcept {
 }
 
 /*************************************************************************
-//
+// try_can_pack and try_can_unpack
 **************************************************************************/
 
 static noinline tribool try_can_pack(PackerBase *pb, void *user) may_throw {
@@ -130,7 +130,7 @@ static noinline tribool try_can_unpack(PackerBase *pb, void *user) may_throw {
 }
 
 /*************************************************************************
-//
+// visitAllPackers
 **************************************************************************/
 
 /*static*/

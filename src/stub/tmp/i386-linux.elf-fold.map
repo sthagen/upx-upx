@@ -14,8 +14,8 @@ Linker script and memory map
  .text          0x0000000000000190        0x0 tmp/i386-linux.elf-help_umf.o
  .text          0x0000000000000190        0x0 tmp/i386-expand.o
  .text          0x0000000000000190      0x86b tmp/i386-linux.elf-main2.o
+                0x00000000000008a7                upx_main2
                 0x00000000000002e8                underlay
-                0x00000000000008a7                upx_main
 
 HUMF_A          0x0000000000000000        0x5
  HUMF_A         0x0000000000000000        0x5 tmp/i386-linux.elf-help_umf.o

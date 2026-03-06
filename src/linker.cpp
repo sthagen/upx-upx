@@ -365,6 +365,8 @@ ElfLinker::Relocation *ElfLinker::addRelocation(const char *section, unsigned of
     }
     if (grow_capacity(nrelocations, &nrelocations_capacity))
         relocations = realloc_array(relocations, nrelocations_capacity);
+    NO_printf("addRelocation section=(%s +%#x)  symbol=(%s +%#x)\n", section, off, symbol,
+              (unsigned) add);
     Relocation *rel = new Relocation(findSection(section), off, type, findSymbol(symbol), add);
     relocations[nrelocations++] = rel;
     return rel;
@@ -485,7 +487,7 @@ void ElfLinker::relocate() {
                    rel->value->offset == 0xdeaddead)
             throwInternalError("undefined symbol '%s' referenced\n", rel->value->name);
         else if (rel->value->section->output == nullptr)
-            throwInternalError("can not apply reloc '%s:%x' without section '%s'\n",
+            throwInternalError("cannot apply reloc '%s:%x' without section '%s'\n",
                                rel->section->name, rel->offset, rel->value->section->name);
         else {
             value = rel->value->section->offset + rel->value->offset + rel->add;

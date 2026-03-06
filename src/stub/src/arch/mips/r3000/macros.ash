@@ -38,6 +38,11 @@
         .align  0
 .endm
 
+//.macro do_sys NR
+//        li v0,\NR
+//        syscall
+//.endm
+
 /* http://math-atlas.sourceforge.net/devel/assembly/mipsabi32.pdf
  *   When calling position independent functions $25 must contain
  *   the address of the called function.  [$25 === $t9 === $jp]
@@ -131,6 +136,11 @@
     lw \p2,1*NBPW(sp)
     lw \p3,2*NBPW(sp)
     addiu sp,3*NBPW
+.endm
+.macro PUSH2 p1,p2
+    addiu sp,-2*NBPW
+    sw \p1,0*NBPW(sp)
+    sw \p2,1*NBPW(sp)
 .endm
 .macro POP2 p1,p2
     lw \p1,0*NBPW(sp)

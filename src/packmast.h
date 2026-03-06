@@ -63,7 +63,7 @@ private:
 private: // UPX conventions
     UPX_CXX_DISABLE_ADDRESS(PackMaster)
     UPX_CXX_DISABLE_COPY_MOVE(PackMaster)
-    UPX_CXX_DISABLE_NEW_DELETE(PackMaster)
+    UPX_CXX_DISABLE_NEW_DELETE_NO_VIRTUAL(PackMaster)
 };
 
 /* vim:set ts=4 sw=4 et: */

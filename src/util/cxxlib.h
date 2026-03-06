@@ -95,8 +95,11 @@ forceinline constexpr upx_uint32_t bswap32(upx_uint32_t v) noexcept {
                            (((U) v & 0xff00) << 8) | (((U) v & 0xff) << 24));
 }
 forceinline constexpr upx_uint64_t bswap64(upx_uint64_t v) noexcept {
-    return (upx_uint64_t) (((upx_uint64_t) bswap32((upx_uint32_t) v) << 32) |
-                           bswap32((upx_uint32_t) (v >> 32)));
+    // return (upx_uint64_t) (((upx_uint64_t) bswap32((upx_uint32_t) v) << 32) |
+    //                        bswap32((upx_uint32_t) (v >> 32)));
+    return ((v & 0xff) << 56) | ((v & 0xff00) << 40) | ((v & 0xff0000) << 24) |
+           ((v & 0xff000000) << 8) | ((v >> 8) & 0xff000000) | ((v >> 24) & 0xff0000) |
+           ((v >> 40) & 0xff00) | ((v >> 56) & 0xff);
 }
 
 forceinline constexpr upx_uint16_t get_be16(const byte *p) noexcept {

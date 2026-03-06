@@ -430,7 +430,7 @@ struct CheckIntegral {
             three = 3;
             four = 4;
             // align - needs binary expressions which do not work
-            // on CHERI uintptr_t because of pointer provenance
+            //   on CHERI uintptr_t because of pointer provenance
             assert_noexcept(upx::align_down(zero, four) == 0);
             assert_noexcept(upx::align_down(zero, four) == zero);
             assert_noexcept(upx::align_down(one, four) == 0);
@@ -678,7 +678,7 @@ struct CheckSignedness {
         static_assert(all_bits == U(~U(0)));
         static_assert(U_is_signed ? (all_bits < 0) : (all_bits > 0));
     }
-    static void check() noexcept {
+    static noinline void check() noexcept {
         checkU<T, T_is_signed>();
         using signed_type = std::make_signed_t<T>;
         checkU<signed_type, true>();
@@ -982,6 +982,8 @@ void upx_compiler_sanity_check() noexcept {
     CheckIntegral<ptrdiff_t>::check();
     CheckIntegral<size_t>::check();
     CheckIntegral<upx_ptraddr_t>::check();
+    CheckIntegral<upx_ssize_t>::check();
+    CheckIntegral<upx_uptrdiff_t>::check();
 #if defined(__CHERI__) && defined(__CHERI_PURE_CAPABILITY__)
     static_assert(sizeof(upx_ptraddr_t) == 8);
     static_assert(alignof(upx_ptraddr_t) == 8);
@@ -1036,6 +1038,8 @@ void upx_compiler_sanity_check() noexcept {
 #endif
     CheckSignedness<upx_off_t, true>::check();
     CheckSignedness<ptrdiff_t, true>::check();
+    CheckSignedness<upx_uptrdiff_t, false>::check();
+    CheckSignedness<upx_ssize_t, true>::check();
     CheckSignedness<size_t, false>::check();
     CheckSignedness<upx_ptraddr_t, false>::check();
     CheckSignedness<intptr_t, true>::check();
@@ -1138,28 +1142,36 @@ void upx_compiler_sanity_check() noexcept {
         assert_noexcept(get_be16(d) == 0xfffe);
         assert_noexcept(bele->get16(d) == 0xfffe);
         assert_noexcept(get_be16_signed(d) == -2);
+        assert_noexcept(bele->get16_signed(d) == -2);
         assert_noexcept(get_be24(d) == 0xfffefd);
         assert_noexcept(bele->get24(d) == 0xfffefd);
         assert_noexcept(get_be24_signed(d) == -259);
+        assert_noexcept(bele->get24_signed(d) == -259);
         assert_noexcept(get_be32(d) == 0xfffefdfc);
         assert_noexcept(bele->get32(d) == 0xfffefdfc);
         assert_noexcept(get_be32_signed(d) == -66052);
+        assert_noexcept(bele->get32_signed(d) == -66052);
         assert_noexcept(get_be64(d) == 0xfffefdfcfbfaf9f8ULL);
         assert_noexcept(bele->get64(d) == 0xfffefdfcfbfaf9f8ULL);
         assert_noexcept(get_be64_signed(d) == -283686952306184LL);
+        assert_noexcept(bele->get64_signed(d) == -283686952306184LL);
         bele = &N_BELE_RTP::le_policy;
         assert_noexcept(get_le16(d) == 0xfeff);
         assert_noexcept(bele->get16(d) == 0xfeff);
         assert_noexcept(get_le16_signed(d) == -257);
+        assert_noexcept(bele->get16_signed(d) == -257);
         assert_noexcept(get_le24(d) == 0xfdfeff);
         assert_noexcept(bele->get24(d) == 0xfdfeff);
         assert_noexcept(get_le24_signed(d) == -131329);
+        assert_noexcept(bele->get24_signed(d) == -131329);
         assert_noexcept(get_le32(d) == 0xfcfdfeff);
         assert_noexcept(bele->get32(d) == 0xfcfdfeff);
         assert_noexcept(get_le32_signed(d) == -50462977);
+        assert_noexcept(bele->get32_signed(d) == -50462977);
         assert_noexcept(get_le64(d) == 0xf8f9fafbfcfdfeffULL);
         assert_noexcept(bele->get64(d) == 0xf8f9fafbfcfdfeffULL);
         assert_noexcept(get_le64_signed(d) == -506097522914230529LL);
+        assert_noexcept(bele->get64_signed(d) == -506097522914230529LL);
         static_assert(get_be24(d) == 0xfffefd);
         static_assert(get_le24(d) == 0xfdfeff);
 #if defined(upx_is_constant_evaluated)
@@ -1222,7 +1234,7 @@ void upx_compiler_sanity_check() noexcept {
 #endif
 #if DEBUG >= 1
     {
-        for (int i = 0; i < 256; i++) {
+        for (int i = -256; i < 256; i++) {
             {
                 const unsigned u = i;
                 assert_noexcept(sign_extend32(u, 1) == ((i & 1) ? -1 : 0));
@@ -1330,6 +1342,12 @@ void upx_compiler_sanity_check() noexcept {
 /*************************************************************************
 // some doctest test cases
 **************************************************************************/
+
+TEST_CASE("upx_is_constant_evaluated") {
+#if defined(upx_is_constant_evaluated)
+    CHECK(true);
+#endif
+}
 
 TEST_CASE("assert_noexcept") {
     // just to make sure that our own assert() macros do not trigger any compiler warnings

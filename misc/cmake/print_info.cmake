@@ -32,7 +32,11 @@ function(upx_print_info)
 
     # binutils
     upx_print_var(CMAKE_EXECUTABLE_FORMAT CMAKE_EXECUTABLE_SUFFIX UPX_CONFIG_CMAKE_EXECUTABLE_SUFFIX)
-    upx_print_var(CMAKE_AR CMAKE_RANLIB)
+    if(0)
+        upx_print_var(CMAKE_AR CMAKE_RANLIB)
+    else()
+        upx_print_var(CMAKE_ADDR2LINE CMAKE_AR CMAKE_DLLTOOL CMAKE_LINKER CMAKE_NM CMAKE_OBJCOPY CMAKE_OBJDUMP CMAKE_RANLIB CMAKE_READELF CMAKE_STRIP CMAKE_TAPI)
+    endif()
 
     # compilers
     foreach(lang IN ITEMS ASM C CXX)

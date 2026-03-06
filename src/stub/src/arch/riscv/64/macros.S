@@ -27,6 +27,8 @@
 ;
 */
 
+DEBUG_NRV= 0
+
 .macro          section name
                 .section \name
 .endm

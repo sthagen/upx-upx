@@ -384,7 +384,7 @@ void upx_shellsort_memcpy(void *array, size_t n, size_t element_size, upx_compar
     byte *tmp = tmp_buf;
     if (element_size > MAX_INLINE_ELEMENT_SIZE) {
         tmp = (byte *) ::malloc(element_size);
-        assert(tmp != nullptr);
+        assert_noexcept(tmp != nullptr);
     }
     size_t gap = 0;         // 0, 1, 4, 13, 40, 121, 364, 1093, ...
     while (gap * 3 + 1 < n) // cannot overflow because of size check above
@@ -569,106 +569,6 @@ TEST_CASE("upx_std_stable_sort") {
 #endif // DEBUG
 
 /*************************************************************************
-// qsort() util
-**************************************************************************/
-
-int __acc_cdecl_qsort be16_compare(const void *e1, const void *e2) {
-    const unsigned d1 = get_be16(e1);
-    const unsigned d2 = get_be16(e2);
-    return (d1 < d2) ? -1 : ((d1 > d2) ? 1 : 0);
-}
-
-int __acc_cdecl_qsort be24_compare(const void *e1, const void *e2) {
-    const unsigned d1 = get_be24(e1);
-    const unsigned d2 = get_be24(e2);
-    return (d1 < d2) ? -1 : ((d1 > d2) ? 1 : 0);
-}
-
-int __acc_cdecl_qsort be32_compare(const void *e1, const void *e2) {
-    const unsigned d1 = get_be32(e1);
-    const unsigned d2 = get_be32(e2);
-    return (d1 < d2) ? -1 : ((d1 > d2) ? 1 : 0);
-}
-
-int __acc_cdecl_qsort be64_compare(const void *e1, const void *e2) {
-    const upx_uint64_t d1 = get_be64(e1);
-    const upx_uint64_t d2 = get_be64(e2);
-    return (d1 < d2) ? -1 : ((d1 > d2) ? 1 : 0);
-}
-
-int __acc_cdecl_qsort le16_compare(const void *e1, const void *e2) {
-    const unsigned d1 = get_le16(e1);
-    const unsigned d2 = get_le16(e2);
-    return (d1 < d2) ? -1 : ((d1 > d2) ? 1 : 0);
-}
-
-int __acc_cdecl_qsort le24_compare(const void *e1, const void *e2) {
-    const unsigned d1 = get_le24(e1);
-    const unsigned d2 = get_le24(e2);
-    return (d1 < d2) ? -1 : ((d1 > d2) ? 1 : 0);
-}
-
-int __acc_cdecl_qsort le32_compare(const void *e1, const void *e2) {
-    const unsigned d1 = get_le32(e1);
-    const unsigned d2 = get_le32(e2);
-    return (d1 < d2) ? -1 : ((d1 > d2) ? 1 : 0);
-}
-
-int __acc_cdecl_qsort le64_compare(const void *e1, const void *e2) {
-    const upx_uint64_t d1 = get_le64(e1);
-    const upx_uint64_t d2 = get_le64(e2);
-    return (d1 < d2) ? -1 : ((d1 > d2) ? 1 : 0);
-}
-
-int __acc_cdecl_qsort be16_compare_signed(const void *e1, const void *e2) {
-    const int d1 = get_be16_signed(e1);
-    const int d2 = get_be16_signed(e2);
-    return (d1 < d2) ? -1 : ((d1 > d2) ? 1 : 0);
-}
-
-int __acc_cdecl_qsort be24_compare_signed(const void *e1, const void *e2) {
-    const int d1 = get_be24_signed(e1);
-    const int d2 = get_be24_signed(e2);
-    return (d1 < d2) ? -1 : ((d1 > d2) ? 1 : 0);
-}
-
-int __acc_cdecl_qsort be32_compare_signed(const void *e1, const void *e2) {
-    const int d1 = get_be32_signed(e1);
-    const int d2 = get_be32_signed(e2);
-    return (d1 < d2) ? -1 : ((d1 > d2) ? 1 : 0);
-}
-
-int __acc_cdecl_qsort be64_compare_signed(const void *e1, const void *e2) {
-    const upx_int64_t d1 = get_be64_signed(e1);
-    const upx_int64_t d2 = get_be64_signed(e2);
-    return (d1 < d2) ? -1 : ((d1 > d2) ? 1 : 0);
-}
-
-int __acc_cdecl_qsort le16_compare_signed(const void *e1, const void *e2) {
-    const int d1 = get_le16_signed(e1);
-    const int d2 = get_le16_signed(e2);
-    return (d1 < d2) ? -1 : ((d1 > d2) ? 1 : 0);
-}
-
-int __acc_cdecl_qsort le24_compare_signed(const void *e1, const void *e2) {
-    const int d1 = get_le24_signed(e1);
-    const int d2 = get_le24_signed(e2);
-    return (d1 < d2) ? -1 : ((d1 > d2) ? 1 : 0);
-}
-
-int __acc_cdecl_qsort le32_compare_signed(const void *e1, const void *e2) {
-    const int d1 = get_le32_signed(e1);
-    const int d2 = get_le32_signed(e2);
-    return (d1 < d2) ? -1 : ((d1 > d2) ? 1 : 0);
-}
-
-int __acc_cdecl_qsort le64_compare_signed(const void *e1, const void *e2) {
-    const upx_int64_t d1 = get_le64_signed(e1);
-    const upx_int64_t d2 = get_le64_signed(e2);
-    return (d1 < d2) ? -1 : ((d1 > d2) ? 1 : 0);
-}
-
-/*************************************************************************
 // find and mem_replace util
 **************************************************************************/
 
@@ -772,6 +672,106 @@ TEST_CASE("mem_replace") {
     CHECK(mem_replace(b, 16, "b", 1, "h") == 2);
     CHECK(strcmp(b, "cdcdcdcdefgefghh") == 0);
     UNUSED(b);
+}
+
+/*************************************************************************
+// qsort() util
+**************************************************************************/
+
+int __acc_cdecl_qsort be16_compare(const void *e1, const void *e2) {
+    const unsigned d1 = get_be16(e1);
+    const unsigned d2 = get_be16(e2);
+    return (d1 < d2) ? -1 : ((d1 > d2) ? 1 : 0);
+}
+
+int __acc_cdecl_qsort be24_compare(const void *e1, const void *e2) {
+    const unsigned d1 = get_be24(e1);
+    const unsigned d2 = get_be24(e2);
+    return (d1 < d2) ? -1 : ((d1 > d2) ? 1 : 0);
+}
+
+int __acc_cdecl_qsort be32_compare(const void *e1, const void *e2) {
+    const unsigned d1 = get_be32(e1);
+    const unsigned d2 = get_be32(e2);
+    return (d1 < d2) ? -1 : ((d1 > d2) ? 1 : 0);
+}
+
+int __acc_cdecl_qsort be64_compare(const void *e1, const void *e2) {
+    const upx_uint64_t d1 = get_be64(e1);
+    const upx_uint64_t d2 = get_be64(e2);
+    return (d1 < d2) ? -1 : ((d1 > d2) ? 1 : 0);
+}
+
+int __acc_cdecl_qsort le16_compare(const void *e1, const void *e2) {
+    const unsigned d1 = get_le16(e1);
+    const unsigned d2 = get_le16(e2);
+    return (d1 < d2) ? -1 : ((d1 > d2) ? 1 : 0);
+}
+
+int __acc_cdecl_qsort le24_compare(const void *e1, const void *e2) {
+    const unsigned d1 = get_le24(e1);
+    const unsigned d2 = get_le24(e2);
+    return (d1 < d2) ? -1 : ((d1 > d2) ? 1 : 0);
+}
+
+int __acc_cdecl_qsort le32_compare(const void *e1, const void *e2) {
+    const unsigned d1 = get_le32(e1);
+    const unsigned d2 = get_le32(e2);
+    return (d1 < d2) ? -1 : ((d1 > d2) ? 1 : 0);
+}
+
+int __acc_cdecl_qsort le64_compare(const void *e1, const void *e2) {
+    const upx_uint64_t d1 = get_le64(e1);
+    const upx_uint64_t d2 = get_le64(e2);
+    return (d1 < d2) ? -1 : ((d1 > d2) ? 1 : 0);
+}
+
+int __acc_cdecl_qsort be16_compare_signed(const void *e1, const void *e2) {
+    const int d1 = get_be16_signed(e1);
+    const int d2 = get_be16_signed(e2);
+    return (d1 < d2) ? -1 : ((d1 > d2) ? 1 : 0);
+}
+
+int __acc_cdecl_qsort be24_compare_signed(const void *e1, const void *e2) {
+    const int d1 = get_be24_signed(e1);
+    const int d2 = get_be24_signed(e2);
+    return (d1 < d2) ? -1 : ((d1 > d2) ? 1 : 0);
+}
+
+int __acc_cdecl_qsort be32_compare_signed(const void *e1, const void *e2) {
+    const int d1 = get_be32_signed(e1);
+    const int d2 = get_be32_signed(e2);
+    return (d1 < d2) ? -1 : ((d1 > d2) ? 1 : 0);
+}
+
+int __acc_cdecl_qsort be64_compare_signed(const void *e1, const void *e2) {
+    const upx_int64_t d1 = get_be64_signed(e1);
+    const upx_int64_t d2 = get_be64_signed(e2);
+    return (d1 < d2) ? -1 : ((d1 > d2) ? 1 : 0);
+}
+
+int __acc_cdecl_qsort le16_compare_signed(const void *e1, const void *e2) {
+    const int d1 = get_le16_signed(e1);
+    const int d2 = get_le16_signed(e2);
+    return (d1 < d2) ? -1 : ((d1 > d2) ? 1 : 0);
+}
+
+int __acc_cdecl_qsort le24_compare_signed(const void *e1, const void *e2) {
+    const int d1 = get_le24_signed(e1);
+    const int d2 = get_le24_signed(e2);
+    return (d1 < d2) ? -1 : ((d1 > d2) ? 1 : 0);
+}
+
+int __acc_cdecl_qsort le32_compare_signed(const void *e1, const void *e2) {
+    const int d1 = get_le32_signed(e1);
+    const int d2 = get_le32_signed(e2);
+    return (d1 < d2) ? -1 : ((d1 > d2) ? 1 : 0);
+}
+
+int __acc_cdecl_qsort le64_compare_signed(const void *e1, const void *e2) {
+    const upx_int64_t d1 = get_le64_signed(e1);
+    const upx_int64_t d2 = get_le64_signed(e2);
+    return (d1 < d2) ? -1 : ((d1 > d2) ? 1 : 0);
 }
 
 /*************************************************************************

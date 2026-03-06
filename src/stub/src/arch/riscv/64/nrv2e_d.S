@@ -34,14 +34,7 @@
 #endif
         lui bits,0x80000  // (1<<31): empty; force refill
         li disp,-1  // initial displacement
-#undef  DEBUG_NRV
-#define DEBUG_NRV 0
-#if DEBUG_NRV  //{
-#define LEN_ROV 0x100000
-#define dst0  x31
-#define src0  x30
-#define hi_rov x29
-#define prov  x28
+.if DEBUG_NRV  //{
         mv dst0,dst
         mv src0,src
         mov hi_rov,sp
@@ -53,7 +46,7 @@
         lw pre8,4(src); sw pre8,8(prov)
         lw pre8,8(src); sw pre8,12(prov)
                               addi prov,prov,4*4
-#endif  // DEBUG_NRV }
+.endif  // DEBUG_NRV }
 
         j top_n2e
 
@@ -65,11 +58,11 @@ top_n2e:
         jnextb1yp lit_n2e
 
 #define off val
-#if DEBUG_NRV  //{
+.if DEBUG_NRV  //{
     sub off,src,src0
     sw off, 0(prov)
     sw bits,4(prov)
-#endif  // DEBUG_NRV }
+.endif  // DEBUG_NRV }
 
         li off,1; j getoff_n2e  # the msb
 
@@ -83,7 +76,7 @@ getoff_n2e:
         addiw off,off,-3; bltz off,offprev_n2e
         slli off,off,8; addi src,src,1  # account for previous prefetch
         addw off,off,pre8; lbu pre8,0(src)  # prefetch
-        xori disp,off,~0; beqz disp,l_n2e_EOF
+        xori disp,off,~0; beqz disp,eof_n2e
 #undef  off
 #define len val
         andi len,disp,1; srai disp,disp,1
@@ -112,7 +105,7 @@ off_check_n2e:
         sltu ta,disp,ta
         add len,len,ta
 
-#if DEBUG_NRV  //{
+.if DEBUG_NRV  //{
     bgeu prov,hi_rov,0f
     sub ta,dst,dst0
     sw  ta,   2*4(prov)
@@ -120,19 +113,12 @@ off_check_n2e:
     sw disp,  3*4(prov)
     addi prov,prov,4*4
 0:
-#endif  // DEBUG_NRV }
+.endif  // DEBUG_NRV }
 #undef len
 
 copy_n2e:
         jalr 0x32(x5)  # call copy
         j top_n2e
-
-l_n2e_EOF:
-#if DEBUG_NRV  //{
-        li ta,LEN_ROV
-        add sp,sp,ta
-#endif  // DEBUG_NRV }
-        j eof_n2e
 
 not_n2e:
         // fall into daisy chain

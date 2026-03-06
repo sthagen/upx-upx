@@ -62,6 +62,7 @@ static_assert(CHAR_BIT == 8);
 static_assert(sizeof(short) == 2);
 static_assert(sizeof(int) == 4);
 static_assert(sizeof(long long) == 8);
+
 // check sane compiler mandatory flags
 static_assert(-1 == ~0);      // two's complement - see https://wg21.link/P0907R4
 static_assert(0u - 1 == ~0u); // two's complement - see https://wg21.link/P0907R4
@@ -78,6 +79,7 @@ static_assert((char) (-1) == 255);             // -funsigned-char
 #if (ACC_CC_GNUC && ACC_CC_GNUC < 0x090000)
 #pragma GCC diagnostic ignored "-Wattributes"
 #endif
+
 // enable some more strict warnings for Git developer builds
 #if defined(UPX_CONFIG_DISABLE_WSTRICT) && (UPX_CONFIG_DISABLE_WSTRICT + 0 == 0)
 #if defined(UPX_CONFIG_DISABLE_WERROR) && (UPX_CONFIG_DISABLE_WERROR + 0 == 0)
@@ -214,7 +216,10 @@ typedef long long upx_off_t;
 #define off_t upx_off_t
 #endif
 
+//
 // shortcuts
+//
+
 #define forceinline __acc_forceinline
 #if (ACC_CC_MSC)
 #define noinline __declspec(noinline)
@@ -315,13 +320,15 @@ typedef long long upx_off_t;
 #endif
 #endif
 
-// some platforms may provide their own system bswapXX() functions, so rename to avoid conflicts
-#undef bswap16
-#undef bswap32
-#undef bswap64
-#define bswap16 upx_bswap16
-#define bswap32 upx_bswap32
-#define bswap64 upx_bswap64
+#if !defined(O_BINARY) || (O_BINARY + 0 == 0)
+#if (ACC_OS_CYGWIN || ACC_OS_DOS16 || ACC_OS_DOS32 || ACC_OS_EMX || ACC_OS_OS2 || ACC_OS_OS216 ||  \
+     ACC_OS_WIN16 || ACC_OS_WIN32 || ACC_OS_WIN64)
+#error "missing O_BINARY"
+#endif
+#endif
+#if !defined(O_BINARY)
+#define O_BINARY 0
+#endif
 
 // avoid warnings about shadowing global symbols
 #undef _base
@@ -333,15 +340,13 @@ typedef long long upx_off_t;
 #define index    upx_renamed_index
 #define outp     upx_renamed_outp
 
-#if !defined(O_BINARY) || (O_BINARY + 0 == 0)
-#if (ACC_OS_CYGWIN || ACC_OS_DOS16 || ACC_OS_DOS32 || ACC_OS_EMX || ACC_OS_OS2 || ACC_OS_OS216 ||  \
-     ACC_OS_WIN16 || ACC_OS_WIN32 || ACC_OS_WIN64)
-#error "missing O_BINARY"
-#endif
-#endif
-#if !defined(O_BINARY)
-#define O_BINARY 0
-#endif
+// some platforms may provide their own system bswapXX() functions, so rename to avoid conflicts
+#undef bswap16
+#undef bswap32
+#undef bswap64
+#define bswap16 upx_bswap16
+#define bswap32 upx_bswap32
+#define bswap64 upx_bswap64
 
 /*************************************************************************
 // util
@@ -440,6 +445,7 @@ inline void NO_fprintf(FILE *, const char *, ...) noexcept {}
     COMPILE_TIME_ASSERT(alignof(a) == sizeof(b))
 #define COMPILE_TIME_ASSERT_ALIGNED1(a) COMPILE_TIME_ASSERT_ALIGNOF__(a, char)
 
+// TABLESIZE
 #define TABLESIZE(table) ((sizeof(table) / sizeof((table)[0])))
 
 // mem_clear()
@@ -488,7 +494,10 @@ noreturn void throwAssertFailed(const char *expr, const char *file, int line, co
 #define assert_noexcept assert
 #endif
 
+//
 // C++ support library
+//
+
 #include "util/cxxlib.h"
 using upx::tribool;
 #define usizeof(expr)      (upx::UnsignedSizeOf<sizeof(expr)>::value)

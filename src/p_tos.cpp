@@ -325,8 +325,7 @@ static bool check_relocs(const byte *relocs, unsigned rsize, unsigned image_size
             fixup += 254;
         else if (c & 1) // must be word-aligned
             return false;
-        else // next reloc is here
-        {
+        else { // next reloc is here
             fixup += c;
             if (fixup - last_fixup < 4) // overlapping relocation
                 return false;

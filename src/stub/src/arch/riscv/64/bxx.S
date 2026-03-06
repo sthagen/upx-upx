@@ -47,34 +47,31 @@ AUIPC= 0x17
         li ta,0x55; bne ta,ftid,rvf_end
 #endif
         add limit,len,ptr  # fence post
-        addi limit,limit,-8
+        addi limit,limit,-8  # un-filtering AUIPC needs 8 bytes
         mv ptr0,ptr
 rvf_top:
-        lbu word1,0(ptr)  # lwu word1,0(ptr) unaligned little-endian
-        li ilen,2
+        lhu word1,0(ptr)  # lwu word1,0(ptr) 2-byte aligned little-endian
+        andi ta,word1,0x7f
+        addi ta,ta,-AUIPC; beqz ta,rvf_auipc  # one of ours
+
+        li ilen,2  # beginning length before next instruction
                       andi ta,word1,3; xori ta,ta,3; bnez ta,ilen2
         srli ta,word1,2; andi ta,ta,3; xori ta,ta,3; bnez ta,ilen4
         srli ta,word1,4; andi ta,ta,3; xori ta,ta,3; bnez ta,ilen6
         addi ilen,ilen,2  # 8 or more
 ilen6:  addi ilen,ilen,2
 ilen4:  addi ilen,ilen,2
-ilen2:
-        andi ta,word1,0x7f
-        addi ta,ta,-AUIPC; bnez ta,rvf_bot
+ilen2:  j rvf_bot
 
-        lbu ta,   1(ptr); slli ta,ta,1*8; or word1,word1,ta  # rest of word1
-        lbu ta,   2(ptr); slli ta,ta,2*8; or word1,word1,ta
-        lbu ta,   3(ptr); slli ta,ta,3*8; or word1,word1,ta
-        li ilen,8  # next is after word2
+rvf_auipc:
+        lhu ta,   2(ptr); slli ta,ta,16; or word1,word1,ta  # rest of word1
 
-        lbu word2,4(ptr)  # lwu word2,4(ptr) unaligned little-endian
-        lbu ta,   5(ptr); slli ta,ta,1*8; or word2,word2,ta
-        lbu ta,   6(ptr); slli ta,ta,2*8; or word2,word2,ta
-        lbu ta,   7(ptr); slli ta,ta,3*8; or word2,word2,ta
+        lhu word2,4(ptr)  # lwu word2,4(ptr) 2-byte aligned little-endian
+        lhu ta,   6(ptr); slli ta,ta,16; or word2,word2,ta
         srli ta,word2,7
         andi r_aui,ta,037
 
-        lbu tb,1(ptr); slli addr,tb,3*8  # lwu addr,1(ptr) BIG_ENDIAN unaligned
+        lbu tb,1(ptr); slli addr,tb,3*8  # lwu addr,1(ptr) BIG_ENDIAN 1-byte aligned
         lbu tb,2(ptr); slli   tb,tb,2*8; or addr,addr,tb
         lbu tb,3(ptr); slli   tb,tb,1*8; or addr,addr,tb
         lbu tb,4(ptr);   andi tb,tb,0x7f   # lo byte is special
@@ -92,21 +89,19 @@ ilen2:
         slli tb,tb,12  # ~0xfff & addr
         slli r_aui,r_aui,7; or tb,tb,r_aui
         ori tb,tb,AUIPC
-        sb tb,0(ptr); srli tb,tb,8  # sw tb,0(ptr) unaligned little-endian
-        sb tb,1(ptr); srli tb,tb,8
-        sb tb,2(ptr); srli tb,tb,8
-        sb tb,3(ptr)
+        sh tb,0(ptr); srli tb,tb,16  # sw tb,0(ptr) 2-byte aligned little-endian
+        sh tb,2(ptr)
 
         slli addr,addr,20
         srli word2,word2,12
         or tb,addr,word2
-        sb tb,4(ptr); srli tb,tb,8  # sw tb,4(ptr) unaligned little-endian
-        sb tb,5(ptr); srli tb,tb,8
-        sb tb,6(ptr); srli tb,tb,8
-        sb tb,7(ptr)
+        sh tb,4(ptr); srli tb,tb,16  # sw tb,4(ptr) 2-byte aligned little-endian
+        sh tb,6(ptr)
+
+        li ilen,4  # resume scanning after AUIPC
 rvf_bot:
         add ptr,ptr,ilen
-        blt ptr,limit,rvf_top
+        ble ptr,limit,rvf_top
 rvf_end:
 #ifndef NO_METHOD_CHECK
         ret

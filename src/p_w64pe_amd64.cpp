@@ -26,7 +26,7 @@
 
    -------------------------------------------------------------------
 
-   PE+ format extension changes         (C) 2010 Stefan Widmann
+   PE+ format extension changes         (C) Stefan Widmann
 
  */
 

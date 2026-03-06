@@ -871,7 +871,7 @@ TEST_CASE("PtrOrSpan int") {
 }
 
 /*************************************************************************
-//
+// xspan global overloads
 **************************************************************************/
 
 #ifdef UPX_VERSION_HEX
@@ -939,6 +939,7 @@ static noinline void check_bele_a(const T &mb, size_t i) {
         CHECK_NOTHROW(set_be64(mb, 0));
         CHECK_NOTHROW(set_le64(mb, 0));
     }
+    (void) mb;
 }
 template <class T>
 static noinline void check_bele_c(const T &mb, size_t i) {
@@ -978,6 +979,7 @@ static noinline void check_bele_c(const T &mb, size_t i) {
         CHECK_NOTHROW(get_be64(mb));
         CHECK_NOTHROW(get_le64(mb));
     }
+    (void) mb;
 }
 } // namespace
 

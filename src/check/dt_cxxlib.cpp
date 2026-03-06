@@ -280,6 +280,11 @@ static_assert(upx::align_down(1, 4) == 0);
 static_assert(upx::align_down(2, 4) == 0);
 static_assert(upx::align_down(3, 4) == 0);
 static_assert(upx::align_down(4, 4) == 4);
+static_assert(upx::align_down_gap(0, 4) == 0);
+static_assert(upx::align_down_gap(1, 4) == 1);
+static_assert(upx::align_down_gap(2, 4) == 2);
+static_assert(upx::align_down_gap(3, 4) == 3);
+static_assert(upx::align_down_gap(4, 4) == 0);
 static_assert(upx::align_up(0, 4) == 0);
 static_assert(upx::align_up(1, 4) == 4);
 static_assert(upx::align_up(2, 4) == 4);
@@ -765,9 +770,110 @@ struct alignas(1) TestCT final {
     static noinline void noinline_set_le64(byte * p, upx_uint64_t v) noexcept {
         upx::compile_time::set_le64(p, v);
     }
+
+    static noinline bool noinline_has_single_bit(upx_ptraddr_t p) noexcept {
+        return upx::has_single_bit(p);
+    }
+
+    static noinline upx_ptraddr_t noinline_align_down(upx_ptraddr_t p, upx_ptraddr_t a) noexcept {
+        return upx::align_down(p, a);
+    }
+    static noinline upx_ptraddr_t noinline_align_down_gap(upx_ptraddr_t p, upx_ptraddr_t a)
+        noexcept {
+        return upx::align_down_gap(p, a);
+    }
+    static noinline upx_ptraddr_t noinline_align_up(upx_ptraddr_t p, upx_ptraddr_t a) noexcept {
+        return upx::align_up(p, a);
+    }
+    static noinline upx_ptraddr_t noinline_align_up_gap(upx_ptraddr_t p, upx_ptraddr_t a) noexcept {
+        return upx::align_up_gap(p, a);
+    }
+
+    static noinline upx_ptraddr_t noinline_align_down_16(upx_ptraddr_t p) noexcept {
+        return upx::align_down(p, upx_ptraddr_t(16));
+    }
+    static noinline upx_ptraddr_t noinline_align_down_gap_16(upx_ptraddr_t p) noexcept {
+        return upx::align_down_gap(p, upx_ptraddr_t(16));
+    }
+    static noinline upx_ptraddr_t noinline_align_up_16(upx_ptraddr_t p) noexcept {
+        return upx::align_up(p, upx_ptraddr_t(16));
+    }
+    static noinline upx_ptraddr_t noinline_align_up_gap_16(upx_ptraddr_t p) noexcept {
+        return upx::align_up_gap(p, upx_ptraddr_t(16));
+    }
 };
 static_assert(sizeof(TestCT) == 8);
 static_assert(alignof(TestCT) == 1);
+
+struct alignas(1) TestXE final {
+    byte d[8]; // public data
+
+    static noinline upx_uint16_t noinline_bswap16(upx_uint16_t v) noexcept { return bswap16(v); }
+    static noinline upx_uint32_t noinline_bswap32(upx_uint32_t v) noexcept { return bswap32(v); }
+    static noinline upx_uint64_t noinline_bswap64(upx_uint64_t v) noexcept { return bswap64(v); }
+
+    static noinline upx_uint16_t noinline_get_be16(const byte *p) noexcept { return get_be16(p); }
+    static noinline upx_uint32_t noinline_get_be24(const byte *p) noexcept { return get_be24(p); }
+    static noinline upx_uint32_t noinline_get_be32(const byte *p) noexcept { return get_be32(p); }
+    static noinline upx_uint64_t noinline_get_be64(const byte *p) noexcept { return get_be64(p); }
+    static noinline upx_uint16_t noinline_get_le16(const byte *p) noexcept { return get_le16(p); }
+    static noinline upx_uint32_t noinline_get_le24(const byte *p) noexcept { return get_le24(p); }
+    static noinline upx_uint32_t noinline_get_le32(const byte *p) noexcept { return get_le32(p); }
+    static noinline upx_uint64_t noinline_get_le64(const byte *p) noexcept { return get_le64(p); }
+
+    static noinline void noinline_set_be16(byte * p, upx_uint16_t v) noexcept { set_be16(p, v); }
+    static noinline void noinline_set_be24(byte * p, upx_uint32_t v) noexcept { set_be24(p, v); }
+    static noinline void noinline_set_be32(byte * p, upx_uint32_t v) noexcept { set_be32(p, v); }
+    static noinline void noinline_set_be64(byte * p, upx_uint64_t v) noexcept { set_be64(p, v); }
+    static noinline void noinline_set_le16(byte * p, upx_uint16_t v) noexcept { set_le16(p, v); }
+    static noinline void noinline_set_le24(byte * p, upx_uint32_t v) noexcept { set_le24(p, v); }
+    static noinline void noinline_set_le32(byte * p, upx_uint32_t v) noexcept { set_le32(p, v); }
+    static noinline void noinline_set_le64(byte * p, upx_uint64_t v) noexcept { set_le64(p, v); }
+
+    static noinline int noinline_sign_extend32(unsigned v, unsigned bits) noexcept {
+        return sign_extend32(v, bits);
+    }
+    static noinline upx_int64_t noinline_sign_extend64(upx_uint64_t v, unsigned bits) noexcept {
+        return sign_extend64(v, bits);
+    }
+
+    static noinline int noinline_sign_extend32_4(unsigned v) noexcept {
+        return sign_extend32(v, 4);
+    }
+    static noinline int noinline_sign_extend32_8(unsigned v) noexcept {
+        return sign_extend32(v, 8);
+    }
+    static noinline int noinline_sign_extend32_16(unsigned v) noexcept {
+        return sign_extend32(v, 16);
+    }
+    static noinline int noinline_sign_extend32_24(unsigned v) noexcept {
+        return sign_extend32(v, 24);
+    }
+    static noinline int noinline_sign_extend32_32(unsigned v) noexcept {
+        return sign_extend32(v, 32);
+    }
+    static noinline upx_int64_t noinline_sign_extend64_4(upx_uint64_t v) noexcept {
+        return sign_extend64(v, 4);
+    }
+    static noinline upx_int64_t noinline_sign_extend64_8(upx_uint64_t v) noexcept {
+        return sign_extend64(v, 8);
+    }
+    static noinline upx_int64_t noinline_sign_extend64_16(upx_uint64_t v) noexcept {
+        return sign_extend64(v, 16);
+    }
+    static noinline upx_int64_t noinline_sign_extend64_24(upx_uint64_t v) noexcept {
+        return sign_extend64(v, 24);
+    }
+    static noinline upx_int64_t noinline_sign_extend64_32(upx_uint64_t v) noexcept {
+        return sign_extend64(v, 32);
+    }
+    static noinline upx_int64_t noinline_sign_extend64_48(upx_uint64_t v) noexcept {
+        return sign_extend64(v, 48);
+    }
+    static noinline upx_int64_t noinline_sign_extend64_64(upx_uint64_t v) noexcept {
+        return sign_extend64(v, 64);
+    }
+};
 } // namespace
 
 TEST_CASE("upx::compile_time 1") {
@@ -888,13 +994,17 @@ TEST_CASE("upx::compile_time 1") {
     }
 }
 
-TEST_CASE("upx::compile_time 2") {
+TEST_CASE("upx::compile_time 2a") {
     constexpr upx_uint16_t v16 = 0xf2f1;
     constexpr upx_uint32_t v24 = 0xf3f2f1;
     constexpr upx_uint32_t v32 = 0xf4f3f2f1;
     constexpr upx_uint64_t v64 = 0xf8f7f6f5f4f3f2f1ull;
     {
-        using upx::compile_time::mem_eq;
+        assert_noexcept(TestCT::noinline_bswap16(v16) == 0xf1f2);
+        assert_noexcept(TestCT::noinline_bswap32(v32) == 0xf1f2f3f4);
+        assert_noexcept(TestCT::noinline_bswap64(v64) == 0xf1f2f3f4f5f6f7f8ull);
+    }
+    {
         upx_alignas_max byte aligned_buffer[32];
         byte *const buf1 = aligned_buffer + 3;
         byte *const buf2 = aligned_buffer + 13;
@@ -941,6 +1051,102 @@ TEST_CASE("upx::compile_time 2") {
         assert_noexcept(TestCT::noinline_get_le64(buf2) == v64);
         assert_noexcept(memcmp(buf1, buf2, 8) == 0);
     }
+}
+
+TEST_CASE("upx::compile_time 2b") {
+    constexpr upx_uint16_t v16 = 0xf2f1;
+    constexpr upx_uint32_t v24 = 0xf3f2f1;
+    constexpr upx_uint32_t v32 = 0xf4f3f2f1;
+    constexpr upx_uint64_t v64 = 0xf8f7f6f5f4f3f2f1ull;
+    {
+        assert_noexcept(TestXE::noinline_bswap16(v16) == 0xf1f2);
+        assert_noexcept(TestXE::noinline_bswap32(v32) == 0xf1f2f3f4);
+        assert_noexcept(TestXE::noinline_bswap64(v64) == 0xf1f2f3f4f5f6f7f8ull);
+    }
+    {
+        upx_alignas_max byte aligned_buffer[32];
+        byte *const buf1 = aligned_buffer + 3;
+        byte *const buf2 = aligned_buffer + 13;
+
+        set_be16(buf1, v16);
+        TestXE::noinline_set_be16(buf2, v16);
+        assert_noexcept(TestXE::noinline_get_be16(buf1) == v16);
+        assert_noexcept(TestXE::noinline_get_be16(buf2) == v16);
+        assert_noexcept(memcmp(buf1, buf2, 2) == 0);
+        set_be24(buf1, v24);
+        TestXE::noinline_set_be24(buf2, v24);
+        assert_noexcept(TestXE::noinline_get_be24(buf1) == v24);
+        assert_noexcept(TestXE::noinline_get_be24(buf2) == v24);
+        assert_noexcept(memcmp(buf1, buf2, 3) == 0);
+        set_be32(buf1, v32);
+        TestXE::noinline_set_be32(buf2, v32);
+        assert_noexcept(TestXE::noinline_get_be32(buf1) == v32);
+        assert_noexcept(TestXE::noinline_get_be32(buf2) == v32);
+        assert_noexcept(memcmp(buf1, buf2, 4) == 0);
+        set_be64(buf1, v64);
+        TestXE::noinline_set_be64(buf2, v64);
+        assert_noexcept(TestXE::noinline_get_be64(buf1) == v64);
+        assert_noexcept(TestXE::noinline_get_be64(buf2) == v64);
+        assert_noexcept(memcmp(buf1, buf2, 8) == 0);
+
+        set_le16(buf1, v16);
+        TestXE::noinline_set_le16(buf2, v16);
+        assert_noexcept(TestXE::noinline_get_le16(buf1) == v16);
+        assert_noexcept(TestXE::noinline_get_le16(buf2) == v16);
+        assert_noexcept(memcmp(buf1, buf2, 2) == 0);
+        set_le24(buf1, v24);
+        TestXE::noinline_set_le24(buf2, v24);
+        assert_noexcept(TestXE::noinline_get_le24(buf1) == v24);
+        assert_noexcept(TestXE::noinline_get_le24(buf2) == v24);
+        assert_noexcept(memcmp(buf1, buf2, 3) == 0);
+        set_le32(buf1, v32);
+        TestXE::noinline_set_le32(buf2, v32);
+        assert_noexcept(TestXE::noinline_get_le32(buf1) == v32);
+        assert_noexcept(TestXE::noinline_get_le32(buf2) == v32);
+        assert_noexcept(memcmp(buf1, buf2, 4) == 0);
+        set_le64(buf1, v64);
+        TestXE::noinline_set_le64(buf2, v64);
+        assert_noexcept(TestXE::noinline_get_le64(buf1) == v64);
+        assert_noexcept(TestXE::noinline_get_le64(buf2) == v64);
+        assert_noexcept(memcmp(buf1, buf2, 8) == 0);
+    }
+    {
+        for (int i = -8; i < 8; i++) {
+            {
+                const unsigned u = i;
+                assert_noexcept(TestXE::noinline_sign_extend32(u, 4 + (i & 1)) == i);
+                assert_noexcept(TestXE::noinline_sign_extend32_4(u) == i);
+                assert_noexcept(TestXE::noinline_sign_extend32_8(u) == i);
+                assert_noexcept(TestXE::noinline_sign_extend32_16(u) == i);
+                assert_noexcept(TestXE::noinline_sign_extend32_24(u) == i);
+                assert_noexcept(TestXE::noinline_sign_extend32_32(u) == i);
+            }
+            {
+                const upx_uint64_t u = i;
+                assert_noexcept(TestXE::noinline_sign_extend64(u, 4 + (i & 1)) == i);
+                assert_noexcept(TestXE::noinline_sign_extend64_4(u) == i);
+                assert_noexcept(TestXE::noinline_sign_extend64_8(u) == i);
+                assert_noexcept(TestXE::noinline_sign_extend64_16(u) == i);
+                assert_noexcept(TestXE::noinline_sign_extend64_24(u) == i);
+                assert_noexcept(TestXE::noinline_sign_extend64_32(u) == i);
+                assert_noexcept(TestXE::noinline_sign_extend64_48(u) == i);
+                assert_noexcept(TestXE::noinline_sign_extend64_64(u) == i);
+            }
+        }
+    }
+}
+
+TEST_CASE("upx::compile_time 3") {
+    constexpr upx_ptraddr_t p = 1;
+    assert_noexcept(TestCT::noinline_has_single_bit(p));
+    assert_noexcept(TestCT::noinline_align_down(p, 8) == 0);
+    assert_noexcept(TestCT::noinline_align_down_gap(p, 8) == 1);
+    assert_noexcept(TestCT::noinline_align_up(p, 8) == 8);
+    assert_noexcept(TestCT::noinline_align_up_gap(p, 8) == 7);
+    assert_noexcept(TestCT::noinline_align_down_16(p) == 0);
+    assert_noexcept(TestCT::noinline_align_down_gap_16(p) == 1);
+    assert_noexcept(TestCT::noinline_align_up_16(p) == 16);
+    assert_noexcept(TestCT::noinline_align_up_gap_16(p) == 15);
 }
 
 /*************************************************************************

@@ -98,7 +98,7 @@ static constexpr int get_open_flags(OpenMode om) noexcept {
 }
 
 // set file time of an open file
-static void set_fd_timestamp(int fd, const XStat *xst) noexcept {
+static noinline void set_fd_timestamp(int fd, const XStat *xst) noexcept {
 #if USE_SETFILETIME
     BOOL r = SetFileTime((HANDLE) _get_osfhandle(fd), nullptr, &xst->ft_atime, &xst->ft_mtime);
     IGNORE_ERROR(r);
@@ -118,8 +118,8 @@ static void set_fd_timestamp(int fd, const XStat *xst) noexcept {
     UNUSED(xst);
 }
 
-static void copy_file_contents(const char *iname, const char *oname, OpenMode om,
-                               const XStat *oname_timestamp) may_throw {
+static noinline void copy_file_contents(const char *iname, const char *oname, OpenMode om,
+                                        const XStat *oname_timestamp) may_throw {
     InputFile fi;
     fi.sopen(iname, get_open_flags(RO_MUST_EXIST), SH_DENYWR);
     fi.seek(0, SEEK_SET);
@@ -142,8 +142,9 @@ static void copy_file_contents(const char *iname, const char *oname, OpenMode om
     fo.closex();
 }
 
-static void copy_file_attributes(const XStat *xst, const char *oname, bool preserve_mode,
-                                 bool preserve_ownership, bool preserve_timestamp) noexcept {
+static noinline void copy_file_attributes(const XStat *xst, const char *oname, bool preserve_mode,
+                                          bool preserve_ownership,
+                                          bool preserve_timestamp) noexcept {
     const struct stat *const st = &xst->st;
     // copy time stamp
     if (preserve_timestamp) {

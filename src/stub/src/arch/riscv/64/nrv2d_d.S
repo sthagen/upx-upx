@@ -35,14 +35,7 @@
         lui bits,0x80000  // (1<<31): empty; force refill
         li disp,-1  // initial displacement
 
-#undef  DEBUG_NRV
-#define DEBUG_NRV 0
 #if DEBUG_NRV  //{
-#define LEN_ROV 0x100000
-#define dst0  x31
-#define src0  x30
-#define hi_rov x29
-#define prov  x28
         mv dst0,dst
         mv src0,src
         mov hi_rov,sp
@@ -79,7 +72,7 @@ getoff_n2d:
         xori disp,off,~0  # no xoriw, so need previous addw
 #undef off
 #define len val
-        beqz disp,l_n2d_EOF
+        beqz disp,eof_n2d
         andi len,disp,1; srai disp,disp,1  # len= 0 or 1
         j getlen_n2d
 
@@ -114,13 +107,6 @@ off_check_n2d:
         call copy
 bot_n2d:  // In: 0==len
         j top_n2d
-
-l_n2d_EOF:
-#if DEBUG_NRV  //{
-        li ta,LEN_ROV
-        add sp,sp,ta
-#endif  // DEBUG_NRV }
-        j eof_n2d
 
 
 #ifndef NO_METHOD_CHECK

@@ -27,7 +27,7 @@
 ;
 ;---------------------------------------------------------------------
 ;
-; 64 bit modifications (C) 2010 Stefan Widmann
+; 64 bit modifications (C) Stefan Widmann
 ;
 ; Major changes when porting 32 bit code to 64 bit:
 ;  - there are no pusha/popa instructions

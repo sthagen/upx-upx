@@ -24,6 +24,8 @@
    <jreiser@users.sourceforge.net>
  */
 
+/* clang-format off */
+
 // Do not change columns or whitespace!
 // I write code with adjacent lines that should match spacing.
 // filter/auipc.h has been added to CLANG_FORMAT_EXCLUDE_FILES in Makefile.
@@ -82,6 +84,18 @@
 // NYI: STOREs are ugly because immediate field is not contiguous
 //    ||  0x23==opf(word2) /*STORE*/
 
+static int get_ilen(int w)  // instruction length in bytes
+{
+    int ilen = 2;
+    if (3 == (3& (w >>0))) {
+        ilen += 2;
+        if (3 == (3& (w >>2))) {
+            ilen += 2;
+            // NYI: 8 bytes or longer
+        }
+    }
+    return ilen;
+}
 #endif  //}
 
 static int F(Filter *f) {
@@ -91,54 +105,68 @@ static int F(Filter *f) {
     byte *b = f->buf;
 #else
     // scan only
-    const byte *b = f->buf;
+    const byte *b = f->buf -8;
 #endif
-    const int size = f->buf_len;
+    const int size = f->buf_len -8;
 
     int ic;
     int calls = 0, noncalls = 0;
     int lastcall = 0;
+    int gi;
+    int const g_end = 25;
+    int gang[g_end];
 
-    int ilen;
-    for (ic = 0; ic < size - 8; ic += ilen) {
-        int word1 = get_le32(ic + b);
-        ilen = 2;
-        if (3 == (3& (word1 >>0))) {
-            ilen += 2;
-            if (3 == (3& (word1 >>2))) {
-                ilen += 2;
-                // NYI: 8 bytes or longer
+    int ilen = 0; (void)gang; // not needed, but placate ignorant compiler
+    for (ic = 0; ic <= size; ic += ilen) {
+        int b1 = *(ic + b);  // opcode and length are in first byte
+        if (!COND(b1)) { // not interesting at all
+            ilen = get_ilen(b1);
+            continue;  // advance to next instr
+        }
+        // find the 'gang' of (nearly-)consecutive AUIPC
+        gi = 0; gang[gi++] = ic;  // AUIPC gang leader
+        for (int jc= ic; jc <= size; ) {
+            // The previous instruction was AUIPC.  Filtering will
+            // change it and the following 4 bytes.  If another AUIPC
+            // starts in that "shadow", then that will create problems
+            // for both filtering and unfiltering.  So find the "gang".
+            int kc, b2;
+            if ((  (kc= 4+ jc), (b2= *(kc+b)), (COND(b2)))
+            ||  ((3!= (3& b2))  // after AUIPC is 2-byte instr
+               && ((kc= 6+ jc), (b2= *(kc+b)), (COND(b2))) ) ) {
+                if (g_end <= gi)
+                    throwInternalError("gang of AUIPC too large at +%#x", ic);
+                gang[gi++] = kc;
+                jc = kc;  // continue looking, starting after newest AUIPC
+            }
+            else { // gang has ended: no AUIPC in shadow of last one
+                ilen = (get_ilen(b2) + kc) - ic;  // to next un-examined byte
+                break;  // quit the inner 'for'; resume the outer 'for'
             }
         }
-        if (!COND(word1)) { // not interesting at all
-            continue;
-        }
-        int word2 = get_le32(4+ic+b);
-        int r_aui = rd(word1);
-        if (CONDf(word2, r_aui)) {
-            lastcall = ic;
-            ++calls;
-        }
-        else {
-            ++noncalls;  // not the best benefits
-            // but shuffle bits anyway, to make unfilter easy
-        }
-        ilen = 8; // next is after word2
 #ifdef U  //{ filtering
-        int addr = (~0xfff& word1) + (word2 >>20);  // sign extend imm
-        addr += ic;  // AUIPC result value: the true "hoisted" address
+        // Process the gang in reverse order so that forward un-filtering works
+        do {
+            int jc = gang[--gi];
+            int word1 = get_le32(0+jc+b); int r_aui = rd(word1);
+            int word2 = get_le32(4+jc+b);
+            int addr = (~0xfff& word1) + (word2 >>20);  // sign extend imm
+            addr += jc;  // AUIPC result value: the true "hoisted" address
 
-        *(0+ic+b) = ((1& addr) <<7) | AUIPC;  // lo bit of addr next to AUIPC
-        set_be32(1+ic+b, addr);  // Note BIG_ENDIAN store at offset of 1 byte
-        set_le32(4+ic+b, (word2 <<12) | (r_aui <<7) | (0x7f& (addr >>1)));
-        if (0) { // DEBUG
-            char line[100];
-            int len = snprintf(line, sizeof(line), "%#6x  %#8.8x %#8.8x  %#8.8x %#8.8x\n",
-                ic, word1, word2, get_le32(0+ic+b), get_le32(4+ic+b));
-            if (len != write(7, line, len)) {
-                exit(7);
+            *(0+jc+b) = ((1& addr) <<7) | AUIPC;  // lo bit of addr goes next to AUIPC
+            set_be32(1+jc+b, addr);  // Note BIG_ENDIAN store at offset of 1 byte
+            set_le32(4+jc+b, (word2 <<12) | (r_aui <<7) | (0x7f& (addr >>1)));
+            ++calls;
+
+            if (0) { // DEBUG
+                char line[100];
+                int len = snprintf(line, sizeof(line), "%#6x  %#8.8x %#8.8x  %#8.8x %#8.8x\n",
+                    jc, word1, word2, get_le32(0+jc+b), get_le32(4+jc+b));
+                if (len != write(7, line, len)) {
+                    exit(7);
+                }
             }
-        }
+        } while (gi);
 #endif  //}
     }
 
@@ -167,28 +195,21 @@ static int F(Filter *f) {
 
 static int U(Filter *f) {
     byte *b = f->buf;
-    const int size = f->buf_len;
+    const int size = f->buf_len -8;
 
     int ic;
     int calls = 0, noncalls = 0;
     int lastcall = 0;
 
     int ilen;
-    for (ic = 0; ic < size - 8; ic += ilen) {
+    for (ic = 0; ic <= size; ic += ilen) {
         int word1 = get_le32(  ic+b);
-        ilen = 2;
-        if (3 == (3& (word1 >>0))) {
-            ilen += 2;
-            if (3 == (3& (word1 >>2))) {
-                ilen += 2;
-                // NYI: 8 bytes or longer
-            }
+        if (!COND(word1)) { // not interesting at all
+            ilen = get_ilen(word1);
+            continue;  // advance to next instr
         }
         int word2 = get_le32(4+ic+b);
         int r_aui = 037& (word2 >> 7);
-        if (!COND(word1)) { // not interesting at all
-            continue;
-        }
         if (CONDu(word2, r_aui)) {
             lastcall = ic;
             ++calls;
@@ -196,7 +217,6 @@ static int U(Filter *f) {
         else {
             ++noncalls;
         }
-        ilen = 8;  // next is after word2
 
         int addr = get_be32(1+ic+b);  // Note BIG_ENDIAN fetch at 1-byte offset
         addr = (~0xff & addr) | ((0x7f& addr) <<1) | (1& (word1 >>7));
@@ -205,6 +225,8 @@ static int U(Filter *f) {
 
         set_le32(0+ic+b, (~0xfff& addr) | (r_aui <<7) | AUIPC);
         set_le32(4+ic+b,    (addr <<20) | ((unsigned)word2 >>12));
+        ilen = 4;  // resume scanning after AUIPC
+
         if (0) { // DEBUG
             char line[100];
             int len = snprintf(line, sizeof(line), "%#6x  %#8.8x %#8.8x  %#8.8x %#8.8x\n",

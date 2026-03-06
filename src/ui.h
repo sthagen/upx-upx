@@ -34,11 +34,9 @@ class PackerBase;
 //
 **************************************************************************/
 
-class UiPacker final {
+class UiPacker /*not_final*/ {
 public:
     explicit noinline UiPacker(const PackerBase *);
-
-public:
     virtual ~UiPacker() noexcept;
 
     static void uiConfirmUpdate();
@@ -72,7 +70,6 @@ protected:
     static void __acc_cdecl progress_callback(upx_callback_t *, unsigned, unsigned);
     virtual void doCallback(unsigned isize, unsigned osize);
 
-protected:
     virtual void uiUpdate(upx_off_t fc_len = -1, upx_off_t fu_len = -1);
 
 public:

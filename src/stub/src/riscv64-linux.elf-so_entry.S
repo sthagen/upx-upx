@@ -2,8 +2,8 @@
 *
 *  This file is part of the UPX executable compressor.
 *
-*  Copyright (C) 1996-2021 Markus Franz Xaver Johannes Oberhumer
-*  Copyright (C) 1996-2021 Laszlo Molnar
+*  Copyright (C) Markus Franz Xaver Johannes Oberhumer
+*  Copyright (C) Laszlo Molnar
 *  Copyright (C) John F. Reiser
 *  All Rights Reserved.
 *
@@ -32,8 +32,6 @@
 NBPW= 8
 #include "arch/riscv/64/macros.S"
 #include "arch/riscv/64/regs.h"
-
-#define DEBUG 1
 
 sz_Elf64_Ehdr = 8*NBPW
 sz_Elf64_Phdr = 7*NBPW
@@ -205,7 +203,7 @@ L360:  // /dev/shm might be restricted to 8KiB at a time!
         li arg6,0  // offset
         lwu arg5,F_MFD(sp)
         li arg4,MAP_PRIVATE
-        li arg3,PROT_WRITE|PROT_EXEC|PROT_READ  // FIXME: add PROT_WRITE for DEBUG only
+        li arg3,PROT_EXEC|PROT_READ  // FIXME: add PROT_WRITE for DEBUG only
         lwu arg2,F_LENU(sp)
         li arg1,0  // (%arg1)dst = 0;  // kernel chooses addr
         syscall __NR_mmap; bgez rv,0f; bkpt; 0:

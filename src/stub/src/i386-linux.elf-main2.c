@@ -750,7 +750,7 @@ ssize_t read(int, void *, size_t);
 **************************************************************************/
 
 void *
-upx_main(  // returns entry address
+upx_main2(  // returns entry address
 /*arg1*/    struct b_info const *const bi  // 1st block header
 /*arg2*/    , size_t const sz_compressed  // total length
 /*arg3*/    , ElfW(Addr) elfaddr  // In: &ElfW(Ehdr) for stub

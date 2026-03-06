@@ -236,8 +236,8 @@ no_pse_env:
         mr a2,r_elfa  // elfaddr
         mr a3,r_auxv  // &Elf32_auxv_t
         la a4,SZ_FRAME(sp)  // &Elf32_Ehdr temporary space
-        call upx_main  // Out: a0= entry
-// entry= upx_main(b_info *a0, total_size a1, Elf32_Ehdr *a2, ELf32_auxv_t *a3,
+        call upx_main2  // Out: a0= entry
+// entry= upx_main2(b_info *a0, total_size a1, Elf32_Ehdr *a2, ELf32_auxv_t *a3,
 //      tmp_ehdr[])
 
         la  sp,SZ_FRAME+OVERHEAD(sp)  // deallocate this frame

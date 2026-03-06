@@ -936,7 +936,7 @@ int Packer::prepareMethods(int *methods, int ph_method, const int *all_methods) 
     return nmethods;
 }
 
-static int prepareFilters(int *filters, int &filter_strategy, const int *all_filters) {
+static noinline int prepareFilters(int *filters, int &filter_strategy, const int *all_filters) {
     int nfilters = 0;
 
     // setup filter filter_strategy

@@ -35,20 +35,13 @@
         lui bits,0x80000  // (1<<31): empty; force refill
         li disp,-1  // initial displacement
 
-#undef  DEBUG_NRV
-#define DEBUG_NRV 0
-#if DEBUG_NRV  //{
-#define LEN_ROV 0x100000
-#define dst0  x31
-#define src0  x30
-#define hi_rov x29
-#define prov  x28
+.if DEBUG_NRV  //{
         mv dst0,dst
         mv src0,src
         mov hi_rov,sp
         li prov,LEN_ROV
         sub prov,sp,prov
-#endif  // DEBUG_NRV }
+.endif  //} DEBUG_NRV
 
         j top_n2b
 

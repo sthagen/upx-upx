@@ -33,8 +33,8 @@
 /* clang-format off */
 
 #define STUB_RISCV64_LINUX_ELF_SO_ENTRY_SIZE    4214
-#define STUB_RISCV64_LINUX_ELF_SO_ENTRY_ADLER32 0x8037d77b
-#define STUB_RISCV64_LINUX_ELF_SO_ENTRY_CRC32   0xed5f1470
+#define STUB_RISCV64_LINUX_ELF_SO_ENTRY_ADLER32 0x0c87d773
+#define STUB_RISCV64_LINUX_ELF_SO_ENTRY_CRC32   0x093bd52b
 
 unsigned char stub_riscv64_linux_elf_so_entry[4214] = {
 /* 0x0000 */ 127, 69, 76, 70,  2,  1,  1,  0,  0,  0,  0,  0,  0,  0,  0,  0,
@@ -69,7 +69,7 @@ unsigned char stub_riscv64_linux_elf_so_entry[4214] = {
 /* 0x01d0 */ 115,  0,  0,  0, 35,184,172,  0,131,182,140,  1, 54,224,  3,230,
 /* 0x01e0 */ 140,  3,138,133,  3,229, 12,  1,147,  8,  0,  4,115,  0,  0,  0,
 /* 0x01f0 */ 170,149,  9,142,117,250,102,129,129, 71,  3,103,  1,  1,137, 70,
-/* 0x0200 */  29, 70,131,101,129,  3,  1, 69,147,  8,224, 13,115,  0,  0,  0,
+/* 0x0200 */  21, 70,131,101,129,  3,  1, 69,147,  8,224, 13,115,  0,  0,  0,
 /* 0x0210 */  99, 83,  5,  0,  2,144, 42,248, 42,135,  3,101,  1,  1,147,  8,
 /* 0x0220 */ 144,  3,115,  0,  0,  0,162,114,130,124, 19,133,194,254,140,  8,
 /* 0x0230 */  69, 97,103,  0,  7,  1,  0,  0,231,135,  2,  0,  0,  0,  0,  0,

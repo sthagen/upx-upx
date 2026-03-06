@@ -243,7 +243,7 @@ r_auxe .req r10
         mov sp,r0
 no_pse_env:
 
-/* Construct arglist for upx_main */
+/* Construct arglist for upx_main2 */
         ldmia sp!,{arg1,arg2,arg3}  @ pop: ADRX, LENX, elfaddr
         stmdb sp!,{arg1,arg2,arg3}  @ put back
         bic arg1,arg1,#unmap_all_pages  // ADRX
@@ -252,7 +252,7 @@ r_elfa .req r9
         //mov arg4,r3  @ auxv
         sub sp,sp,#MAX_ELF_HDR_32 + OVERHEAD  @ alloca
         stmdb sp!,{sp}  // arg5  &tmp_ehdr
-        call upx_main
+        call upx_main2
         add sp,sp,#NBPW  // toss arg5
         add sp,sp,#MAX_ELF_HDR_32 + OVERHEAD  @ un-alloca
         str r0,[sp,#F_ENTR]  @ entry address

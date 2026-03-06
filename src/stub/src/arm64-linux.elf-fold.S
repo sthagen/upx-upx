@@ -102,7 +102,7 @@ wLENC  .req w29  // compressed input
   xLENC  .req x29
 xADRC  .req x28
 
-wLENU  .req w27  // unfolded fold_begin and upx_main
+wLENU  .req w27  // unfolded fold_begin and upx_main2
   xLENU  .req x27
 xADRU  .req x26
 
@@ -260,7 +260,7 @@ no_buf_pse:
         call open; mov wfd,w0
 no_env_pse:
 
-/* Construct arglist for upx_main */
+/* Construct arglist for upx_main2 */
         mov x4,xelfa  // Elf64_Ehdr (reloc if ET_DYN and not pre-link)
           sub sp,sp,#MAX_ELF_HDR_64 + OVERHEAD  // alloca
         mov x3,xauxv  // new &Elf64_auxv_t

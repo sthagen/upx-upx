@@ -3,8 +3,8 @@
 ;
 ;  This file is part of the UPX executable compressor.
 ;
-;  Copyright (C) 1996-2021 Markus Franz Xaver Johannes Oberhumer
-;  Copyright (C) 1996-2021 Laszlo Molnar
+;  Copyright (C) Markus Franz Xaver Johannes Oberhumer
+;  Copyright (C) Laszlo Molnar
 ;  Copyright (C) John F. Reiser
 ;  All Rights Reserved.
 ;

@@ -25,11 +25,43 @@
    <markus@oberhumer.com>               <ezerotven+github@gmail.com>
  */
 
+#if !defined(__has_attribute)
+static constexpr int has_attribute = 0;
+#else
+static constexpr int has_attribute = 1;
+#endif
+#if !defined(__has_builtin)
+static constexpr int has_builtin = 0;
+#else
+static constexpr int has_builtin = 1;
+#endif
+#if !defined(__has_declspec_attribute)
+static constexpr int has_declspec_attribute = 0;
+#else
+static constexpr int has_declspec_attribute = 1;
+#endif
+#if !defined(__has_feature)
+static constexpr int has_feature = 0;
+#else
+static constexpr int has_feature = 1;
+#endif
+#if !defined(__has_include)
+static constexpr int has_include = 0;
+#else
+static constexpr int has_include = 1;
+#endif
+#if !defined(__has_warning)
+static constexpr int has_warning = 0;
+#else
+static constexpr int has_warning = 1;
+#endif
+
 #if defined(_WIN32_WINNT)
 static constexpr long long initial_win32_winnt = _WIN32_WINNT + 0LL;
 #else
 static constexpr long long initial_win32_winnt = 0;
 #endif
+
 #define WANT_WINDOWS_LEAN_H 1 // _WIN32_WINNT
 #include "conf.h"
 #include "compress/compress.h" // upx_ucl_version_string()
@@ -140,6 +172,7 @@ struct PackerNames final {
                 e.filters[e.filters_count++] = *f;
             }
         }
+        assert_noexcept(e.methods_count >= 1);
         upx_gnomesort(e.methods, e.methods_count, sizeof(e.methods[0]), ne32_compare);
         upx_gnomesort(e.filters, e.filters_count, sizeof(e.filters[0]), ne32_compare);
     }
@@ -517,7 +550,7 @@ void show_sysinfo(const char *options_var) {
     // Compilation Flags
     {
         size_t cf_count = 0;
-        auto cf_print = [f, &cf_count](const char *name, const char *fmt, upx_int64_t v,
+        auto cf_print = [f, &cf_count](const char *name, const char *fmt, long long v,
                                        int need_verbose = 2) noexcept {
             if (opt->verbose < need_verbose)
                 return;
@@ -574,6 +607,12 @@ void show_sysinfo(const char *options_var) {
 #if defined(_MSC_FULL_VER)
         cf_print("_MSC_FULL_VER", "%lld", _MSC_FULL_VER + 0);
 #endif
+        cf_print("__has_attribute", "%lld", has_attribute, 3);
+        cf_print("__has_builtin", "%lld", has_builtin, 3);
+        cf_print("__has_declspec_attribute", "%lld", has_declspec_attribute, 3);
+        cf_print("__has_feature", "%lld", has_feature, 3);
+        cf_print("__has_include", "%lld", has_include, 3);
+        cf_print("__has_warning", "%lld", has_warning, 3);
 
         // architecture
 #if defined(__CHERI__)
@@ -673,7 +712,7 @@ void show_sysinfo(const char *options_var) {
                      (int) tmp->tm_min, (int) tmp->tm_sec);
         };
 
-        char s[40];
+        char s[64];
         const time_t t = time(nullptr);
         tm2str(s, sizeof(s), localtime(&t));
         con_fprintf(f, "\n");

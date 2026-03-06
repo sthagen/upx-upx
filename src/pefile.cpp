@@ -71,8 +71,10 @@ static void xcheck(const void *p, size_t plen, const void *b, size_t blen) may_t
 PeFile::PeFile(InputFile *f) : super(f) {
     bele = &N_BELE_RTP::le_policy;
     COMPILE_TIME_ASSERT(sizeof(ddirs_t) == 8)
+    COMPILE_TIME_ASSERT(sizeof(import_desc) == 20)
     COMPILE_TIME_ASSERT(sizeof(pe_section_t) == 40)
     COMPILE_TIME_ASSERT_ALIGNED1(ddirs_t)
+    COMPILE_TIME_ASSERT_ALIGNED1(import_desc)
     COMPILE_TIME_ASSERT_ALIGNED1(pe_section_t)
     COMPILE_TIME_ASSERT(RT_LAST == TABLESIZE(opt->win32_pe.compress_rt))
 
@@ -2557,6 +2559,9 @@ void PeFile::pack0(OutputFile *fo, ht &ih, ht &oh, unsigned subsystem_mask,
     ic += soloadconf;
 
     if (dbgCET) {
+        int delta = ic - dbgCET->rva;
+        dbgCET->rva = ic;
+        dbgCET->fpos += delta;
         ODADDR(PEDIR_DEBUG) = ic;
         ODSIZE(PEDIR_DEBUG) = sizeof(*dbgCET);
         ic += sizeof(LE32) + ODSIZE(PEDIR_DEBUG);
@@ -2709,7 +2714,7 @@ void PeFile::pack0(OutputFile *fo, ht &ih, ht &oh, unsigned subsystem_mask,
     if (dbgCET) {
         ic = fo->getBytesWritten();
         dbgCET->fpos = ic + sizeof(*dbgCET);
-        dbgCET->rva = rvamin + 0x400 + dbgCET->fpos; // 0x400 => soheaders
+        dbgCET->rva = osection[1].vaddr + dbgCET->fpos - osection[1].rawdataptr;
         LE32 word;
         set_le32(&word, IMAGE_DLLCHARACTERISTICS_EX_CET_COMPAT);
         if (0) { // set all bytes t0 zero

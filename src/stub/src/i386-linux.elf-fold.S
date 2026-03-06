@@ -219,7 +219,7 @@ no_env_pse:
         push ebp  // elfaddr
         push esi  // LENX total size
         push eax  // ADRX &b_info
-        call upx_main  // returns entry address
+        call upx_main2  // returns entry address
           // leave 5 params on stack until de-alloca below
         mov esi,eax  // esi= entry;  edi= auxv; ebp= elfaddr
 

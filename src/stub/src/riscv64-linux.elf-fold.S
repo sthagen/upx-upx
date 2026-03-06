@@ -249,8 +249,6 @@ sz_Phdr= 7*NBPW
 p_memsz= 5*NBPW
 // Discard pages of compressed data (includes [ADRX,+LENX) )
         //cmpw $ET_EXEC, e_type(%r13); jne 0f
-    ebreak  // brk() debug
-    li arg1, 0  // snooping ONLY!
         mv arg1,s1; call brk  // also sets the brk
 0:
         ld arg2,p_memsz+sz_Phdr+sz_Ehdr(s1)  #   Phdr[C_TEXT= 1].p_memsz

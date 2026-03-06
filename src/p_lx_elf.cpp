@@ -566,6 +566,14 @@ enum { // ordinals in ELFxx_Phdr[] of compressed output
     , C_NOTE = 2  // PT_NOTE copied from input
     , C_GSTK = 3  // PT_GNU_STACK; will be 2 if no PT_NOTE
 };
+// For a shared library, then the system runtime linker rtld (ld-linux)
+// must see PT_DYNAMIC for DT_NEEDED, DT_INIT, DT_STRTAB, DT_SYMTAB, etc.
+// This is because de-compression happens *after* linker processing.
+// So everything below xct_off must appear in the output.
+// On MIPS, even a main program must present PT_MIPS_ABIFLAGS and
+// PT_MIPS_REGINFO so that qemu can choose the correct floating-point
+// emulation.
+// It seems that only PT_INTERP and PT_ARM_EXIDX can be elided?
 
 off_t PackLinuxElf32::pack3(OutputFile *fo, Filter &ft)
 {
@@ -1280,38 +1288,27 @@ void PackLinuxElf64::patchLoader()
 {
 }
 
-void PackLinuxElf32::ARM_updateLoader(OutputFile * /*fo*/)
-{
-    set_te32(&elfout.ehdr.e_entry, sz_pack2 +
-        linker->getSymbolOffset("_start") +
-        get_te32(&elfout.phdr[C_TEXT].p_vaddr));
-}
-
-void PackLinuxElf32armLe::updateLoader(OutputFile *fo)
-{
-    ARM_updateLoader(fo);
-}
-
-void PackLinuxElf32armBe::updateLoader(OutputFile *fo)
-{
-    ARM_updateLoader(fo);
-}
-
-void PackLinuxElf32mipsel::updateLoader(OutputFile *fo)
-{
-    ARM_updateLoader(fo);  // not ARM specific; (no 32-bit immediates)
-}
-
-void PackLinuxElf32mipseb::updateLoader(OutputFile *fo)
-{
-    ARM_updateLoader(fo);  // not ARM specific; (no 32-bit immediates)
-}
-
-void PackLinuxElf32::updateLoader(OutputFile * /*fo*/)
+void PackLinuxElf32::updateLoader(OutputFile *fo)
 {
     unsigned start = linker->getSymbolOffset("_start");
-    unsigned vbase = get_te32(&elfout.phdr[C_TEXT].p_vaddr);
-    set_te32(&elfout.ehdr.e_entry, start + sz_pack2 + vbase);
+    cprElfHdr4 *eho = !xct_off
+            ? (cprElfHdr4 *)(void *)&elfout  // not shlib  FIXME: ugly casting
+            : (cprElfHdr4 *)lowmem.getVoidPtr();  // shlib
+    unsigned vbase = 0;
+    for (unsigned j = 0; j < e_phnum; ++j)
+        if (is_LOAD(&eho->phdr[j])) {
+            vbase = get_te32(&eho->phdr[j].p_vaddr);
+            break;
+        }
+    set_te32(&eho->ehdr.e_entry, start + sz_pack2 + vbase);
+    if (user_init_off < xct_off) { // such as MIPS shlib PT_DYNAMIC DT_INIT
+        set_te32(&lowmem[user_init_off], start + sz_pack2 + vbase);
+        if (fo) {
+            fo->seek(user_init_off, SEEK_SET);
+            fo->rewrite(&lowmem[user_init_off], sizeof(int));
+            fo->seek(0, SEEK_END);
+        }
+    }
 }
 
 void PackLinuxElf64::updateLoader(OutputFile * /*fo*/)
@@ -1547,8 +1544,12 @@ PackLinuxElf32::buildLinuxLoader(
   if (0 < szfold) {
     if (xct_off // shlib
       && (  this->e_machine==Elf32_Ehdr::EM_ARM
+         || this->e_machine==Elf32_Ehdr::EM_MIPS
          || this->e_machine==Elf32_Ehdr::EM_386)
     ) {
+        NO_printf("\n\nbuildLinuxLoader  proto=(%p  %#x)  fold=(%p  %#x)\n",
+            proto, szproto, fold, szfold);
+        NO_printf("shlib  initLoader  %p  %#x\n", fold, szfold);
         initLoader(this->e_machine, fold, szfold);
 // Typical layout of 'sections' in compressed stub code for shared library:
 //   SO_HEAD
@@ -1580,8 +1581,8 @@ PackLinuxElf32::buildLinuxLoader(
         len += snprintf(&sec[len], sizeof(sec) - len, ",%s", "EXP_TAIL");
         // End of daisy-chain fall-through.
 
-        // MIPS directly calls memfd_create
-        if (this->e_machine != Elf32_Ehdr::EM_MIPS) {
+        // $(ARCH)-linux.elf-so_main2.c calls upx_mmap_and_fd.
+        if (1 || this->e_machine != Elf32_Ehdr::EM_MIPS) {
             len += snprintf(&sec[len], sizeof(sec) - len, ",%s",
                 (sec_arm_attr || is_asl)
                     ? "HUMF_A,UMF_ANDROID"
@@ -1592,7 +1593,7 @@ PackLinuxElf32::buildLinuxLoader(
         }
         len += snprintf(&sec[len], sizeof(sec) - len, ",%s", "SO_TAIL,SO_MAIN");
         (void)len;  // Pacify the anal-retentive static analyzer which hates a good idiom.
-        NO_printf("\n%s\n", sec);
+        NO_printf("\n\n%s\n", sec);
         addLoader(sec, nullptr);
         relocateLoader();
         {
@@ -1609,6 +1610,7 @@ PackLinuxElf32::buildLinuxLoader(
          ||  this->e_machine==Elf32_Ehdr::EM_PPC
          ||  this->e_machine==Elf32_Ehdr::EM_MIPS
          ) { // main program with ELF2 de-compressor (folded portion)
+        NO_printf("entry fold (ELF2) initLoader  %p  %#x\n", fold, szfold);
         initLoader(this->e_machine, fold, szfold);
         char sec[200]; memset(sec, 0, sizeof(sec));  // debug convenience
         int len = 0;
@@ -1629,11 +1631,14 @@ PackLinuxElf32::buildLinuxLoader(
         }
         len += snprintf(&sec[len], sizeof(sec) - len, ",%s", "EXP_TAIL");
 
-        // $ARCH-linux.elf-main2.c calls upx_mmap_and_fd, not direct memfd_create
-        len += snprintf(&sec[len], sizeof(sec) - len, ",%s",
-            (sec_arm_attr || is_asl)
-                ? "HUMF_A,UMF_ANDROID"
-                : "HUMF_L,UMF_LINUX");
+        // $ARCH-linux.elf-main2.c calls upx_mmap_and_fd.
+        // So this still is needed even if no Android.
+        if (1 || this->e_machine != Elf32_Ehdr::EM_MIPS) {
+            len += snprintf(&sec[len], sizeof(sec) - len, ",%s",
+                (sec_arm_attr || is_asl)
+                    ? "HUMF_A,UMF_ANDROID"
+                    : "HUMF_L,UMF_LINUX");
+        }
         if (hasLoaderSection("SYSCALLS")) {
             len += snprintf(&sec[len], sizeof(sec) - len, ",%s", "SYSCALLS");
         }
@@ -1677,12 +1682,21 @@ PackLinuxElf32::buildLinuxLoader(
         h.sz_cpr = sz_cpr;  // actual length used
         if (r != UPX_E_OK || h.sz_cpr >= h.sz_unc)
             throwInternalError("loader compression failed");
+        MemBuffer mb_uncLoader(10 + sz_unc);
+        unsigned unc_len = sz_unc;
+        r = upx_decompress(sizeof(h) + cprLoader, sz_cpr,
+            (unsigned char *)mb_uncLoader, &unc_len, method, nullptr);
+        if (r != UPX_E_OK)
+            throwInternalError("header compression failed");
+        if (0 && memcmp((unsigned char *)mb_uncLoader, uncLoader, sz_unc))
+            throwInternalError("data error in header compression");
     }
     set_te32(&h.sz_cpr, h.sz_cpr);
     set_te32(&h.sz_unc, h.sz_unc);
     memcpy(cprLoader, &h, sizeof(h)); // cprLoader will become FOLDEXEC
   }  // end (0 < szfold)
 
+    NO_printf("main proto initLoader  %p  %#x\n", proto, szproto);
     initLoader(this->e_machine, proto, szproto, -1, sz_cpr);
     NO_printf("FOLDEXEC unc=%#x  cpr=%#x\n", sz_unc, sz_cpr);
     linker->addSection("FOLDEXEC", mb_cprLoader, sizeof(b_info) + sz_cpr, 0);
@@ -1695,9 +1709,11 @@ PackLinuxElf32::buildLinuxLoader(
           )
     ) { // shlib with ELF2 de-compressor
         addLoader("ELFMAINX");
-        addLoader((sec_arm_attr || is_asl)
-            ? "HUMF_A,UMF_ANDROID"
-            : "HUMF_L,UMF_LINUX");
+        if (1 || this->e_machine != Elf32_Ehdr::EM_MIPS) {
+            addLoader((sec_arm_attr || is_asl)
+                ? "HUMF_A,UMF_ANDROID"
+                : "HUMF_L,UMF_LINUX");
+        }
         addLoader("ELFMAINZ,FOLDEXEC,IDENTSTR");
     }
     else if (this->e_machine==Elf32_Ehdr::EM_NONE
@@ -1730,7 +1746,7 @@ PackLinuxElf32::buildLinuxLoader(
     relocateLoader();
 }
 
-unsigned bb1;  // aid for possible debugging NRV/UCL
+// unsigned bb1;  // aid for possible debugging NRV/UCL
 
 void
 PackLinuxElf64::buildLinuxLoader(
@@ -2134,6 +2150,10 @@ static const CLANG_FORMAT_DUMMY_STATEMENT
 static const CLANG_FORMAT_DUMMY_STATEMENT
 #include "stub/mipsel.r3000-linux.elf-fold.h"
 static const CLANG_FORMAT_DUMMY_STATEMENT
+#include "stub/mipsel.r3000-linux.elf-so_entry.h"
+static const CLANG_FORMAT_DUMMY_STATEMENT
+#include "stub/mipsel.r3000-linux.elf-so_fold.h"
+static const CLANG_FORMAT_DUMMY_STATEMENT
 #include "stub/mipsel.r3000-linux.shlib-init.h"
 
 void
@@ -2141,8 +2161,8 @@ PackLinuxElf32mipsel::buildLoader(Filter const *ft)
 {
     if (0!=xct_off) {  // shared library
         buildLinuxLoader(
-            stub_mipsel_r3000_linux_shlib_init, sizeof(stub_mipsel_r3000_linux_shlib_init),
-            nullptr,                        0,                                 ft );
+            stub_mipsel_r3000_linux_elf_so_entry, sizeof(stub_mipsel_r3000_linux_elf_so_entry),
+            stub_mipsel_r3000_linux_elf_so_fold,  sizeof(stub_mipsel_r3000_linux_elf_so_fold), ft );
         return;
     }
     buildLinuxLoader(
@@ -3399,9 +3419,8 @@ tribool PackLinuxElf32::canPack()
                     opt->info_mode--;
                 }
             }
-            if (Elf32_Ehdr::EM_MIPS == get_te16(&ehdr->e_machine)
-            ||  Elf32_Ehdr::EM_PPC  == get_te16(&ehdr->e_machine)) {
-                throwCantPack("This test UPX cannot pack .so for MIPS or PowerPC; coming soon.");
+            if (Elf32_Ehdr::EM_PPC  == get_te16(&ehdr->e_machine)) {
+                throwCantPack("This test UPX cannot pack .so for PowerPC; coming soon.");
             }
             xct_va = ~(upx_uint64_t)0;
             if (e_shnum) {
@@ -5573,7 +5592,8 @@ int PackLinuxElf32::pack2_shlib(OutputFile *fo, Filter &ft, unsigned pre_xct_top
             else {
                 fo->write(&lowmem[p_offset], sz_elf_hdrs);  total_out += sz_elf_hdrs;
                 total_in  += sz_elf_hdrs;
-                fo->seek(sz_phdrx, SEEK_CUR);  total_out += sz_phdrx;  // leave space
+                if (e_phnum < (2+ n_phdrx))  // C_BASE, C_TEXT, others
+                    throwInternalError("too many Phdr");
 
                 // Compare PackUnix::packExtent, especially "if (u_len)" .
                 //
@@ -5582,6 +5602,8 @@ int PackLinuxElf32::pack2_shlib(OutputFile *fo, Filter &ft, unsigned pre_xct_top
                 if (sz_elf_hdrs < hi_offset) {
                     // Loader tables in first PT_LOAD, and below xct_off.
                     //
+                    if (user_init_off < hi_offset)  // MIPS in particular
+                        set_te32(&lowmem[user_init_off], user_init_va);
                     fo->write(&lowmem[sz_elf_hdrs], hi_offset - sz_elf_hdrs);  total_out += hi_offset - sz_elf_hdrs;
                     total_in  += hi_offset - sz_elf_hdrs;
                     Elf32_Phdr *lo_phdr = k + (Elf32_Phdr *)(1+ (Elf32_Ehdr *)&lowmem[0]);

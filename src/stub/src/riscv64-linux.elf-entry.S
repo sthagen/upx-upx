@@ -145,14 +145,14 @@ _start: .globl _start
         li arg2,MFD_EXEC  // flags
         syscall __NR_memfd_create
         bgez a0,9f  // success
-            // failure, so try /dev/mem
+            // failure, so try /dev/shm
 O_RDWR= 2
 O_DIRECTORY= 0200000  // 0x010000
 O_TMPFILE= 020000000  // 0x400000
         li arg4,0700  // mode
         li arg3,O_RDWR | O_TMPFILE | O_DIRECTORY
         jal arg2,0f
-        .ascii "/dev/mem"; .int 0  // .balign causes problems
+        .ascii "/dev/shm"; .int 0  // .balign causes problems
 0:
         li arg1,FD_CWD
         syscall __NR_openat

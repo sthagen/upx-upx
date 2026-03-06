@@ -152,7 +152,6 @@ protected:
     // These ARM routines are essentially common to big/little endian,
     // but the class hierarchy splits after this class.
     virtual void ARM_defineSymbols(Filter const *ft);
-    virtual void ARM_updateLoader(OutputFile *);
     virtual int  ARM_is_QNX(void);
 
     virtual upx_uint64_t canPack_Shdr(Elf32_Phdr const *pload_x0);
@@ -739,7 +738,6 @@ protected:
     virtual Linker* newLinker() const override;
     virtual void pack1(OutputFile *, Filter &) override;  // generate executable header
     virtual void buildLoader(const Filter *) override;
-    virtual void updateLoader(OutputFile *) override;
     virtual void defineSymbols(Filter const *) override;
 };
 
@@ -759,7 +757,6 @@ protected:
     virtual Linker* newLinker() const override;
     virtual void pack1(OutputFile *, Filter &) override;  // generate executable header
     virtual void buildLoader(const Filter *) override;
-    virtual void updateLoader(OutputFile *) override;
     virtual void defineSymbols(Filter const *) override;
 };
 
@@ -778,7 +775,6 @@ protected:
     virtual Linker* newLinker() const override;
     virtual void pack1(OutputFile *, Filter &) override;  // generate executable header
     virtual void buildLoader(const Filter *) override;
-    virtual void updateLoader(OutputFile *) override;
     virtual void defineSymbols(Filter const *) override;
 };
 
@@ -797,7 +793,6 @@ protected:
     virtual Linker* newLinker() const override;
     virtual void pack1(OutputFile *, Filter &) override;  // generate executable header
     virtual void buildLoader(const Filter *) override;
-    virtual void updateLoader(OutputFile *) override;
     virtual void defineSymbols(Filter const *) override;
 };
 
