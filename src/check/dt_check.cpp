@@ -266,6 +266,22 @@ ASSERT_SAME_TYPE(unsigned, upx_uint32_t);
 ASSERT_SAME_TYPE(long long, upx_int64_t);
 ASSERT_SAME_TYPE(unsigned long long, upx_uint64_t);
 #endif
+static_assert(sizeof(upx_int8_t) == 1, "");
+static_assert(sizeof(upx_uint8_t) == 1, "");
+static_assert(sizeof(upx_int16_t) == 2, "");
+static_assert(sizeof(upx_uint16_t) == 2, "");
+static_assert(sizeof(upx_int32_t) == 4, "");
+static_assert(sizeof(upx_uint32_t) == 4, "");
+static_assert(sizeof(upx_int64_t) == 8, "");
+static_assert(sizeof(upx_uint64_t) == 8, "");
+static_assert(alignof(upx_int8_t) == 1, "");
+static_assert(alignof(upx_uint8_t) == 1, "");
+static_assert(alignof(upx_int16_t) >= 1, "");
+static_assert(alignof(upx_uint16_t) >= 1, "");
+static_assert(alignof(upx_int32_t) >= 1, "");
+static_assert(alignof(upx_uint32_t) >= 1, "");
+static_assert(alignof(upx_int64_t) >= 1, "");
+static_assert(alignof(upx_uint64_t) >= 1, "");
 
 /*************************************************************************
 // compile-time checks
@@ -692,9 +708,9 @@ struct CheckTypePair {
     static_assert(std::is_integral_v<A>);
     static_assert(std::is_integral_v<B>);
     static_assert(std::is_signed_v<A>);
+    static_assert(!std::is_signed_v<B>);
     static_assert(!std::is_unsigned_v<A>);
     static_assert(std::is_unsigned_v<B>);
-    static_assert(!std::is_signed_v<B>);
     static_assert(std::is_same_v<A, std::make_signed_t<A> >);
     static_assert(std::is_same_v<A, std::make_signed_t<B> >);
     static_assert(std::is_same_v<B, std::make_unsigned_t<A> >);
@@ -951,10 +967,11 @@ void upx_compiler_sanity_check() noexcept {
     CHECK_TYPE(upx_int128_t);
     CHECK_TYPE(upx_uint128_t);
 #endif
-    CHECK_TYPE(upx_ptraddr_t);
-    CHECK_TYPE(upx_uintptr_t);
+    CHECK_TYPE(upx_off_t);
     CHECK_TYPE(upx_uptrdiff_t);
     CHECK_TYPE(upx_ssize_t);
+    CHECK_TYPE(upx_ptraddr_t);
+    CHECK_TYPE(upx_uintptr_t);
 #undef CHECK_TYPE
 
     CheckIntegral<char>::check();
@@ -978,12 +995,19 @@ void upx_compiler_sanity_check() noexcept {
     CheckIntegral<upx_uint32_t>::check();
     CheckIntegral<upx_int64_t>::check();
     CheckIntegral<upx_uint64_t>::check();
+#if (__SIZEOF_INT128__ == 16)
+#if defined(_CPP_VER) || defined(_WIN32) // int128 is not fully supported by MSVC libstdc++ yet
+#else
+    CheckIntegral<upx_int128_t>::check();
+    CheckIntegral<upx_uint128_t>::check();
+#endif
+#endif
     CheckIntegral<upx_off_t>::check();
     CheckIntegral<ptrdiff_t>::check();
+    CheckIntegral<upx_uptrdiff_t>::check();
+    CheckIntegral<upx_ssize_t>::check();
     CheckIntegral<size_t>::check();
     CheckIntegral<upx_ptraddr_t>::check();
-    CheckIntegral<upx_ssize_t>::check();
-    CheckIntegral<upx_uptrdiff_t>::check();
 #if defined(__CHERI__) && defined(__CHERI_PURE_CAPABILITY__)
     static_assert(sizeof(upx_ptraddr_t) == 8);
     static_assert(alignof(upx_ptraddr_t) == 8);
@@ -999,13 +1023,6 @@ void upx_compiler_sanity_check() noexcept {
     CheckIntegral<intptr_t>::check();
     CheckIntegral<uintptr_t>::check();
     CheckIntegral<upx_uintptr_t>::check();
-#endif
-#if (__SIZEOF_INT128__ == 16)
-#if defined(_CPP_VER) || defined(_WIN32) // int128 is not fully supported by MSVC libstdc++ yet
-#else
-    CheckIntegral<upx_int128_t>::check();
-    CheckIntegral<upx_uint128_t>::check();
-#endif
 #endif
 
     CheckSignedness<char, false>::check(); // -funsigned-char

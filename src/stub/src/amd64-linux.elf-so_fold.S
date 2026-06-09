@@ -1,6 +1,6 @@
 #include "arch/amd64/regs.h"
 #include "arch/amd64/macros.S"
-#include "MAX_ELF_HDR.S"
+#include "../../MAX_ELF_HDR.h"
 NBPW= 8
 
 #ifndef DEBUG  //{

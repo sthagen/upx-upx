@@ -100,7 +100,7 @@ static const char header_line2[] = "   --------------------   ------   ---------
 
 static const char progress_filler[4 + 1] = ".*[]";
 
-static void init_global_constants(void) noexcept {
+static noinline void init_global_constants() noexcept {
 #if 0 && (ACC_OS_DOS16 || ACC_OS_DOS32)
     // FIXME: should test codepage here
 

@@ -41,7 +41,7 @@
 // it at an address different from it load address:  there must be no
 // static data, and no string constants.
 
-#include "MAX_ELF_HDR.c"
+#include "../../MAX_ELF_HDR.h"
 
 
 /*************************************************************************

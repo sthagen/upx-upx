@@ -28,7 +28,7 @@
 //
 
 #include "arch/arm64/v8/macros.S"
-#include "MAX_ELF_HDR.S"
+#include "../../MAX_ELF_HDR.h"
 NBPW= 8
 #define bkpt brk #0
 

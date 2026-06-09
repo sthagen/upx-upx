@@ -125,9 +125,18 @@ public:
         return assign(Self(other));
     }
 
+    // subtraction - ptrdiff_t
+    template <class U>
+    XSPAN_REQUIRES_CONVERTIBLE_R(ptrdiff_t)
+    operator-(const CSelf<U> &other) const {
+        assertInvariants();
+        other.assertInvariants();
+        return check_ptrdiff(ptr, other.ptr);
+    }
+
     // cast to a different type (creates a new value)
     template <class U>
-    inline CSelf<U> type_cast() const {
+    CSelf<U> type_cast() const {
         typedef CSelf<U> R;
         typedef typename R::pointer rpointer;
         return R(upx::ptr_static_cast<rpointer>(ptr));
@@ -201,6 +210,7 @@ private:
     static forceinline pointer check_deref(pointer p) noexcept { return p; }
     static forceinline pointer check_deref(pointer p, ptrdiff_t n) noexcept { return p + n; }
     static forceinline pointer check_add(pointer p, ptrdiff_t n) noexcept { return p + n; }
+    static forceinline ptrdiff_t check_ptrdiff(pointer a, pointer b) noexcept { return a - b; }
 
     // disable taking the address => force passing by reference
     // [I'm not too sure about this design decision, but we can always allow it if needed]
@@ -233,7 +243,7 @@ inline typename Ptr<T>::pointer raw_index_bytes(const Ptr<T> &a, size_t index,
                                                 size_t size_in_bytes) {
     typedef typename Ptr<T>::element_type element_type;
     if very_unlikely (a.raw_ptr() == nullptr)
-        throwInternalError("raw_index_bytes unexpected NULL ptr");
+        throwCantPack("raw_index_bytes unexpected NULL ptr");
     return a.raw_bytes(mem_size(sizeof(element_type), index, size_in_bytes)) + index;
 }
 

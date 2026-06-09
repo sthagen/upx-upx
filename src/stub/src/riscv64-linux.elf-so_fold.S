@@ -37,7 +37,7 @@ NBPW= 8
 #define arg7 a6
 #define call jal
 
-#include "MAX_ELF_HDR.S"
+#include "../../MAX_ELF_HDR.h"
 
 MAP_ANONYMOUS= 0x20
 MAP_PRIVATE=   0x02
@@ -112,10 +112,12 @@ fold:  // enter here (arg1= &so_info; arg2= &{argc,argv,envp,lr}
 //  LENU: MATCH_10  len unfolded_code
 //  s0,s1: ABI saved registers
 //  MATCH_00  argc,argv,envp,ra
-        addi sp,sp,-MAX_ELF_HDR_64; mv arg3,sp  // space for Elf64_Ehdr and Elf64_Phdrs
+        li arg3,MAX_ELF_HDR_64 >> 8; sll arg3,arg3,8
+        sub sp,sp,arg3; mv arg3,sp  // space for Elf64_Ehdr and Elf64_Phdrs
 .globl upx_so_main
         call upx_so_main  // (&so_info, &argc, elf_tmp); returns &escape_hatch
-        addi sp,sp, MAX_ELF_HDR_64
+        li arg3,MAX_ELF_HDR_64 >> 8; sll arg3,arg3,8
+        add sp,sp,arg3
         mv   arg3,arg1  // save &escape_hatch
         POP4 arg1,arg2,s0,s1  // F_ADRU, F_LENU  (unfolded region); ABI
         li a7,__NR_munmap

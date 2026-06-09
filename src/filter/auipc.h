@@ -89,7 +89,7 @@ static int get_ilen(int w)  // instruction length in bytes
     int ilen = 2;
     if (3 == (3& (w >>0))) {
         ilen += 2;
-        if (3 == (3& (w >>2))) {
+        if (7 == (7& (w >>2))) {
             ilen += 2;
             // NYI: 8 bytes or longer
         }

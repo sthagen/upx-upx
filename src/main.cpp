@@ -27,6 +27,7 @@
 
 // main entry, mostly boring stuff; see work.cpp for actual action
 
+#define WANT_WINDOWS_LEAN_H 1
 #include "conf.h"
 #include "packer.h"            // Packer::isValidCompressionMethod()
 #include "p_elf.h"             // ELFOSABI_xxx
@@ -105,40 +106,45 @@ static bool set_eec(int ec, int *eec) {
 
 bool main_set_exit_code(int ec) { return set_eec(ec, &exit_code); }
 
-static noinline void e_exit(int ec) {
+static noreturn void e_exit(int ec) {
     if (opt->debug.getopt_throw_instead_of_exit)
         throw ec;
     (void) main_set_exit_code(ec);
     do_exit();
 }
 
-static noinline void e_usage() {
+static noreturn void e_usage() {
     if (opt->debug.getopt_throw_instead_of_exit)
         throw EXIT_USAGE;
     show_usage();
     e_exit(EXIT_USAGE);
 }
 
-static void e_method(int m, int l) {
+static noreturn void e_method(int m, int l) {
     fflush(con_term);
     fprintf(stderr, "%s: illegal method option -- %d/%d\n", argv0, m, l);
     e_usage();
 }
 
-static void e_optarg(const char *n) {
+static noreturn void e_optarg(const char *n) {
     fflush(con_term);
     fprintf(stderr, "%s: invalid argument in option '%s'\n", argv0, n);
     e_exit(EXIT_USAGE);
 }
 
-static void e_optval(const char *n) {
+static noreturn void e_optval(const char *n) {
     fflush(con_term);
     fprintf(stderr, "%s: invalid value for option '%s'\n", argv0, n);
     e_exit(EXIT_USAGE);
 }
 
+static noreturn void e_help() {
+    show_help(0);
+    e_exit(EXIT_USAGE);
+}
+
 #if defined(OPTIONS_VAR)
-static void e_envopt(const char *n) {
+static noreturn void e_envopt(const char *n) {
     fflush(con_term);
     if (n)
         fprintf(stderr, "%s: invalid string '%s' in environment variable '%s'\n", argv0, n,
@@ -160,7 +166,7 @@ static void check_not_both(bool e1, bool e2, const char *c1, const char *c2) {
     }
 }
 
-static void check_and_update_options(int i, int argc) {
+static noinline void check_and_update_options(int i, int argc) {
     assert(i <= argc);
 
     if (opt->cmd != CMD_COMPRESS) {
@@ -213,11 +219,6 @@ static void check_and_update_options(int i, int argc) {
 /*************************************************************************
 // misc
 **************************************************************************/
-
-static void e_help() {
-    show_help(0);
-    e_exit(EXIT_USAGE);
-}
 
 static void set_term(FILE *f) {
     if (f != nullptr)
@@ -284,9 +285,8 @@ static char *prepare_shortopts(char *buf, const char *n, const struct mfx_option
 #endif
 #if 0
         static char vopts[1024];
-        if (v > 0 && v < 1024)
-        {
-            if (vopts[v] && strchr(buf,v) == nullptr)
+        if (v > 0 && v < 1024) {
+            if (vopts[v] && strchr(buf, v) == nullptr)
                 printf("warning: duplicate option %d ('%c')!\n", v, v & 127);
             vopts[v] = 1;
         }
@@ -349,13 +349,11 @@ static int getoptvar(upx::OptVar<T, default_value, min_value, max_value> *var,
     return r;
 }
 
-static int do_option(int optc, const char *arg) {
-    int i = 0;
-
+static noinline int do_option(int optc, const char *arg) {
     switch (optc) {
 #if 0
     // FIXME: to_stdout doesn't work because of console code mess
-    //case 'c':
+    // case 'c':
     case 517:
         opt->to_stdout = true;
         break;
@@ -811,7 +809,6 @@ static int do_option(int optc, const char *arg) {
         return -3;
     }
 
-    UNUSED(i);
     return 0;
 }
 
@@ -1104,6 +1101,7 @@ void main_get_envoptions() {
     assert_noexcept(env != nullptr);
     if (env == nullptr)
         return;
+    const auto env_deleter = upx::MallocDeleter(&env, 1); // don't leak memory
 
     /* count arguments */
     for (p = env, targc = 1;;) {
@@ -1120,12 +1118,13 @@ void main_get_envoptions() {
     }
 
     /* alloc temp argv */
-    if (targc > 1)
+    if (targc > 1) {
         targv = (const char **) upx_calloc(targc + 1, sizeof(char *));
-    if (targv == nullptr) {
-        ::free(env);
-        return;
+        assert_noexcept(targv != nullptr);
     }
+    if (targv == nullptr)
+        return;
+    const auto targv_deleter = upx::MallocDeleter(&targv, 1); // don't leak memory
 
     /* fill temp argv */
     targv[0] = argv0;
@@ -1160,14 +1159,10 @@ void main_get_envoptions() {
 
     if (mfx_optind < targc)
         e_envopt(targv[mfx_optind]);
-
-    /* clean up */
-    ::free(targv); // NOLINT(bugprone-multi-level-implicit-pointer-conversion)
-    ::free(env);
 #endif /* defined(OPTIONS_VAR) */
 }
 
-static void first_options(int argc, char **argv) {
+static noinline void first_options(int argc, char **argv) {
     int i;
     int n = argc;
 
@@ -1318,10 +1313,10 @@ int upx_main(int argc, char *argv[]) may_throw {
             e_usage();
     }
 
-    /* start work */
+    /* start work; see work.cpp */
     set_term(stdout);
     if (do_files(i, argc, argv) != 0) {
-        assert(exit_code != 0);
+        assert_noexcept(exit_code != 0);
         return exit_code;
     }
 

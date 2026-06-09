@@ -205,7 +205,7 @@ protected:
     bool use_clear_dirty_stack = true;
     bool use_stub_relocs = true;
 
-    static unsigned virta2objnum(unsigned, SPAN_0(pe_section_t), unsigned);
+    static unsigned virta2objnum(unsigned, SPAN_0(const pe_section_t), unsigned);
     unsigned tryremove(unsigned, unsigned);
 
     enum {

@@ -984,13 +984,13 @@ inline bele_constexpr T align_down(const LE32 &a, const T &b) noexcept {
 }
 
 REQUIRE_UINT32
-inline bele_constexpr T align_up(const T &a, const LE32 &b) noexcept { return align_up(a, T(b)); }
-REQUIRE_UINT32
-inline bele_constexpr T align_up(const LE32 &a, const T &b) noexcept { return align_up(T(a), b); }
-REQUIRE_UINT32
 inline bele_constexpr T align_up(const T &a, const BE32 &b) noexcept { return align_up(a, T(b)); }
 REQUIRE_UINT32
 inline bele_constexpr T align_up(const BE32 &a, const T &b) noexcept { return align_up(T(a), b); }
+REQUIRE_UINT32
+inline bele_constexpr T align_up(const T &a, const LE32 &b) noexcept { return align_up(a, T(b)); }
+REQUIRE_UINT32
+inline bele_constexpr T align_up(const LE32 &a, const T &b) noexcept { return align_up(T(a), b); }
 
 REQUIRE_UINT32
 inline bele_constexpr T min(const T &a, const BE16 &b) noexcept { return min(a, T(b)); }

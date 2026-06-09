@@ -62,9 +62,8 @@ PATH_MAX= 4096
 #define TRACE_REGS r0-r12,r14,r15
 #endif  /*}*/
 
-#define OVERHEAD 2048
 #define call bl
-#include "MAX_ELF_HDR.S"
+#include "../../MAX_ELF_HDR.h"
 
 arg1  .req r0
 arg2  .req r1
@@ -250,11 +249,11 @@ no_pse_env:
 r_elfa .req r9
         mov r_elfa,arg3  // save elfaddr
         //mov arg4,r3  @ auxv
-        sub sp,sp,#MAX_ELF_HDR_32 + OVERHEAD  @ alloca
+        sub sp,sp,#MAX_ELF_HDR_32  @ alloca
         stmdb sp!,{sp}  // arg5  &tmp_ehdr
         call upx_main2
         add sp,sp,#NBPW  // toss arg5
-        add sp,sp,#MAX_ELF_HDR_32 + OVERHEAD  @ un-alloca
+        add sp,sp,#MAX_ELF_HDR_32  @ un-alloca
         str r0,[sp,#F_ENTR]  @ entry address
 
         adr lr,0f; ldr pc,[sp,#F_SEGV]  // cancel_sigsegv

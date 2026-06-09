@@ -30,6 +30,7 @@
 NBPW= 8
 #include "arch/riscv/64/macros.S"
 #include "arch/riscv/64/regs.h"
+#include "../../MAX_ELF_HDR.h"
 
 PATH_MAX= 4096  // /usr/include/linux/limits.h
 
@@ -47,8 +48,6 @@ PROT_READ=     0x1
 
 O_RDONLY=       0
 FD_CWD= -100
-
-OVERHEAD=2048
 
 /* 64-bit mode only! */
 __NR_brk=       214
@@ -222,8 +221,9 @@ no_PSE:
         andi ta,arg5,is_ptinterp; or arg4,naux,ta  # transfer is_ptinterp to &new_ELF64_auxv
         sub arg5,arg5,ta  # and clear from  ELFA
         mv  s1,arg5  # save ELFA
-        addi sp,sp,-OVERHEAD
-        mv arg3,sp  # &ELf64_Ehdr temporary space
+        li ta,MAX_ELF_HDR_64 >> 8; sll ta,ta,8
+        sub sp,sp,ta  // alloc Elf64_Ehdr temporary space
+        mv arg3,sp  # &ELf64_Ehd temporary space
         call upx_main2  # Out: rv= entry
 
 // entry= upx_main2(
@@ -234,8 +234,8 @@ no_PSE:
 // Elf64_Addr elfaddr
 // )
 
-// sp/ {OVERHEAD},ADRU,LENU,rdx,%entry,  argc,argv,0,envp,0,auxv,0,strings
-        li ta,OVERHEAD
+// sp/ {MAX_ELF_HDR_64},ADRU,LENU,rdx,%entry,  argc,argv,0,envp,0,auxv,0,strings
+        li ta,MAX_ELF_HDR_64 >> 8; sll ta,ta,8
         add sp,sp,ta  # remove Elf64_Ehdr temporary space
         sd rv,F_ENTR(sp)  # entry
 

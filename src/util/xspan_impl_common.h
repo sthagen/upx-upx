@@ -53,6 +53,9 @@ public:
 #endif
 
 private:
+#if XSPAN_CONFIG_ENABLE_DEBUG
+    XSpanDebugFile f;
+#endif
     pointer ptr; // current view into (base, base+size_in_bytes) iff base != nullptr
     pointer base;
     size_type size_in_bytes;
@@ -126,8 +129,18 @@ forceinline ~CSelf() noexcept {}
           size_in_bytes(xspan_mem_size<T>(count.count)) {
         assertInvariants();
     }
+    CSelf(XSPAN_DEBUG_ARGS pointer first, XSpanCount count)
+        : XSPAN_DEBUG_IMPL ptr(makePtr(first)), base(makeBase(first)),
+          size_in_bytes(xspan_mem_size<T>(count.count)) {
+        assertInvariants();
+    }
     CSelf(pointer first, XSpanSizeInBytes bytes)
         : ptr(makePtr(first)), base(makeBase(first)),
+          size_in_bytes(xspan_mem_size<char>(bytes.size_in_bytes)) {
+        assertInvariants();
+    }
+    CSelf(XSPAN_DEBUG_ARGS pointer first, XSpanSizeInBytes bytes)
+        : XSPAN_DEBUG_IMPL ptr(makePtr(first)), base(makeBase(first)),
           size_in_bytes(xspan_mem_size<char>(bytes.size_in_bytes)) {
         assertInvariants();
     }
@@ -135,6 +148,12 @@ forceinline ~CSelf() noexcept {}
     template <class U>
     CSelf(U *first, size_type count, XSPAN_REQUIRES_SIZE_1_A)
         : ptr(makePtr(first)), base(makeBase(first)), size_in_bytes(xspan_mem_size<T>(count)) {
+        assertInvariants();
+    }
+    template <class U>
+    CSelf(XSPAN_DEBUG_ARGS U *first, size_type count, XSPAN_REQUIRES_SIZE_1_A)
+        : XSPAN_DEBUG_IMPL ptr(makePtr(first)), base(makeBase(first)),
+          size_in_bytes(xspan_mem_size<T>(count)) {
         assertInvariants();
     }
     CSelf(pointer first, XSpanCount count, pointer base_)
@@ -147,8 +166,28 @@ forceinline ~CSelf() noexcept {}
         // double sanity check
         assertInvariants();
     }
+    CSelf(XSPAN_DEBUG_ARGS pointer first, XSpanCount count, pointer base_)
+        : XSPAN_DEBUG_IMPL ptr(makePtr(first)), base(makeBase(base_)),
+          size_in_bytes(xspan_mem_size<T>(count.count)) {
+        // check invariants
+        if __acc_cte ((configRequirePtr || ptr != nullptr) &&
+                      (configRequireBase || base != nullptr))
+            xspan_check_range(ptr, base, size_in_bytes);
+        // double sanity check
+        assertInvariants();
+    }
     CSelf(pointer first, XSpanSizeInBytes bytes, pointer base_)
         : ptr(makePtr(first)), base(makeBase(base_)),
+          size_in_bytes(xspan_mem_size<char>(bytes.size_in_bytes)) {
+        // check invariants
+        if __acc_cte ((configRequirePtr || ptr != nullptr) &&
+                      (configRequireBase || base != nullptr))
+            xspan_check_range(ptr, base, size_in_bytes);
+        // double sanity check
+        assertInvariants();
+    }
+    CSelf(XSPAN_DEBUG_ARGS pointer first, XSpanSizeInBytes bytes, pointer base_)
+        : XSPAN_DEBUG_IMPL ptr(makePtr(first)), base(makeBase(base_)),
           size_in_bytes(xspan_mem_size<char>(bytes.size_in_bytes)) {
         // check invariants
         if __acc_cte ((configRequirePtr || ptr != nullptr) &&
@@ -168,15 +207,34 @@ forceinline ~CSelf() noexcept {}
         // double sanity check
         assertInvariants();
     }
+    template <class U>
+    CSelf(XSPAN_DEBUG_ARGS pointer first, size_type count, U *base_, XSPAN_REQUIRES_SIZE_1_A)
+        : XSPAN_DEBUG_IMPL ptr(makePtr(first)), base(makeBase(base_)),
+          size_in_bytes(xspan_mem_size<T>(count)) {
+        // check invariants
+        if __acc_cte ((configRequirePtr || ptr != nullptr) &&
+                      (configRequireBase || base != nullptr))
+            xspan_check_range(ptr, base, size_in_bytes);
+        // double sanity check
+        assertInvariants();
+    }
+
 #ifdef UPX_VERSION_HEX
     // constructors from MemBuffer
     CSelf(MemBuffer &mb)
         : CSelf(makeNotNull((pointer) membuffer_get_void_ptr(mb)),
                 XSpanSizeInBytes(membuffer_get_size_in_bytes(mb))) {}
+    CSelf(XSPAN_DEBUG_ARGS MemBuffer &mb)
+        : CSelf(XSPAN_DEBUG_PASS makeNotNull((pointer) membuffer_get_void_ptr(mb)),
+                XSpanSizeInBytes(membuffer_get_size_in_bytes(mb))) {}
     CSelf(pointer first, MemBuffer &mb)
         : CSelf(first, XSpanSizeInBytes(membuffer_get_size_in_bytes(mb)),
                 makeNotNull((pointer) membuffer_get_void_ptr(mb))) {}
+    CSelf(XSPAN_DEBUG_ARGS pointer first, MemBuffer &mb)
+        : CSelf(XSPAN_DEBUG_PASS first, XSpanSizeInBytes(membuffer_get_size_in_bytes(mb)),
+                makeNotNull((pointer) membuffer_get_void_ptr(mb))) {}
     CSelf(std::nullptr_t, MemBuffer &) XSPAN_DELETED_FUNCTION;
+    CSelf(XSPAN_DEBUG_ARGS std::nullptr_t, MemBuffer &) XSPAN_DELETED_FUNCTION;
 #endif
 
     // disable constructors from nullptr to catch compile-time misuse
@@ -190,6 +248,15 @@ private:
     CSelf(std::nullptr_t, size_type) XSPAN_DELETED_FUNCTION;
     CSelf(std::nullptr_t, size_type, std::nullptr_t) XSPAN_DELETED_FUNCTION;
     CSelf(const void *, size_type, std::nullptr_t) XSPAN_DELETED_FUNCTION;
+    CSelf(XSPAN_DEBUG_ARGS std::nullptr_t, XSpanCount) XSPAN_DELETED_FUNCTION;
+    CSelf(XSPAN_DEBUG_ARGS std::nullptr_t, XSpanCount, std::nullptr_t) XSPAN_DELETED_FUNCTION;
+    CSelf(XSPAN_DEBUG_ARGS const void *, XSpanCount, std::nullptr_t) XSPAN_DELETED_FUNCTION;
+    CSelf(XSPAN_DEBUG_ARGS std::nullptr_t, XSpanSizeInBytes) XSPAN_DELETED_FUNCTION;
+    CSelf(XSPAN_DEBUG_ARGS std::nullptr_t, XSpanSizeInBytes, std::nullptr_t) XSPAN_DELETED_FUNCTION;
+    CSelf(XSPAN_DEBUG_ARGS const void *, XSpanSizeInBytes, std::nullptr_t) XSPAN_DELETED_FUNCTION;
+    CSelf(XSPAN_DEBUG_ARGS std::nullptr_t, size_type) XSPAN_DELETED_FUNCTION;
+    CSelf(XSPAN_DEBUG_ARGS std::nullptr_t, size_type, std::nullptr_t) XSPAN_DELETED_FUNCTION;
+    CSelf(XSPAN_DEBUG_ARGS const void *, size_type, std::nullptr_t) XSPAN_DELETED_FUNCTION;
 
     // unchecked constructor
 protected:
@@ -207,13 +274,17 @@ protected:
         return *this;
     }
 #if 0
-Self &assign(ModeUnchecked, const Self &other) {
-    ptr = other.ptr;
-    base = other.base;
-    size_in_bytes = other.size_in_bytes;
-    assertInvariants();
-    return *this;
-}
+    Self &assign(ModeUnchecked, const Self &other) {
+        ptr = other.ptr;
+        base = other.base;
+        size_in_bytes = other.size_in_bytes;
+#if XSPAN_CONFIG_ENABLE_DEBUG && 1
+        if (f.src_file == nullptr)
+            f = other.f;
+#endif
+        assertInvariants();
+        return *this;
+    }
 #endif
 
 public:
@@ -253,6 +324,10 @@ public:
             // ok
             ptr = other.ptr;
         }
+#if XSPAN_CONFIG_ENABLE_DEBUG && 1
+        if (f.src_file == nullptr)
+            f = other.f;
+#endif
         assertInvariants();
         return *this;
     }
@@ -273,25 +348,47 @@ public:
     Self &operator=(MemBuffer &mb) { return assign(Self(mb)); }
 #endif
 
+    // subtraction - ptrdiff_t
+    template <class U>
+    XSPAN_REQUIRES_CONVERTIBLE_R(ptrdiff_t)
+    operator-(const CSelf<U> &other) const {
+        assertInvariants();
+        other.assertInvariants();
+        return check_ptrdiff(ptr, other.ptr);
+    }
+
     // subspan (creates a new value)
     Self subspan(ptrdiff_t offset, ptrdiff_t count) const {
         pointer p_begin = check_add(ptr, offset);
         pointer p_end = check_add(p_begin, count);
-        if (p_begin <= p_end)
-            return Self(Unchecked, p_begin, (p_end - p_begin) * sizeof(T), p_begin);
-        else
-            return Self(Unchecked, p_end, (p_begin - p_end) * sizeof(T), p_end);
+        if (p_begin <= p_end) {
+            Self r = Self(Unchecked, p_begin, (p_end - p_begin) * sizeof(T), p_begin);
+#if XSPAN_CONFIG_ENABLE_DEBUG
+            r.f = f;
+#endif
+            return r;
+        } else {
+            Self r = Self(Unchecked, p_end, (p_begin - p_end) * sizeof(T), p_end);
+#if XSPAN_CONFIG_ENABLE_DEBUG
+            r.f = f;
+#endif
+            return r;
+        }
     }
     // subspan (creates a new value)
     Self subspan(ptrdiff_t offset) const { return subspan(offset, size() - offset); }
 
     // cast to a different type (creates a new value)
     template <class U>
-    inline CSelf<U> type_cast() const {
+    CSelf<U> type_cast() const {
         typedef CSelf<U> R;
         typedef typename R::pointer rpointer;
-        return R(R::Unchecked, upx::ptr_static_cast<rpointer>(ptr), size_in_bytes,
-                 upx::ptr_static_cast<rpointer>(base));
+        R r = R(R::Unchecked, upx::ptr_static_cast<rpointer>(ptr), size_in_bytes,
+                upx::ptr_static_cast<rpointer>(base));
+#if XSPAN_CONFIG_ENABLE_DEBUG
+        r.f = f;
+#endif
+        return r;
     }
 
     bool operator==(pointer other) const noexcept { return ptr == other; }
@@ -398,11 +495,19 @@ public:
 
     Self operator+(ptrdiff_t n) const {
         pointer first = check_add(ptr, n);
-        return Self(Unchecked, first, size_in_bytes, base);
+        Self r = Self(Unchecked, first, size_in_bytes, base);
+#if XSPAN_CONFIG_ENABLE_DEBUG
+        r.f = f;
+#endif
+        return r;
     }
     Self operator-(ptrdiff_t n) const {
         pointer first = check_add(ptr, -n);
-        return Self(Unchecked, first, size_in_bytes, base);
+        Self r = Self(Unchecked, first, size_in_bytes, base);
+#if XSPAN_CONFIG_ENABLE_DEBUG
+        r.f = f;
+#endif
+        return r;
     }
 
 private:
@@ -434,6 +539,16 @@ private:
             xspan_check_range(p, base, size_in_bytes);
         return p;
     }
+    ptrdiff_t check_ptrdiff(pointer a, pointer b) const may_throw {
+        assertInvariants();
+        if very_unlikely (a == nullptr && b != nullptr)
+            xspan_fail_nullptr();
+        if very_unlikely (a != nullptr && b == nullptr)
+            xspan_fail_nullptr();
+        if (a != nullptr && b != nullptr)
+            (void) ptr_diff_bytes(a, b);
+        return a - b;
+    }
 
     // disable taking the address => force passing by reference
     // [I'm not too sure about this design decision, but we can always allow it if needed]
@@ -459,7 +574,7 @@ public: // raw access
 
     // like C++20 std::span
     pointer data() const noexcept { return ptr; }
-    pointer data(size_t bytes) const { return raw_bytes(bytes); } // UPX extra
+    pointer data(size_t bytes) const may_throw { return raw_bytes(bytes); } // UPX extra
     size_type size() const { return size_bytes() / sizeof(element_type); }
     size_type size_bytes() const {
         assertInvariants();
@@ -467,8 +582,8 @@ public: // raw access
             return 0;
         if __acc_cte (!configRequireBase && base == nullptr)
             return 0;
-        const charptr p_begin = (const charptr) ptr;
-        const charptr p_end = (const charptr) base + size_in_bytes;
+        const charptr p_begin = upx::ptr_static_cast<const charptr>(ptr);
+        const charptr p_end = upx::ptr_static_cast<const charptr>(base) + size_in_bytes;
         return p_end - p_begin;
     }
 

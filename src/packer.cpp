@@ -49,6 +49,7 @@ Packer::Packer(InputFile *f) : PackerBase(f) { uip = new UiPacker(this); }
 Packer::~Packer() noexcept {
     upx::owner_delete(uip);
     upx::owner_delete(linker);
+    assert_noexcept(uip == nullptr);
     assert_noexcept(linker == nullptr);
 }
 
@@ -764,7 +765,7 @@ void Packer::initLoader(unsigned arch, const void *pdata, int plen, int small, i
     linker->init(arch, pdata, plen, pextra);
 
     unsigned size;
-    char const *const ident = getIdentstr(&size, small);
+    const char *const ident = getIdentstr(&size, small);
     linker->addSection("IDENTSTR", ident, size, 0);
 }
 

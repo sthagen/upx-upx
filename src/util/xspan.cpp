@@ -79,7 +79,7 @@ void xspan_check_range(const void *ptr, const void *base, ptrdiff_t size_in_byte
     upx_sptraddr_t off = ptraddr_diff(ptr, base);
     if very_unlikely (off < 0 || off > size_in_bytes || size_in_bytes > UPX_RSIZE_MAX)
         xspan_fail_range_range();
-    NO_fprintf(stderr, "xspan_check_range done\n");
+    // NO_fprintf(stderr, "xspan_check_range done %zu\n", size_t(xspan_stats.check_range_counter));
 }
 
 XSPAN_NAMESPACE_END

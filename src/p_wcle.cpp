@@ -388,7 +388,7 @@ void PackWcle::encodeImage(Filter *ft) {
     ifixups = nullptr;
 
     mb_oimage.allocForCompression(isize, RESERVED + 512);
-    oimage = mb_oimage; // => now a SPAN_S
+    oimage = SPAN_S_MAKE(byte, mb_oimage); // => now a SPAN_S
     // prepare packheader
     ph.u_len = isize;
     // prepare filter [already done]
@@ -692,7 +692,7 @@ void PackWcle::decodeObjectTable() {
 
 void PackWcle::decodeImage() {
     mb_oimage.allocForDecompression(ph.u_len);
-    oimage = mb_oimage; // => now a SPAN_S
+    oimage = SPAN_S_MAKE(byte, mb_oimage); // => now a SPAN_S
 
     decompress(iimage + ph.buf_offset + ph.getPackHeaderSize(), oimage);
     soimage = get_le32(oimage + ph.u_len - 5);

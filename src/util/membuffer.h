@@ -153,6 +153,8 @@ template <class T>
 inline typename MemBufferBase<T>::pointer raw_index_bytes(const MemBufferBase<T> &mbb, size_t index,
                                                           size_t size_in_bytes) {
     typedef typename MemBufferBase<T>::element_type element_type;
+    if very_unlikely (mbb.raw_ptr() == nullptr)
+        throwCantPack("raw_index_bytes unexpected NULL ptr");
     return mbb.raw_bytes(mem_size(sizeof(element_type), index, size_in_bytes)) + index;
 }
 

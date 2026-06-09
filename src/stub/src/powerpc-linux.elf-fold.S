@@ -51,8 +51,7 @@ MAP_FIXED=     0x10
 PROT_READ=     0x1
 
 O_RDONLY=       0
-
-OVERHEAD= 2048
+#include "../../MAX_ELF_HDR.h"
 
 // http://refspecs.linuxfoundation.org/elf/elfspec_ppc.pdf  p.3-17 (pdf p.33)
 // SZ_LINKA= (2 + max(0, #params - 8))*NBPW  // (sp,lr, arg9,arg10, ... )
@@ -230,7 +229,7 @@ L90:
         mr sp,a0
 
 no_pse_env:
-        stwu sp,-(SZ_FRAME+OVERHEAD)(sp)  // allocate this frame
+        stwu sp,-(SZ_FRAME + MAX_ELF_HDR_32)(sp)  // allocate this frame
         mr a0,r_ADRX  // &b_info
         mr a1,r_LENX  // total_size
         mr a2,r_elfa  // elfaddr
@@ -240,7 +239,7 @@ no_pse_env:
 // entry= upx_main2(b_info *a0, total_size a1, Elf32_Ehdr *a2, ELf32_auxv_t *a3,
 //      tmp_ehdr[])
 
-        la  sp,SZ_FRAME+OVERHEAD(sp)  // deallocate this frame
+        lwz  sp,0(sp)  // deallocate this frame
         mr r_exp,a0  // save &entry
 
 sz_Ehdr= 13*NBPW

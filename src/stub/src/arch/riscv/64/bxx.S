@@ -56,8 +56,8 @@ rvf_top:
 
         li ilen,2  # beginning length before next instruction
                       andi ta,word1,3; xori ta,ta,3; bnez ta,ilen2
-        srli ta,word1,2; andi ta,ta,3; xori ta,ta,3; bnez ta,ilen4
-        srli ta,word1,4; andi ta,ta,3; xori ta,ta,3; bnez ta,ilen6
+        srli ta,word1,2; andi ta,ta,7; xori ta,ta,7; bnez ta,ilen4
+        srli ta,word1,5; andi ta,ta,3; xori ta,ta,3; bnez ta,ilen6
         addi ilen,ilen,2  # 8 or more
 ilen6:  addi ilen,ilen,2
 ilen4:  addi ilen,ilen,2

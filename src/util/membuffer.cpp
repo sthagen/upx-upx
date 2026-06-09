@@ -160,7 +160,7 @@ void MemBuffer::checkState() const may_throw {
         throwInternalError("block not allocated");
     assert(size_in_bytes > 0);
     if (use_simple_mcheck()) {
-        const byte *p = (const byte *) ptr;
+        const byte *p = upx::ptr_static_cast<const byte *>(ptr);
         if very_unlikely (get_ne32(p - 4) != MAGIC1(p))
             throwInternalError("memory clobbered before allocated block 1");
         if very_unlikely (get_ne32(p - 8) != size_in_bytes)
@@ -233,7 +233,7 @@ void MemBuffer::dealloc() noexcept {
     stats.global_dealloc_counter += 1;
     stats.global_total_active_bytes -= size_in_bytes;
     if (use_simple_mcheck()) {
-        byte *p = (byte *) ptr;
+        byte *p = upx::ptr_static_cast<byte *>(ptr);
         // clear magic constants
         set_ne32(p - 8, 0);
         set_ne32(p - 4, 0);
@@ -296,7 +296,7 @@ TEST_CASE("MemBuffer core") {
     CHECK_THROWS(mb.subref("", 1, N));
     CHECK_THROWS(mb.subref("", N, 1));
     if (use_simple_mcheck()) {
-        byte *p = raw_bytes(mb, 0);
+        byte *p = upx::ptr_static_cast<byte *>(raw_bytes(mb, 0));
         upx_uint32_t magic1 = get_ne32(p - 4);
         set_ne32(p - 4, magic1 ^ 1);
         CHECK_THROWS(mb.checkState());

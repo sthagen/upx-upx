@@ -38,6 +38,7 @@
 #include "p_unix.h"
 
 #include "p_com.h"
+#include "p_cpm86.h"
 #include "p_djgpp2.h"
 #include "p_exe.h"
 #include "p_lx_elf.h"
@@ -232,10 +233,11 @@ PackerBase *PackMaster::visitAllPackers(visit_func_t func, InputFile *f, const O
     //
     // misc
     //
-    VISIT(PackTos); // atari/tos
-    VISIT(PackPs1); // ps1/exe
-    VISIT(PackSys); // dos/sys
-    VISIT(PackCom); // dos/com
+    VISIT(PackTos);   // atari/tos
+    VISIT(PackPs1);   // ps1/exe
+    VISIT(PackSys);   // dos/sys
+    VISIT(PackCom);   // dos/com
+    VISIT(PackCpm86); // cpm86/cmd
 
     return nullptr;
 #undef VISIT

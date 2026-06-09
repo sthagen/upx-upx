@@ -403,7 +403,7 @@ function(upx_sanitize_target) # ARGV
             # MSVC uses -GS (similar to -fstack-protector) by default
         elseif(NOT GNU_FRONTEND)
             # unknown compiler
-        elseif(MINGW OR CYGWIN)
+        elseif(WIN32 OR MINGW OR CYGWIN)
             # avoid link errors with current MinGW-w64 versions
             # see https://www.mingw-w64.org/contribute/#sanitizers-asan-tsan-usan
         elseif(CMAKE_C_COMPILER_ID MATCHES "^Clang$" AND CMAKE_C_COMPILER_VERSION VERSION_LESS "9.0")

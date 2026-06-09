@@ -152,34 +152,34 @@ TEST_CASE("ptr_diff") {
 void ptraddr_check_no_overlap(upx_ptraddr_t a, size_t a_size, upx_ptraddr_t b, size_t b_size)
     may_throw {
     if very_unlikely (a == 0 || b == 0)
-        throwCantPack("ptr_check_no_overlap-nullptr");
+        throwCantPack("ptr_check_no_overlap2-nullptr");
     upx_ptraddr_t a_end = a + mem_size(1, a_size);
     upx_ptraddr_t b_end = b + mem_size(1, b_size);
     if very_unlikely (a_end < a || b_end < b) // wrap-around
-        throwCantPack("ptr_check_no_overlap-overflow");
+        throwCantPack("ptr_check_no_overlap2-overflow");
     // simple, but a little bit mind bending:
     //   same as (!(a >= b_end || b >= a_end))
     //   same as (!(a_end <= b || b_end <= a))
     if very_unlikely (a < b_end && b < a_end)
-        throwCantPack("ptr_check_no_overlap-ab");
+        throwCantPack("ptr_check_no_overlap2-ab");
 }
 
 // check that 3 buffers do not overlap; will throw on error
 void ptraddr_check_no_overlap(upx_ptraddr_t a, size_t a_size, upx_ptraddr_t b, size_t b_size,
                               upx_ptraddr_t c, size_t c_size) may_throw {
     if very_unlikely (a == 0 || b == 0 || c == 0)
-        throwCantPack("ptr_check_no_overlap-nullptr");
+        throwCantPack("ptr_check_no_overlap3-nullptr");
     upx_ptraddr_t a_end = a + mem_size(1, a_size);
     upx_ptraddr_t b_end = b + mem_size(1, b_size);
     upx_ptraddr_t c_end = c + mem_size(1, c_size);
     if very_unlikely (a_end < a || b_end < b || c_end < c) // wrap-around
-        throwCantPack("ptr_check_no_overlap-overflow");
+        throwCantPack("ptr_check_no_overlap3-overflow");
     if very_unlikely (a < b_end && b < a_end)
-        throwCantPack("ptr_check_no_overlap-ab");
+        throwCantPack("ptr_check_no_overlap3-ab");
     if very_unlikely (a < c_end && c < a_end)
-        throwCantPack("ptr_check_no_overlap-ac");
+        throwCantPack("ptr_check_no_overlap3-ac");
     if very_unlikely (b < c_end && c < b_end)
-        throwCantPack("ptr_check_no_overlap-bc");
+        throwCantPack("ptr_check_no_overlap3-bc");
 }
 
 #if !defined(DOCTEST_CONFIG_DISABLE) && !defined(__wasi__) && DEBUG
@@ -499,7 +499,7 @@ TEST_CASE("upx_memswap") {
 #if __cplusplus >= 202002L // use C++20 std::next_permutation() to test all permutations
 namespace {
 template <class ElementType, upx_compare_func_t CompareFunc>
-struct TestSortAllPermutations {
+struct TestSortAllPermutations final {
     typedef ElementType element_type;
     static noinline upx_uint64_t test(upx_sort_func_t sort, size_t n) {
         constexpr size_t N = 16;

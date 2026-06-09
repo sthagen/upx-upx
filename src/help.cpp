@@ -157,6 +157,8 @@ struct PackerNames final {
         names[names_count++] = &e;
         e.fname = pb->getFullName(o);
         e.sname = pb->getName();
+        assert_noexcept(e.fname != nullptr && e.fname[0]);
+        assert_noexcept(e.sname != nullptr && e.sname[0]);
         e.methods_count = e.filters_count = 0;
         for (const int *m = pb->getCompressionMethods(M_ALL, 10); *m != M_END; m++) {
             if (*m >= 0) {
@@ -193,6 +195,7 @@ struct PackerNames final {
 static noinline void list_all_packers(FILE *f, int verbose) {
     Options o;
     o.reset();
+    o.o_unix.use_ptinterp = true;
     PackerNames pn;
     pn.o = &o;
     (void) PackMaster::visitAllPackers(PackerNames::visit, nullptr, &o, &pn);
@@ -685,14 +688,28 @@ void show_sysinfo(const char *options_var) {
 #if defined(__SIZEOF_LONG_LONG__) && (__SIZEOF_LONG_LONG__ + 0 > 8)
         cf_print("__SIZEOF_LONG_LONG__", "%lld", __SIZEOF_LONG_LONG__ + 0, 3);
 #endif
+        cf_print("__SIZEOF_POINTER__", "%lld", (long long) sizeof(void *), 3);
 #if defined(__SIZEOF_POINTER__) && (__SIZEOF_POINTER__ + 0 > 8)
         cf_print("__SIZEOF_POINTER__", "%lld", __SIZEOF_POINTER__ + 0, 3);
 #endif
+        cf_print("__SIZEOF_SIZE_T__", "%lld", (long long) sizeof(size_t), 3);
 #if defined(UPX_CONFIG_DISABLE_WSTRICT)
         cf_print("UPX_CONFIG_DISABLE_WSTRICT", "%lld", UPX_CONFIG_DISABLE_WSTRICT + 0, 3);
 #endif
 #if defined(UPX_CONFIG_DISABLE_WERROR)
         cf_print("UPX_CONFIG_DISABLE_WERROR", "%lld", UPX_CONFIG_DISABLE_WERROR + 0, 3);
+#endif
+#if defined(DOCTEST_CONFIG_DISABLE)
+        cf_print("DOCTEST_CONFIG_DISABLE", "%lld", DOCTEST_CONFIG_DISABLE + 0, 3);
+#endif
+#if defined(UPX_CONFIG_USE_STABLE_SORT)
+        cf_print("UPX_CONFIG_USE_STABLE_SORT", "%lld", UPX_CONFIG_USE_STABLE_SORT + 0, 3);
+#endif
+#if defined(WITH_XSPAN)
+        cf_print("WITH_XSPAN", "%lld", WITH_XSPAN + 0, 3);
+#endif
+#if defined(XSPAN_CONFIG_ENABLE_DEBUG)
+        cf_print("XSPAN_CONFIG_ENABLE_DEBUG", "%lld", XSPAN_CONFIG_ENABLE_DEBUG + 0, 3);
 #endif
 #if defined(WITH_THREADS)
         cf_print("WITH_THREADS", "%lld", WITH_THREADS + 0);

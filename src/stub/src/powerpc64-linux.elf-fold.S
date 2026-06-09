@@ -45,6 +45,7 @@ NBPW= 8  //Number of Bytes Per Word
 AL_STK= 0x10  // stack alignment
 #include "arch/powerpc/64/ppc_regs.h"
 #include "arch/powerpc/64/macros.S"
+#include "../../MAX_ELF_HDR.h"
 
 PATH_MAX= 4096  // /usr/include/linux/limits.h
 
@@ -66,8 +67,6 @@ MAP_FIXED=     0x10
 PROT_READ=     0x1
 
 O_RDONLY=       0
-
-OVERHEAD= 2048
 
 // http://refspecs.linuxfoundation.org/ELF/ppc64/PPC-elf64abi.html#REG
 // r0        Volatile register used in function prologs
@@ -262,17 +261,17 @@ r_reloc= 32 - 1  # used slot in register save area
         la a6,SZ_FRAME + r_reloc*NBPW(sp)  // &reloc [adjacent to argc]
         std r_elfa,0(a6)  // elfaddr
 
-        stdu sp,-(SZ_FRAME+OVERHEAD)(sp)  // FR_01  allocate this frame
+        stdu sp,-(SZ_FRAME + MAX_ELF_HDR_64)(sp)  // FR_01  allocate this frame
         mr a0,r_ADRX  // &b_info
         mr a1,r_LENX  // total_size
         la a2,SZ_FRAME(sp)  // &Elf64_Ehdr temporary space
         mr a3,r_auxv  // &Elf64_auxv_t
-        la a4,SZ_FRAME+OVERHEAD + SZ_FRAME+(r_reloc * NBPW)(sp)  // &p_reloc
+        la a4,SZ_FRAME + SZ_FRAME+(r_reloc * NBPW)(sp)  // &p_reloc
         std r_elfa,0(a4)
         call upx_main2  // Out: a0= entry
 // entry= upx_main2(b_info *a0, total_size a1, Elf64_Ehdr *a2, ELf32_auxv_t *a3,
 //      Elf64_Addr *p_reloc)
-        la  sp,SZ_FRAME+OVERHEAD(sp)  // FR_01  deallocate this frame
+        la  sp,SZ_FRAME + MAX_ELF_HDR_64(sp)  // FR_01  deallocate this frame
 #if USE_TOC  //{
 // Sometimes the "entry TOC" is not a TOC, particularly with musl.
         movr r2,av_hi  // default fake TOC

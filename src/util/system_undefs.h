@@ -49,6 +49,7 @@
 #undef large
 #undef linux
 #undef mc68000
+#undef mc68020
 #undef mips
 #undef near
 #undef powerpc

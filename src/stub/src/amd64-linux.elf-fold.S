@@ -30,6 +30,7 @@
 NBPW= 8
 #include "arch/amd64/macros.S"
 #include "arch/amd64/regs.h"
+#include "../../MAX_ELF_HDR.h"
 
 PATH_MAX= 4096  // /usr/include/linux/limits.h
 
@@ -46,8 +47,6 @@ MAP_FIXED=     0x10
 PROT_READ=     0x1
 
 O_RDONLY=       0
-
-OVERHEAD=2048
 
 /* 64-bit mode only! */
 __NR_read=  0
@@ -162,7 +161,7 @@ no_env_pse:
         or  %rax,%arg4  # transfer is_ptinterp to &new_ELF64_auxv
         sub %rax,%arg5  # and clear from  ELFA
         mov %arg5,%r13  # save ELFA
-        subq $ OVERHEAD,%rsp
+        subq $ MAX_ELF_HDR_64,%rsp
         movq %rsp,%arg3  # &ELf64_Ehdr temporary space
         call upx_main2  # Out: %rax= entry
 /* entry= upx_main2(
@@ -173,8 +172,8 @@ no_env_pse:
    Elf64_Addr elfaddr  {%r8}
    )
 */
-// rsp/ {OVERHEAD},ADRU,LENU,rdx,%entry,  argc,argv,0,envp,0,auxv,0,strings
-        addq $OVERHEAD,%rsp  # Elf64_Ehdr temporary space
+// rsp/ {MAX_ELF_HDR_64},ADRU,LENU,rdx,%entry,  argc,argv,0,envp,0,auxv,0,strings
+        addq $MAX_ELF_HDR_64,%rsp  # Elf64_Ehdr temporary space
 #define r_fd  ebx
         mov       %ebp,%r_fd
         movq %rax,3*NBPW(%rsp)  # entry

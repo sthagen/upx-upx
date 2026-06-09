@@ -81,8 +81,7 @@ PATH_MAX= 4096
 //@ control just falls through, after this part and compiled C code
 //@ are uncompressed.
 
-#define OVERHEAD 2048
-#include "MAX_ELF_HDR.S"
+#include "../../MAX_ELF_HDR.h"
 
 PAGE_MASK: .quad ~0<<12  // default  D_PMASK
 cancel_sigsegv: .quad 0  // D_XSIGSEGV
@@ -262,13 +261,13 @@ no_env_pse:
 
 /* Construct arglist for upx_main2 */
         mov x4,xelfa  // Elf64_Ehdr (reloc if ET_DYN and not pre-link)
-          sub sp,sp,#MAX_ELF_HDR_64 + OVERHEAD  // alloca
+          sub sp,sp,#MAX_ELF_HDR_64  // alloca
         mov x3,xauxv  // new &Elf64_auxv_t
         mov x2,sp  // ehdr
         mov w1,wLENC  // total size of compressed data
         mov x0,xADRC  // &b_info
         call upx_main2
-          add sp,sp,#MAX_ELF_HDR_64 + OVERHEAD  // un-alloca
+          add sp,sp,#MAX_ELF_HDR_64  // un-alloca
         mov xfexp,x0  // entry address
 
         ldr x0,cancel_sigsegv

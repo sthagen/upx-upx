@@ -101,10 +101,9 @@ L30:  // distribute existing Elf32_auxv into new table
         jmp L30
 L40:
 
-#define OVERHEAD 2048
-#include "MAX_ELF_HDR.S"
+#include "../../MAX_ELF_HDR.h"
 
-        sub esp, MAX_ELF_HDR_32 + OVERHEAD
+        sub esp, MAX_ELF_HDR_32
 
         xchg eax, ebx  // eax= uncDst
         mov ecx, [   edx]  // sz_unc
@@ -116,7 +115,7 @@ L40:
         pop ecx  // junk
         push eax  // save entry address
         popa  // edi= entry address; esi= uncDst
-        add esp, MAX_ELF_HDR_32 + OVERHEAD  // remove temp space
+        add esp, MAX_ELF_HDR_32  // remove temp space
 
         pop ecx  // argc
         pop edx  // $0 filename, to become argv[0]
@@ -141,7 +140,7 @@ L40:
 // Ulrich Drepper (drepper@cyngus.com) has refused to fix the bugs.
 // See GNU wwwgnats libc/1165 .
 
-#define  N_STKCLR (0x100 + MAX_ELF_HDR_32 + OVERHEAD)/4
+#define  N_STKCLR (0x100 + MAX_ELF_HDR_32)/4
         lea edi, [esp - 4*N_STKCLR]
         pusha  // values will be zeroed
         mov ebx,esp  // save

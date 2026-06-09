@@ -121,12 +121,12 @@ static_assert((char) (-1) == 255);             // -funsigned-char
 // multithreading (UPX currently does not use multithreading)
 #if (WITH_THREADS)
 #define upx_thread_local     thread_local
-#define upx_std_atomic(Type) std::atomic<Type>
+#define upx_std_atomic(type) std::atomic<type>
 #define upx_std_once_flag    std::once_flag
 #define upx_std_call_once    std::call_once
 #else
 #define upx_thread_local     /*empty*/
-#define upx_std_atomic(Type) Type
+#define upx_std_atomic(type) type
 #define upx_std_once_flag    upx_std_atomic(size_t)
 template <class NoexceptCallable>
 inline void upx_std_call_once(upx_std_once_flag &flag, NoexceptCallable &&f) noexcept {
@@ -456,6 +456,7 @@ inline void mem_clear(T *object) noexcept {
     static_assert(std::is_trivially_copyable_v<T>);
     constexpr size_t size = sizeof(*object);
     static_assert(size >= 1 && size <= UPX_RSIZE_MAX_MEM);
+    // NOLINTNEXTLINE(bugprone-multi-level-implicit-pointer-conversion)
     memset((void *) object, 0, size);
 }
 // disable some overloads
@@ -475,8 +476,11 @@ inline void mem_clear(T (&array)[N]) noexcept DELETED_FUNCTION;
 #define ByteArray(var, n) Array(byte, var, (n))
 
 // assert_noexcept()
+noinline void assertFailed(int e, const char *expr, const char *file, int line,
+                           const char *func) noexcept;
 noreturn void assertFailed(const char *expr, const char *file, int line, const char *func) noexcept;
-noreturn void throwAssertFailed(const char *expr, const char *file, int line, const char *func);
+noreturn void throwAssertFailed(const char *expr, const char *file, int line, const char *func)
+    may_throw;
 #if defined(__clang__) || defined(__GNUC__)
 #undef assert
 #if DEBUG || 0
@@ -490,8 +494,10 @@ noreturn void throwAssertFailed(const char *expr, const char *file, int line, co
 #endif
 #define assert_noexcept(e)                                                                         \
     ((void) (__acc_cte(e) || (assertFailed(#e, __FILE__, __LINE__, __func__), 0)))
+#define assert_noexcept2(e) assertFailed(e, #e, __FILE__, __LINE__, __func__)
 #else
-#define assert_noexcept assert
+#define assert_noexcept  assert
+#define assert_noexcept2 assert
 #endif
 
 //
@@ -587,6 +593,7 @@ using upx::tribool;
 #define UPX_F_W64PE_ARM64         43 // NOT YET IMPLEMENTED
 #define UPX_F_W64PE_ARM64EC       44 // NOT YET IMPLEMENTED
 #define UPX_F_LINUX_ELF64_RISCV64 45
+#define UPX_F_CPM86_CMD           46 // CP/M-86 .cmd
 
 #define UPX_F_ATARI_TOS         129
 // #define UPX_F_SOLARIS_SPARC     130 // NOT IMPLEMENTED
@@ -827,9 +834,9 @@ unsigned membuffer_get_size_in_bytes(const MemBuffer &mb) noexcept;
 
 // main.cpp
 extern const char *progname;
-bool main_set_exit_code(int ec);
-int main_get_options(int argc, char **argv);
-void main_get_envoptions();
+noinline bool main_set_exit_code(int ec);
+noinline int main_get_options(int argc, char **argv);
+noinline void main_get_envoptions();
 noinline int upx_main(int argc, char *argv[]) may_throw;
 
 // msg.cpp

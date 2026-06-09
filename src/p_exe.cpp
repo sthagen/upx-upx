@@ -616,7 +616,7 @@ void PackExe::unpack(OutputFile *fo) {
     SPAN_0_VAR(byte, relocs, nullptr);
     if (!(flag & NORELOC)) {
         mb_relocs.alloc(4 * MAXRELOCSIZE);
-        relocs = mb_relocs; // => now a SPAN_S
+        relocs = SPAN_S_MAKE(byte, mb_relocs); // => now a SPAN_S
 
         relocsize = get_le16(obuf + ph.u_len - 2);
         ph.u_len -= 2;

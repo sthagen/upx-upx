@@ -610,6 +610,7 @@ struct MallocDeleter final {
     void delete_items() noexcept {
         for (std::size_t i = 0; i < count; i++) {
             T *item = atomic_exchange(&items[i], (T *) nullptr);
+            // NOLINTNEXTLINE(bugprone-multi-level-implicit-pointer-conversion)
             ::free(item); // free memory from malloc()
         }
     }
@@ -800,6 +801,7 @@ template <class T>
 inline void owner_free(OwningPointer(T)(&object)) noexcept {
     static_assert(!std::is_class_v<T>); // UPX convention
     if (object != nullptr) {
+        // NOLINTNEXTLINE(bugprone-multi-level-implicit-pointer-conversion)
         ::free((T *) object); // free memory from malloc()
         object = nullptr;
     }

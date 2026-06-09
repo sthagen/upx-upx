@@ -31,7 +31,7 @@ NBPW= 4
 #include "arch/mips/r3000/macros.ash"
 #include "arch/mips/r3000/bits.ash"
 
-#include "../src/MAX_ELF_HDR.S"
+#include "../../../src/MAX_ELF_HDR.h"
 
   .set mips1
   .set noat

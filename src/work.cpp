@@ -402,7 +402,7 @@ void do_one_file(const char *const iname, char *const oname) may_throw {
 // process all files from the commandline
 **************************************************************************/
 
-static void unlink_ofile(char *oname) noexcept {
+static noinline void unlink_ofile(char *oname) noexcept {
     if (oname && oname[0]) {
         (void) FileBase::unlink_noexcept(oname); // IGNORE_ERROR
         oname[0] = 0;                            // done with oname

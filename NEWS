@@ -2,6 +2,10 @@
 User visible changes for UPX
 ==================================================================
 
+Changes in 5.2.0 (08 Jun 2026):
+  * new format cpm86/cmd
+  * bug fixes - see https://github.com/upx/upx/milestone/23
+
 Changes in 5.1.1 (05 Mar 2026):
   * ELF: MIPS r3000 (32-bit) shared libraries are supported
   * bug fixes - see https://github.com/upx/upx/milestone/22

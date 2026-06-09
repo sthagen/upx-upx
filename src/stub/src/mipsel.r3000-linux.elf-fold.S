@@ -80,8 +80,7 @@ __NR_unlink=     10+ __NR_Linux
 __NR_write    =   4+ __NR_Linux
 
 PATHSIZE=4096
-OVERHEAD=2048
-#include "../src/MAX_ELF_HDR.S"
+#include "../../../src/MAX_ELF_HDR.h"
 
 MAP_PRIVATE=  0x002
 // see "#define __MAP_ANONYMOUS 0x0800" in  mips-linux-gnu/libc/usr/include/bits/mman.h

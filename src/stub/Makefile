@@ -83,6 +83,7 @@ STUBS += arm64-linux.shlib-init.h
 STUBS += arm64-darwin.macho-entry.h
 STUBS += arm64-darwin.macho-fold.h
 STUBS += arm64-win64.pe.h
+STUBS += i086-cpm86.cmd.h
 STUBS += i086-dos16.com.h
 STUBS += i086-dos16.exe.h
 STUBS += i086-dos16.sys.h
@@ -1117,6 +1118,19 @@ tmp/arm64-darwin.macho-fold.o : $(srcdir)/src/$$T.S
 tmp/arm64-darwin.macho-main.o : $(srcdir)/src/$$T.c
 	$(call tc,gcc) -c -Os $< -o $@
 	$(call tc,f-objstrip,$@)
+
+# /***********************************************************************
+# // i086-cpm86.cmd
+# ************************************************************************/
+
+i086-cpm86.cmd.h : tc_list = arch-i086 default
+i086-cpm86.cmd.h : tc_bfdname = elf32-i386
+i086-cpm86.cmd.h : tc_bfdarch = i8086
+
+i086-cpm86.cmd.h : $(srcdir)/src/$$T.S
+	$(call tc,gcc) -c -x assembler-with-cpp $< -o tmp/$T.bin
+	$(call tc,f-embed_objinfo,tmp/$T.bin)
+	$(call tc,bin2h-c) tmp/$T.bin $@
 
 # /***********************************************************************
 # // i086-dos16.com

@@ -7,6 +7,23 @@ ifeq ($(UPX_MAKEFILE_EXTRA_MK_INCLUDED),)
 override UPX_MAKEFILE_EXTRA_MK_INCLUDED := 1
 
 #***********************************************************************
+# fast test
+#***********************************************************************
+
+build/debug+fast:     $$(dir $$@)debug PHONY; cd "$(dir $@)debug" && $(CTEST) $(CTEST_FLAGS) -R "upx-sysinfo*" -C Debug
+build/%/debug+fast:   $$(dir $$@)debug PHONY; cd "$(dir $@)debug" && $(CTEST) $(CTEST_FLAGS) -R "upx-sysinfo*" -C Debug
+build/release+fast:   $$(dir $$@)release PHONY; cd "$(dir $@)release" && $(CTEST) $(CTEST_FLAGS) -R "upx-sysinfo*" -C Release
+build/%/release+fast: $$(dir $$@)release PHONY; cd "$(dir $@)release" && $(CTEST) $(CTEST_FLAGS) -R "upx-sysinfo*" -C Release
+build/%/all+fast:     $$(dir $$@)debug+fast $$(dir $$@)release+fast PHONY ;
+
+# shortcuts
+debug+fast:   build/debug+fast PHONY
+release+fast: build/release+fast PHONY
+all+fast build/all+fast: build/debug+fast build/release+fast PHONY
+
+fast: $$(patsubst %+test,%,$$(.DEFAULT_GOAL))+fast PHONY
+
+#***********************************************************************
 # support functions
 #***********************************************************************
 
@@ -223,6 +240,7 @@ build/extra/cross-windows-mingw32/%: export CXX = i686-w64-mingw32-g++ -static -
 build/extra/cross-windows-mingw32/%: CMAKE_SYSTEM_NAME ?= Windows
 build/extra/cross-windows-mingw32/%: CMAKE_SYSTEM_PROCESSOR ?= X86
 build/extra/cross-windows-mingw32/%: CMAKE_CROSSCOMPILING_EMULATOR ?= wine
+build/extra/cross-windows-mingw32/%: export UPX_CONFIG_EXPECT_THREADS ?= OFF
 
 # cross compiler: Windows x64 win64 MinGW (amd64)
 build/extra/cross-windows-mingw64/debug:   PHONY; $(call run_config_and_build,$@,Debug)
@@ -232,6 +250,7 @@ build/extra/cross-windows-mingw64/%: export CXX = x86_64-w64-mingw32-g++ -static
 build/extra/cross-windows-mingw64/%: CMAKE_SYSTEM_NAME ?= Windows
 build/extra/cross-windows-mingw64/%: CMAKE_SYSTEM_PROCESSOR ?= AMD64
 build/extra/cross-windows-mingw64/%: CMAKE_CROSSCOMPILING_EMULATOR ?= wine
+build/extra/cross-windows-mingw64/%: export UPX_CONFIG_EXPECT_THREADS ?= OFF
 
 # cross compiler: macOS arm64 (aarch64)
 build/extra/cross-darwin-arm64/debug:   PHONY; $(call run_config_and_build,$@,Debug)
@@ -375,7 +394,7 @@ UPX_CMAKE_CONFIG_FLAGS += $(call __add_cmake_config,UPX_CONFIG_EXTRA_COMPILE_OPT
 # check git submodules
 #***********************************************************************
 
-SUBMODULES = doctest lzma-sdk ucl valgrind zlib
+SUBMODULES = bzip2 doctest lzma-sdk ucl valgrind zlib zstd
 
 $(foreach 1,$(SUBMODULES),$(if $(wildcard vendor/$1/[CL]*),,\
   $(error ERROR: missing git submodule '$1'; run 'git submodule update --init')))

@@ -153,7 +153,7 @@ static int dprintf(char const *fmt, ...); // forward
 
 #define ElfW(sym) Elf32_ ## sym
 
-#include "MAX_ELF_HDR.c"
+#include "../../MAX_ELF_HDR.h"
 
 /*************************************************************************
 // "file" util

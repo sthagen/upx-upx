@@ -206,7 +206,7 @@ bool PackHeader::decodePackHeaderFromBuf(SPAN_S(const byte) buf, int blen) {
         fprintf(stderr, "  decodePackHeaderFromBuf  version=%d  format=%d  method=%d  level=%d\n",
                 version, format, method, level);
     }
-    if (!((format >= 1 && format <= UPX_F_LINUX_ELF64_RISCV64) ||
+    if (!((format >= 1 && format <= UPX_F_CPM86_CMD) ||
           (format >= 129 && format <= UPX_F_DYLIB_PPC64))) {
         throwCantUnpack("unknown format %d", format);
     }
