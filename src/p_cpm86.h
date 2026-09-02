@@ -66,9 +66,9 @@ protected:
     virtual Linker *newLinker() const override;
     virtual void buildLoader(const Filter *ft) override;
 
-    static const unsigned CMD_HDR_SIZE = 128;
-    static const unsigned CMD_NGROUPS = 8;
-    static const unsigned GD_SIZE = 9;
+    static constexpr unsigned CMD_HDR_SIZE = 128;
+    static constexpr unsigned CMD_NGROUPS = 8;
+    static constexpr unsigned GD_SIZE = 9;
 
     enum { GT_UNUSED = 0, GT_CODE = 1, GT_DATA = 2, GT_EXTRA = 3, GT_STACK = 4, GT_ESCAPE = 9 };
 

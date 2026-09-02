@@ -44,7 +44,7 @@ static void initFilter(Filter *f, byte *buf, unsigned buf_len) noexcept {
 // get a FilterEntry
 **************************************************************************/
 
-/*static*/ const FilterImpl::FilterEntry *FilterImpl::getFilter(int id) {
+/*static*/ const FilterImpl::FilterEntry *FilterImpl::getFilter(int id) noexcept {
     static upx_uint8_t filter_map[256];
     static upx_std_once_flag init_done;
 
@@ -69,12 +69,12 @@ static void initFilter(Filter *f, byte *buf, unsigned buf_len) noexcept {
     return &filters[index];
 }
 
-/*static*/ bool Filter::isValidFilter(int filter_id) {
+/*static*/ bool Filter::isValidFilter(int filter_id) noexcept {
     const FilterImpl::FilterEntry *const fe = FilterImpl::getFilter(filter_id);
     return fe != nullptr;
 }
 
-/*static*/ bool Filter::isValidFilter(int filter_id, const int *allowed_filters) {
+/*static*/ bool Filter::isValidFilter(int filter_id, const int *allowed_filters) noexcept {
     if (!isValidFilter(filter_id))
         return false;
     if (filter_id == 0)

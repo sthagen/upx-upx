@@ -54,8 +54,8 @@ public:
     void verifyUnfilter();
     bool scan(SPAN_0(const byte) buf, unsigned buf_len);
 
-    static bool isValidFilter(int filter_id);
-    static bool isValidFilter(int filter_id, const int *allowed_filters);
+    static bool isValidFilter(int filter_id) noexcept;
+    static bool isValidFilter(int filter_id, const int *allowed_filters) noexcept;
 
 public:
     // Will be set by each call to filter()/unfilter().
@@ -112,7 +112,7 @@ private:
     };
 
     // get a specific filter entry
-    static noinline const FilterEntry *getFilter(int id);
+    static const noinline FilterEntry *getFilter(int id) noexcept;
 
 private:
     // strictly private filter database

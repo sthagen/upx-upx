@@ -27,7 +27,7 @@ else()
     cmake_minimum_required(VERSION "3.8" FATAL_ERROR) # CMake >= 3.8 is needed for CXX_STANDARD 17
 endif()
 
-set(UPX_VERSION_STRING "5.2.0") # this should match src/version.h
+set(UPX_VERSION_STRING "5.2.1") # this should match src/version.h
 
 # support functions and some utility
 include("${CMAKE_CURRENT_SOURCE_DIR}/misc/cmake/functions.cmake")
@@ -92,6 +92,7 @@ upx_cache_bool_vars(OFF
     UPX_CONFIG_DISABLE_C_STANDARD UPX_CONFIG_DISABLE_CXX_STANDARD
     UPX_CONFIG_DISABLE_RUN_UNPACKED_TEST UPX_CONFIG_DISABLE_RUN_PACKED_TEST
     UPX_CONFIG_DISABLE_SAVE_TEMPS UPX_CONFIG_DISABLE_SHARED_LIBS UPX_CONFIG_REQUIRE_THREADS
+    UPX_CONFIG_DISABLE_RELEASE_O2
 )
 upx_cache_bool_vars(ON UPX_CONFIG_EXPECT_THREADS)
 
@@ -217,7 +218,7 @@ if(MSVC_FRONTEND)
     set(warn_WX -wd5105 ${warn_WX})
 endif()
 
-if(NOT CMAKE_C_COMPILER_ID MATCHES "^MSVC")
+if(NOT CMAKE_C_COMPILER_ID MATCHES "^MSVC" AND NOT UPX_CONFIG_DISABLE_RELEASE_O2)
     # use -O2 instead of -O3 to reduce code size
     string(REGEX REPLACE "(^| )-O3( |$$)" "\\1-O2\\2" a "${CMAKE_C_FLAGS_RELEASE}")
     string(REGEX REPLACE "(^| )-O3( |$$)" "\\1-O2\\2" b "${CMAKE_CXX_FLAGS_RELEASE}")
@@ -472,6 +473,8 @@ if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR)
         include("${CMAKE_CURRENT_SOURCE_DIR}/misc/cmake/self_pack_test.cmake")
         upx_self_pack_test()
     endif()
+else()
+    message(STATUS "CMAKE_CROSSCOMPILING = ON")
 endif()
 
 endif() # UPX_CONFIG_CMAKE_DISABLE_TEST
@@ -487,19 +490,17 @@ upx_cmake_include_hook(7_install)
 
 if(NOT UPX_CONFIG_CMAKE_DISABLE_INSTALL)
 
-# installation prefix and directories
-if(NOT CMAKE_INSTALL_PREFIX)
-    #message(FATAL_ERROR "ERROR: CMAKE_INSTALL_PREFIX is not defined")
-    message(WARNING "WARNING: CMAKE_INSTALL_PREFIX is not defined")
-endif()
 # install files
-if(CMAKE_INSTALL_PREFIX AND DEFINED CMAKE_INSTALL_BINDIR)
+if(CMAKE_INSTALL_PREFIX AND DEFINED CMAKE_INSTALL_BINDIR AND DEFINED CMAKE_INSTALL_LIBDIR)
     install(TARGETS upx DESTINATION "${CMAKE_INSTALL_BINDIR}")
     install(FILES
         COPYING LICENSE NEWS README doc/THANKS.txt doc/upx-doc.html doc/upx-doc.txt
         DESTINATION "${CMAKE_INSTALL_DOCDIR}"
     )
     install(FILES doc/upx.1 DESTINATION "${CMAKE_INSTALL_MANDIR}/man1")
+else()
+    #message(FATAL_ERROR "ERROR: CMAKE_INSTALL_PREFIX is not defined")
+    message(WARNING "WARNING: CMAKE_INSTALL_PREFIX is not defined")
 endif()
 
 endif() # UPX_CONFIG_CMAKE_DISABLE_INSTALL

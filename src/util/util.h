@@ -35,12 +35,15 @@
 
 inline bool mem_size_valid_bytes(upx_uint64_t bytes) noexcept { return bytes <= UPX_RSIZE_MAX; }
 
-bool mem_size_valid(upx_uint64_t element_size, upx_uint64_t n, upx_uint64_t extra1 = 0,
-                    upx_uint64_t extra2 = 0) noexcept;
+noinline bool mem_size_valid(upx_uint64_t element_size, upx_uint64_t n, upx_uint64_t extra1 = 0,
+                             upx_uint64_t extra2 = 0) noexcept;
 
 // will throw on invalid size
-upx_rsize_t mem_size(upx_uint64_t element_size, upx_uint64_t n, upx_uint64_t extra1,
-                     upx_uint64_t extra2 = 0) may_throw;
+noinline upx_rsize_t mem_size(upx_uint64_t element_size, upx_uint64_t n, upx_uint64_t extra1,
+                              upx_uint64_t extra2 = 0) may_throw;
+
+noinline upx_rsize_t mem_size_ptr(const void *ptr, upx_uint64_t element_size, upx_uint64_t n,
+                                  upx_uint64_t extra1 = 0, upx_uint64_t extra2 = 0) may_throw;
 
 //
 // inline fast paths:
@@ -48,7 +51,7 @@ upx_rsize_t mem_size(upx_uint64_t element_size, upx_uint64_t n, upx_uint64_t ext
 
 // will throw on invalid size
 inline upx_rsize_t mem_size(upx_uint64_t element_size, upx_uint64_t n) may_throw {
-    upx_uint64_t bytes = element_size * n;
+    const upx_uint64_t bytes = element_size * n;
     if very_unlikely (element_size == 0 || element_size > UPX_RSIZE_MAX || n > UPX_RSIZE_MAX ||
                       bytes > UPX_RSIZE_MAX)
         return mem_size(element_size, n, 0, 0); // this will throw
@@ -133,6 +136,20 @@ forceinline bool ptr_is_aligned(const void *p) noexcept {
 forceinline bool ptr_is_aligned(const void *p, size_t alignment) noexcept {
     assert_noexcept(upx::has_single_bit(alignment));
     return (ptr_get_address(p) & (alignment - 1)) == 0;
+}
+
+template <class T>
+forceinline T *ptr_align_down(T *p, size_t alignment) noexcept {
+    typedef std::conditional_t<std::is_const_v<T>, const char *, char *> CharPtr;
+    return upx::ptr_static_cast<T *>(upx::ptr_static_cast<CharPtr>(p) -
+                                     size_t(ptr_get_address(p) & (alignment - 1)));
+}
+template <class T>
+forceinline T *ptr_align_up(T *p, size_t alignment) noexcept {
+    typedef std::conditional_t<std::is_const_v<T>, const char *, char *> CharPtr;
+    return upx::ptr_static_cast<T *>(
+        upx::ptr_static_cast<CharPtr>(p) +
+        size_t((upx_ptraddr_t(0) - ptr_get_address(p)) & (alignment - 1)));
 }
 
 // ptrdiff_t with nullptr checks and asserted size; will throw on failure

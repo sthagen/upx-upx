@@ -67,8 +67,7 @@ void Packer::assertPacker() const {
     if (bele == nullptr)
         fprintf(stderr, "%s\n", getName());
     assert(bele != nullptr);
-    if (getFormat() != UPX_F_MACH_FAT) // macho/fat is multiarch
-    {
+    if (getFormat() != UPX_F_MACH_FAT) { // macho/fat is multiarch
         const N_BELE_RTP::AbstractPolicy *format_bele;
         if (getFormat() < 128)
             format_bele = &N_BELE_RTP::le_policy;
@@ -85,6 +84,7 @@ void Packer::assertPacker() const {
     assert(bele == l->bele);
     delete l;
 #endif
+    assert_noexcept(isValidFormat(getFormat()));
 }
 
 /*************************************************************************

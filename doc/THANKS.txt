@@ -33,6 +33,8 @@ Andreas Muegge <andreas.muegge@gmx.de>
   for the Win32 GUI
 Atli Mar Gudmundsson <agudmundsson@symantec.com>
   for several comments on the win32/pe stub
+bitraid <bitraid@protonmail.ch>
+  for beta testing
 Charles W. Sandmann <sandmann@clio.rice.edu>
   for the idea with the stubless decompressor in djgpp2/coff
 Ice
@@ -45,6 +47,8 @@ Joergen Ibsen <jibz@hotmail.com> and d'b
   for the relocation & address optimization ideas
 John S. Fine <johnfine@erols.com>
   for the new version of the dos/exe decompressor
+Kartik Kenchi <netliomax25@gmail.com>
+  for beta testing
 Kornel Pal
   for the EFI support
 Lukundoo <Lukundoo@softhome.net>

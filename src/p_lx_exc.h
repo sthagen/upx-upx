@@ -28,11 +28,7 @@
    <jreiser@users.sourceforge.net>
  */
 
-
 #pragma once
-#ifndef __UPX_P_LX_EXC_H
-#define __UPX_P_LX_EXC_H 1
-
 
 /*************************************************************************
 // linux/386 (generic "execve" format)
@@ -144,6 +140,5 @@ protected:
 
     virtual void buildLoader(const Filter *) override;
 };
-#endif /* already included */
 
 /* vim:set ts=4 sw=4 et: */

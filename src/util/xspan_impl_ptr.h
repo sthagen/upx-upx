@@ -51,9 +51,9 @@ private:
     pointer ptr;
 
     // enforce config invariants at constructor time - static functions
-    static inline pointer makePtr(pointer p) { return p; }
+    static forceinline pointer makePtr(pointer p) { return p; }
     // inverse logic for ensuring valid pointers from existing objects
-    inline pointer ensurePtr() const { return ptr; }
+    forceinline pointer ensurePtr() const { return ptr; }
     // debug
     forceinline void assertInvariants() const noexcept {}
 
@@ -226,6 +226,7 @@ public: // raw access
                 xspan_fail_nullptr();
             if very_unlikely (__acc_cte(VALGRIND_CHECK_MEM_IS_ADDRESSABLE(ptr, bytes) != 0))
                 throwCantPack("raw_bytes valgrind-check-mem");
+            (void) mem_size_ptr(ptr, 1, bytes); // assert size
         }
         return ptr;
     }

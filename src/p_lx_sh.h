@@ -29,11 +29,7 @@
    <jreiser@users.sourceforge.net>
  */
 
-
 #pragma once
-#ifndef __UPX_P_LX_SH_H  //{
-#define __UPX_P_LX_SH_H 1
-
 
 /*************************************************************************
 // linux/sh386
@@ -68,8 +64,5 @@ protected:
     int o_shname;  // offset to name_of_shell
     int l_shname;  // length of name_of_shell
 };
-
-
-#endif /*} already included */
 
 /* vim:set ts=4 sw=4 et: */

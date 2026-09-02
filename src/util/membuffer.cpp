@@ -89,7 +89,7 @@ unsigned MemBuffer::getSizeForCompression(unsigned uncompressed_size, unsigned e
     if (uncompressed_size == 0)
         throwCantPack("invalid uncompressed_size");
     const size_t z = uncompressed_size; // fewer keystrokes and display columns
-    size_t bytes = mem_size(1, z);      // check size
+    upx_rsize_t bytes = mem_size(1, z); // check size
     // All literal: 1 bit overhead per literal byte; from UCL documentation
     bytes = upx::umax(bytes, z + z / 8 + 256);
     // zstd: ZSTD_COMPRESSBOUND
@@ -103,18 +103,18 @@ unsigned MemBuffer::getSizeForCompression(unsigned uncompressed_size, unsigned e
 unsigned MemBuffer::getSizeForDecompression(unsigned uncompressed_size, unsigned extra) may_throw {
     if (uncompressed_size == 0)
         throwCantPack("invalid uncompressed_size");
-    size_t bytes = mem_size(1, uncompressed_size, extra); // check size
+    const upx_rsize_t bytes = mem_size(1, uncompressed_size, extra); // check size
     return ACC_ICONV(unsigned, bytes);
 }
 
 void MemBuffer::allocForCompression(unsigned uncompressed_size, unsigned extra) may_throw {
-    unsigned bytes = getSizeForCompression(uncompressed_size, extra);
+    const unsigned bytes = getSizeForCompression(uncompressed_size, extra);
     alloc(bytes);
     debug_set(debug.last_return_address_alloc, upx_return_address());
 }
 
 void MemBuffer::allocForDecompression(unsigned uncompressed_size, unsigned extra) may_throw {
-    unsigned bytes = getSizeForDecompression(uncompressed_size, extra);
+    const unsigned bytes = getSizeForDecompression(uncompressed_size, extra);
     alloc(bytes);
     debug_set(debug.last_return_address_alloc, upx_return_address());
 }
@@ -296,7 +296,7 @@ TEST_CASE("MemBuffer core") {
     CHECK_THROWS(mb.subref("", 1, N));
     CHECK_THROWS(mb.subref("", N, 1));
     if (use_simple_mcheck()) {
-        byte *p = upx::ptr_static_cast<byte *>(raw_bytes(mb, 0));
+        byte *p = upx::ptr_static_cast<byte *>(raw_bytes(mb, N));
         upx_uint32_t magic1 = get_ne32(p - 4);
         set_ne32(p - 4, magic1 ^ 1);
         CHECK_THROWS(mb.checkState());

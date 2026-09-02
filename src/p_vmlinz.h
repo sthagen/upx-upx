@@ -25,11 +25,7 @@
    <markus@oberhumer.com>               <ezerotven+github@gmail.com>
  */
 
-
 #pragma once
-#ifndef __UPX_P_VMLINZ_H
-#define __UPX_P_VMLINZ_H 1
-
 
 /*************************************************************************
 // vmlinuz/i386 (gzip compressed Linux kernel image)
@@ -166,8 +162,5 @@ protected:
 //    unsigned config_physical_align;
     unsigned filter_len;
 };
-
-
-#endif /* already included */
 
 /* vim:set ts=4 sw=4 et: */

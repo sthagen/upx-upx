@@ -41,7 +41,7 @@ class Filter;
 // clients: PackMaster, UiPacker
 **************************************************************************/
 
-class PackerBase {
+class PackerBase /*not_final*/ {
     friend class UiPacker;
 protected:
     explicit PackerBase(InputFile *f);
@@ -103,7 +103,7 @@ protected:
 // historically and really would benefit from a decomposition
 **************************************************************************/
 
-class Packer : public PackerBase {
+class Packer /*not_final*/ : public PackerBase {
 protected:
     explicit Packer(InputFile *f);
 
@@ -214,7 +214,8 @@ protected:
 
     // compression handling [see packer_c.cpp]
 public:
-    static bool isValidCompressionMethod(int method);
+    static bool isValidFormat(int format) noexcept;
+    static bool isValidCompressionMethod(int method) noexcept;
 
 protected:
     const int *getDefaultCompressionMethods_8(int method, int level, int small = -1) const;

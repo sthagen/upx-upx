@@ -183,7 +183,7 @@ struct Options final {
     } win32_pe;
 
 private: // UPX conventions
-    UPX_CXX_DISABLE_NEW_DELETE(Options)
+    UPX_CXX_DISABLE_NEW_DELETE_NO_VIRTUAL(Options)
 };
 
 /* vim:set ts=4 sw=4 et: */

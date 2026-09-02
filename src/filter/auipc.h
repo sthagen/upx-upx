@@ -113,7 +113,7 @@ static int F(Filter *f) {
     int calls = 0, noncalls = 0;
     int lastcall = 0;
     int gi;
-    int const g_end = 25;
+    int constexpr g_end = 128;
     int gang[g_end];
 
     int ilen = 0; (void)gang; // not needed, but placate ignorant compiler

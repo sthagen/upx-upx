@@ -29,11 +29,7 @@
    <jreiser@users.sourceforge.net>
  */
 
-
 #pragma once
-#ifndef __UPX_P_LX_INTERP_H  //{
-#define __UPX_P_LX_INTERP_H 1
-
 
 /*************************************************************************
 // linux/interp386
@@ -58,8 +54,5 @@ protected:
     virtual int  pack2(OutputFile *, Filter &) override;  // append compressed data
     virtual off_t pack3(OutputFile *, Filter &) override;  // build loader
 };
-
-
-#endif /*} already included */
 
 /* vim:set ts=4 sw=4 et: */

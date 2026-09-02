@@ -120,8 +120,8 @@ protected:
     unsigned sz_lunc = 0, sz_lcpr = 0;
     unsigned pad_code = 0;
     unsigned bss_start = 0, bss_end = 0;
-    // filesize-PS_HDR_SIZE
-    unsigned fdata_size = 0;
+    unsigned fdata_size = 0; // file_size - PS_HDR_SIZE
+    MemBuffer mb_cprLoader;
 };
 
 /* vim:set ts=4 sw=4 et: */

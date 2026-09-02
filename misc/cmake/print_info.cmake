@@ -35,7 +35,7 @@ function(upx_print_info)
     if(0)
         upx_print_var(CMAKE_AR CMAKE_RANLIB)
     else()
-        upx_print_var(CMAKE_ADDR2LINE CMAKE_AR CMAKE_DLLTOOL CMAKE_LINKER CMAKE_NM CMAKE_OBJCOPY CMAKE_OBJDUMP CMAKE_RANLIB CMAKE_READELF CMAKE_SIZE CMAKE_STRIP CMAKE_TAPI)
+        upx_print_var(CMAKE_ADDR2LINE CMAKE_AR CMAKE_DLLTOOL CMAKE_LINKER CMAKE_NM CMAKE_OBJCOPY CMAKE_OBJDUMP CMAKE_RANLIB CMAKE_READELF CMAKE_SIZE CMAKE_STRIP CMAKE_TAPI CMAKE_WINDRES)
     endif()
 
     # compilers
@@ -52,6 +52,13 @@ function(upx_print_info)
         upx_print_var(CMAKE_${lang}_COMPILER_ABI)
         upx_print_var(CMAKE_${lang}_COMPILER_TARGET)
     endforeach()
+
+    # install
+    upx_print_var(CMAKE_INSTALL_PREFIX)
+    upx_print_var(CMAKE_INSTALL_BINDIR)
+    upx_print_var(CMAKE_INSTALL_LIBDIR)
+    upx_print_var(CMAKE_INSTALL_DOCDIR)
+    upx_print_var(CMAKE_INSTALL_MANDIR)
 
     # misc
     upx_print_var(CMAKE_BUILD_WITH_INSTALL_RPATH CMAKE_SKIP_RPATH CMAKE_SKIP_BUILD_RPATH CMAKE_SKIP_INSTALL_RPATH)

@@ -29,10 +29,7 @@
    <jreiser@users.sourceforge.net>
  */
 
-
 #pragma once
-#ifndef __UPX_P_LX_ELF_H  //{
-#define __UPX_P_LX_ELF_H 1
 
 typedef upx_uint32_t u32_t;  // easier to type; more narrow
 typedef upx_uint64_t u64_t;  // easier to type; more narrow
@@ -795,8 +792,5 @@ protected:
     virtual void buildLoader(const Filter *) override;
     virtual void defineSymbols(Filter const *) override;
 };
-
-
-#endif /*} already included */
 
 /* vim:set ts=4 sw=4 et: */

@@ -471,12 +471,14 @@ int do_files(int i, int argc, char *argv[]) may_throw {
         UiPacker::uiPackTotal();
     else if (opt->cmd == CMD_DECOMPRESS)
         UiPacker::uiUnpackTotal();
-    else if (opt->cmd == CMD_LIST)
-        UiPacker::uiListTotal();
     else if (opt->cmd == CMD_TEST)
         UiPacker::uiTestTotal();
+    else if (opt->cmd == CMD_LIST)
+        UiPacker::uiListTotal();
     else if (opt->cmd == CMD_FILEINFO)
         UiPacker::uiFileInfoTotal();
+    else
+        throwInternalError("invalid command");
     return 0;
 }
 

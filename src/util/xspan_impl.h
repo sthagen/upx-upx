@@ -45,11 +45,13 @@ XSPAN_NAMESPACE_BEGIN
 #if XSPAN_CONFIG_ENABLE_DEBUG
 #define XSPAN_DEBUG_ARGS  const XSpanDebugFile &ff,
 #define XSPAN_DEBUG_IMPL  f(ff),
+#define XSPAN_DEBUG_NULL  f(XSpanDebugFile()),
 #define XSPAN_DEBUG_OTHER f(other.f),
 #define XSPAN_DEBUG_PASS  ff,
 #else
 #define XSPAN_DEBUG_ARGS  XSpanDebugFile,
 #define XSPAN_DEBUG_IMPL  /*empty*/
+#define XSPAN_DEBUG_NULL  /*empty*/
 #define XSPAN_DEBUG_OTHER /*empty*/
 #define XSPAN_DEBUG_PASS  /*empty*/
 #endif
@@ -61,7 +63,7 @@ struct XSpanDebugFile final {
     static forceinline_constexpr XSpanDebugFile make(const char *f, size_t l) noexcept {
         return XSpanDebugFile(f, l);
     }
-    forceinline_constexpr XSpanDebugFile() noexcept : src_file(nullptr), src_line(0) {}
+    explicit forceinline_constexpr XSpanDebugFile() noexcept : src_file(nullptr), src_line(0) {}
 private:
     explicit forceinline_constexpr XSpanDebugFile(const char *f, size_t l) noexcept : src_file(f),
                                                                                       src_line(l) {}
@@ -71,7 +73,7 @@ private:
     (XSPAN_NS(XSpanDebugFile)(XSPAN_NS(XSpanDebugFile)::make(__FILE__, __LINE__)))
 #else
 struct XSpanDebugFile final {
-    forceinline_constexpr XSpanDebugFile() noexcept {}
+    explicit forceinline_constexpr XSpanDebugFile() noexcept {}
     UPX_CXX_DISABLE_ADDRESS(XSpanDebugFile)
 };
 #endif
@@ -109,7 +111,7 @@ struct TypeForSizeOf<const void> {
 };
 
 template <class T>
-struct ValueForSizeOf {
+struct ValueForSizeOf final {
     static const size_t value = sizeof(typename TypeForSizeOf<T>::type);
 };
 
@@ -122,7 +124,7 @@ ACC_COMPILE_TIME_ASSERT_HEADER(ValueForSizeOf<const int>::value == 4)
 
 #ifndef xspan_mem_size_impl
 template <class T>
-static inline size_t xspan_mem_size_impl(size_t n) {
+static forceinline size_t xspan_mem_size_impl(size_t n) {
 #ifdef UPX_VERSION_HEX
     // check for overflow and sane limits
     return mem_size(sizeof(T), n);
@@ -133,12 +135,12 @@ static inline size_t xspan_mem_size_impl(size_t n) {
 #endif
 
 template <class T>
-static inline size_t xspan_mem_size(size_t n) {
+static forceinline size_t xspan_mem_size(size_t n) {
     return xspan_mem_size_impl<typename TypeForSizeOf<T>::type>(n);
 }
 
 template <class T>
-static inline void xspan_mem_size_assert_ptrdiff(ptrdiff_t n) {
+static forceinline void xspan_mem_size_assert_ptrdiff(ptrdiff_t n) {
     if (n >= 0)
         (void) xspan_mem_size<T>((size_t) n);
     else
@@ -149,7 +151,7 @@ static inline void xspan_mem_size_assert_ptrdiff(ptrdiff_t n) {
 // unfortunately doesn't work with some older versions of libstdc++
 // (TODO later: we now require C++17, so this now probably works on all supported platforms)
 template <class From, class To>
-struct XSpan_is_convertible : public std::is_convertible<From *, To *> {};
+struct XSpan_is_convertible final : public std::is_convertible<From *, To *> {};
 #else
 // manual implementation
 
@@ -177,8 +179,9 @@ struct XSpan_ptr_is_convertible<T, const T> : public std::true_type {};
 } // namespace XSpan_detail
 
 template <class From, class To>
-struct XSpan_is_convertible : public XSpan_detail::XSpan_ptr_is_convertible<
-                                  From, typename XSpan_detail::XSpan_void_to_T<From, To>::type> {};
+struct XSpan_is_convertible final
+    : public XSpan_detail::XSpan_ptr_is_convertible<
+          From, typename XSpan_detail::XSpan_void_to_T<From, To>::type> {};
 #endif
 
 #if DEBUG || 1
@@ -319,6 +322,12 @@ XSPAN_NAMESPACE_END
 #undef XSPAN_REQUIRES_CONVERTIBLE_T
 #undef XSPAN_REQUIRES_SIZE_1_A
 #undef XSPAN_REQUIRES_SIZE_1_R
+
+#undef XSPAN_DEBUG_ARGS
+#undef XSPAN_DEBUG_IMPL
+#undef XSPAN_DEBUG_NULL
+#undef XSPAN_DEBUG_OTHER
+#undef XSPAN_DEBUG_PASS
 
 #endif // WITH_XSPAN
 

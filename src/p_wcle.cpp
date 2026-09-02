@@ -128,17 +128,19 @@ tribool PackWcle::canPack() {
 // elements (of course I still have to handle empty bundles)
 
 void PackWcle::encodeEntryTable() {
-    unsigned count, object, n;
-    byte *p = ientries;
+    unsigned count, n;
+    SPAN_S_VAR(byte, p, ientries, soentries);
     n = 0;
     while (*p) {
         count = *p;
         n += count;
         if (p[1] == 0) // unused bundle
             p += 2;
-        else if (p[1] == 3) // 32-bit bundle
-        {
-            object = get_le16(p + 2) - 1;
+        else if (p[1] == 3) { // 32-bit bundle
+            unsigned object = get_le16(p + 2);
+            if (object == 0 || object > objects)
+                throwCantPack("bad object number in entry table");
+            object -= 1;
             set_le16(p + 2, 1);
             p += 4;
             for (; count; count--, p += 5)
@@ -429,6 +431,8 @@ void PackWcle::pack(OutputFile *fo) {
 
     if (ih.init_ss_object != objects)
         throwCantPack("the stack is not in the last object");
+    if (ih.init_cs_object == 0 || ih.init_cs_object > objects)
+        throwCantPack("bad init_cs_object");
 
     preprocessFixups();
 
@@ -569,7 +573,7 @@ void PackWcle::decodeFixups() {
             }
         }
         // Guard against run-away.
-        static byte const blank[9] = {0};
+        static const byte blank[9] = {};
         // catastrophic worst case or no-good early warning
         if (ptr_diff_bytes(oimage + ph.u_len - sizeof(blank), raw_bytes(q, 0)) < 0 ||
             !memcmp(blank, q, sizeof(blank))) {
@@ -701,7 +705,7 @@ void PackWcle::decodeImage() {
 }
 
 void PackWcle::decodeEntryTable() {
-    unsigned count, object, n, r;
+    unsigned count, n, r;
     SPAN_S_VAR(byte, p, ientries, soentries);
     n = 0;
     while (*p) {
@@ -709,9 +713,8 @@ void PackWcle::decodeEntryTable() {
         n += count;
         if (p[1] == 0) // unused bundle
             p += 2;
-        else if (p[1] == 3) // 32-bit offset bundle
-        {
-            object = get_le16(p + 2);
+        else if (p[1] == 3) { // 32-bit offset bundle
+            unsigned object = get_le16(p + 2);
             if (object != 1)
                 throwCantUnpack("corrupted entry found");
             object = soobject_table;

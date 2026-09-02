@@ -703,6 +703,10 @@ void PackTos::unpack(OutputFile *fo) {
     // decompress
     decompress(ibuf, obuf);
 
+    // the trailing FH_SIZE bytes hold the original file header
+    if (ph.u_len < FH_SIZE)
+        throwCantUnpack("file damaged");
+
     // write original header & decompressed file
     if (fo) {
         unsigned overlay = file_size_u - (FH_SIZE + ih.fh_text + ih.fh_data);
@@ -710,8 +714,8 @@ void PackTos::unpack(OutputFile *fo) {
             overlay -= 4; // this is our empty fixup
         checkOverlay(overlay);
 
-        fo->write(obuf + ph.u_len - FH_SIZE, FH_SIZE); // orig. file_hdr
-        fo->write(obuf, ph.u_len - FH_SIZE);           // orig. text+data+relocs
+        fo->write(obuf + (ph.u_len - FH_SIZE), FH_SIZE); // orig. file_hdr
+        fo->write(obuf, ph.u_len - FH_SIZE);             // orig. text+data+relocs
 
         // copy any overlay
         copyOverlay(fo, overlay, obuf);

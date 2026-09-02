@@ -36,7 +36,7 @@
 **************************************************************************/
 
 template <class T>
-class MemBufferBase {
+class MemBufferBase /*not_final*/ {
 public:
     typedef T element_type;
     typedef typename std::add_lvalue_reference<T>::type reference;
@@ -51,7 +51,7 @@ protected:
     size_type size_in_bytes;
 
 public:
-    explicit inline MemBufferBase() noexcept : ptr(nullptr), size_in_bytes(0) {}
+    explicit forceinline MemBufferBase() noexcept : ptr(nullptr), size_in_bytes(0) {}
     forceinline ~MemBufferBase() noexcept {}
 
     // IMPORTANT NOTE: automatic conversion to underlying pointer
@@ -95,8 +95,8 @@ public:
     template <class U>
     typename std::enable_if<std::is_integral<U>::value, pointer>::type operator+(U n) const
         may_throw {
-        size_t bytes = mem_size(element_size, n); // check mem_size
-        return raw_bytes(bytes) + n;              // and check bytes
+        const upx_rsize_t bytes = mem_size(element_size, n); // check mem_size
+        return raw_bytes(bytes) + n;                         // and check bytes
     }
 private:
     // membuffer - n -> pointer; not allowed - use raw_bytes() if needed
@@ -187,7 +187,7 @@ inline typename MemBufferBase<T>::pointer raw_index_bytes(const MemBufferBase<T>
 
 class MemBuffer final : public MemBufferBase<byte> {
 public:
-    explicit inline MemBuffer() noexcept : MemBufferBase<byte>() {}
+    explicit forceinline MemBuffer() noexcept : MemBufferBase<byte>() {}
     explicit MemBuffer(upx_uint64_t bytes) may_throw;
     ~MemBuffer() noexcept;
 

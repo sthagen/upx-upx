@@ -35,6 +35,11 @@ static constexpr int has_builtin = 0;
 #else
 static constexpr int has_builtin = 1;
 #endif
+#if !defined(__has_cpp_attribute)
+static constexpr int has_cpp_attribute = 0;
+#else
+static constexpr int has_cpp_attribute = 1;
+#endif
 #if !defined(__has_declspec_attribute)
 static constexpr int has_declspec_attribute = 0;
 #else
@@ -138,7 +143,8 @@ struct PackerNames final {
     ~PackerNames() noexcept = default;
 
     static constexpr unsigned MAX_NAMES = 64; // arbitrary limit, increase as needed
-    struct Entry {
+    struct Entry final {
+        int format;
         const char *fname;
         const char *sname;
         unsigned methods_count;
@@ -151,18 +157,28 @@ struct PackerNames final {
     unsigned names_count = 0;
     const Options *o = nullptr;
 
-    void add(const PackerBase *pb) {
+    noinline void add(const PackerBase *pb) {
+        assert_noexcept(pb != nullptr);
+        const int format = pb->getFormat();
+        if (format != 25)
+            for (unsigned i = 0; i < names_count; i++)
+                assert_noexcept(names_array[i].format != format);
         assert_noexcept(names_count < MAX_NAMES);
         Entry &e = names_array[names_count];
+        mem_clear(&e);
         names[names_count++] = &e;
+        e.format = format;
+        assert_noexcept(Packer::isValidFormat(e.format));
         e.fname = pb->getFullName(o);
         e.sname = pb->getName();
         assert_noexcept(e.fname != nullptr && e.fname[0]);
         assert_noexcept(e.sname != nullptr && e.sname[0]);
-        e.methods_count = e.filters_count = 0;
         for (const int *m = pb->getCompressionMethods(M_ALL, 10); *m != M_END; m++) {
             if (*m >= 0) {
                 assert_noexcept(Packer::isValidCompressionMethod(*m));
+                assert_noexcept(*m != 0);
+                for (unsigned mm = 0; mm < e.methods_count; mm++)
+                    assert_noexcept(e.methods[mm] != (unsigned) *m);
                 assert_noexcept(e.methods_count < PackerBase::MAX_METHODS);
                 e.methods[e.methods_count++] = *m;
             }
@@ -170,6 +186,9 @@ struct PackerNames final {
         for (const int *f = pb->getFilters(); f != nullptr && *f != FT_END; f++) {
             if (*f >= 0) {
                 assert_noexcept(Filter::isValidFilter(*f));
+                assert_noexcept(*f != 0);
+                for (unsigned ff = 0; ff < e.filters_count; ff++)
+                    assert_noexcept(e.filters[ff] != (unsigned) *f);
                 assert_noexcept(e.filters_count < PackerBase::MAX_FILTERS);
                 e.filters[e.filters_count++] = *f;
             }
@@ -177,8 +196,12 @@ struct PackerNames final {
         assert_noexcept(e.methods_count >= 1);
         upx_gnomesort(e.methods, e.methods_count, sizeof(e.methods[0]), ne32_compare);
         upx_gnomesort(e.filters, e.filters_count, sizeof(e.filters[0]), ne32_compare);
+        NO_printf("%2u %3d %-36s %2u %2u\n", names_count, e.format, e.fname, e.methods_count,
+                  e.filters_count);
     }
     static tribool visit(PackerBase *pb, void *user) {
+        assert_noexcept(pb != nullptr);
+        assert_noexcept(user != nullptr);
         NO_fprintf(stderr, "visit %s\n", pb->getFullName(nullptr));
         PackerNames *self = (PackerNames *) user;
         self->add(pb);
@@ -271,13 +294,10 @@ void show_help(int verbose) {
                 "  -q     be quiet                          -v    be verbose\n"
                 "  -oFILE write output to 'FILE'\n"
                 "  -f     force compression of suspicious files\n"
-                "%s%s"
+                "%s%s%s"
                 , (verbose == 0) ? "  -k     keep backup files\n" : ""
-#if 1
+                , (verbose > 0) ? "  -i     info mode\n" : ""
                 , (verbose > 0) ? "  --no-color, --mono, --color, --no-progress   change look\n" : ""
-#else
-                , ""
-#endif
                 );
 
     if (verbose > 0)
@@ -610,12 +630,13 @@ void show_sysinfo(const char *options_var) {
 #if defined(_MSC_FULL_VER)
         cf_print("_MSC_FULL_VER", "%lld", _MSC_FULL_VER + 0);
 #endif
-        cf_print("__has_attribute", "%lld", has_attribute, 3);
-        cf_print("__has_builtin", "%lld", has_builtin, 3);
-        cf_print("__has_declspec_attribute", "%lld", has_declspec_attribute, 3);
-        cf_print("__has_feature", "%lld", has_feature, 3);
-        cf_print("__has_include", "%lld", has_include, 3);
-        cf_print("__has_warning", "%lld", has_warning, 3);
+        cf_print("__has_attribute", "%lld", has_attribute, 4);
+        cf_print("__has_builtin", "%lld", has_builtin, 4);
+        cf_print("__has_cpp_attribute", "%lld", has_cpp_attribute, 4);
+        cf_print("__has_declspec_attribute", "%lld", has_declspec_attribute, 4);
+        cf_print("__has_feature", "%lld", has_feature, 4);
+        cf_print("__has_include", "%lld", has_include, 4);
+        cf_print("__has_warning", "%lld", has_warning, 4);
 
         // architecture
 #if defined(__CHERI__)
@@ -693,11 +714,18 @@ void show_sysinfo(const char *options_var) {
         cf_print("__SIZEOF_POINTER__", "%lld", __SIZEOF_POINTER__ + 0, 3);
 #endif
         cf_print("__SIZEOF_SIZE_T__", "%lld", (long long) sizeof(size_t), 3);
+#if (ACC_ABI_BIG_ENDIAN)
+        cf_print("ACC_ABI_BIG_ENDIAN", "%lld", ACC_ABI_BIG_ENDIAN + 0, 4);
+#elif (ACC_ABI_LITTLE_ENDIAN)
+        cf_print("ACC_ABI_LITTLE_ENDIAN", "%lld", ACC_ABI_LITTLE_ENDIAN + 0, 4);
+#else
+#error "ACC_ABI_ENDIAN"
+#endif
 #if defined(UPX_CONFIG_DISABLE_WSTRICT)
-        cf_print("UPX_CONFIG_DISABLE_WSTRICT", "%lld", UPX_CONFIG_DISABLE_WSTRICT + 0, 3);
+        cf_print("UPX_CONFIG_DISABLE_WSTRICT", "%lld", UPX_CONFIG_DISABLE_WSTRICT + 0, 4);
 #endif
 #if defined(UPX_CONFIG_DISABLE_WERROR)
-        cf_print("UPX_CONFIG_DISABLE_WERROR", "%lld", UPX_CONFIG_DISABLE_WERROR + 0, 3);
+        cf_print("UPX_CONFIG_DISABLE_WERROR", "%lld", UPX_CONFIG_DISABLE_WERROR + 0, 4);
 #endif
 #if defined(DOCTEST_CONFIG_DISABLE)
         cf_print("DOCTEST_CONFIG_DISABLE", "%lld", DOCTEST_CONFIG_DISABLE + 0, 3);

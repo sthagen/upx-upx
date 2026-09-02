@@ -25,13 +25,9 @@
    <markus@oberhumer.com>               <ezerotven+github@gmail.com>
  */
 
-
 #pragma once
-#ifndef __UPX_P_VMLINX_H
-#define __UPX_P_VMLINX_H 1
 
 #include "p_elf.h"
-
 
 /*************************************************************************
 // vmlinx/i386 (bare binary Linux kernel image)
@@ -240,8 +236,5 @@ protected:
         Shdr *stxt
     ) override;
 };
-
-
-#endif /* already included */
 
 /* vim:set ts=4 sw=4 et: */

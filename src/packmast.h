@@ -51,8 +51,8 @@ public:
                                                 void *user) may_throw;
 
 private:
-    static PackerBase *getPacker(InputFile *f) may_throw;
-    static PackerBase *getUnpacker(InputFile *f) may_throw;
+    static noinline PackerBase *getPacker(InputFile *f) may_throw;
+    static noinline PackerBase *getUnpacker(InputFile *f) may_throw;
 
     OwningPointer(PackerBase) packer = nullptr; // owner
     InputFile *const fi;                        // reference, required

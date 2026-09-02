@@ -25,10 +25,7 @@
    <markus@oberhumer.com>               <ezerotven+github@gmail.com>
  */
 
-
 #pragma once
-#ifndef __UPX_P_MACHO_H
-#define __UPX_P_MACHO_H 1
 
 #include "conf.h"
 
@@ -1390,7 +1387,5 @@ struct version_min_command {
     upx_uint32_t version;
     upx_uint32_t sdk;
 };
-
-#endif /* already included */
 
 /* vim:set ts=4 sw=4 et: */

@@ -223,16 +223,24 @@ void PackLinuxElf32x86interp::unpack(OutputFile *fo)
     if (file_size > (off_t)orig_file_size || blocksize > orig_file_size)
         throwCantUnpack("file header corrupted");
 
-    ibuf.alloc(blocksize + OVERHEAD);
+    ibuf.alloc(blocksize + OVERHEAD + (blocksize >> ELF_NRV_FUDGE));
     b_info bhdr; memset(&bhdr, 0, sizeof(bhdr));
     fi->readx(&bhdr, szb_info);
     ph.u_len = get_te32(&bhdr.sz_unc);
     ph.c_len = get_te32(&bhdr.sz_cpr);
     ph.filter_cto = bhdr.b_cto8;
+    // sz_unc/sz_cpr come straight from the packed file's b_info; the Ehdr+Phdrs
+    // decompress into the fixed-size u.buf[MAX_INTERP_HDR] on the stack, so the
+    // sibling ElfXX/Mach unpackers that size their output buffer to u_len don't
+    // overflow, but this one would. Bound u_len to the buffer.
+    if (ph.c_len == 0 || ph.u_len < sizeof(*ehdr) || ph.u_len > MAX_INTERP_HDR)
+        throwCantUnpack("b_info corrupted");
 
     // Uncompress Ehdr and Phdrs.
     fi->readx(ibuf, ph.c_len);
     decompress(ibuf, (upx_byte *)ehdr, false);
+    if ((ph.u_len - sizeof(*ehdr)) / sizeof(*phdr) < ehdr->e_phnum)
+        throwCantUnpack("bad compressed e_phnum");
 
     total_in = 0;
     total_out = 0;

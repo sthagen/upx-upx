@@ -59,6 +59,7 @@ jobs:
           git clone --branch "$GITHUB_REF_NAME" --depth 1 "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" .
           git submodule update --init
           git fsck --strict --progress
+      - run: ls -laF "$HOME" "$GITHUB_WORKSPACE" || true
       - name: Rebuild and verify stubs
         run: |
           export PATH="$(readlink -en ../deps/bin-upx-20221212):$PATH"
@@ -94,7 +95,7 @@ jobs:
       matrix:
         container:
           - alpine:3.9
-          - alpine:3.23
+          - alpine:3.24
           - i386/alpine:3.9
           - i386/alpine:3.23
         cc:
@@ -129,25 +130,29 @@ jobs:
             gcc)   CC="gcc $xflags";   CXX="g++ $xflags" ;;
             *)     exit 99 ;;
           esac
-          if [[ "${{ matrix.container }}" == *'alpine:3.23' ]]; then true;
+          if [[ "${{ matrix.container }}" == *'alpine:3.2'* ]]; then true;
             export CXX="$CXX -std=gnu++23"
             echo "UPX_CONFIG_DISABLE_CXX_STANDARD=ON" >> $GITHUB_ENV
           fi
           echo -e "CC=$CC\nCXX=$CXX" >> $GITHUB_ENV
+      - run: ls -laF "$HOME" "$GITHUB_WORKSPACE" || true
+      - run: set -x; cat "$HOME/.gitconfig" || true
       - run: set -x; $CC --version; $CXX --version
       - run: $CC  -E -x c   -dM /dev/null | LC_ALL=C sort
       - run: $CXX -E -x c++ -dM /dev/null | LC_ALL=C sort
       - run: make build/debug
       - run: make build/release
+      - run: UPX_DEBUG_DOCTEST_VERBOSE=1 ./build/debug/upx --sysinfo -vv
+      - run: UPX_DEBUG_DOCTEST_VERBOSE=1 ./build/release/upx --sysinfo -vv
       - run: make build/debug+test
       - run: make build/release+test
+      # run: DESTDIR="$PWD/Install with cmake debug"   make build/debug+install
+      # run: DESTDIR="$PWD/Install with cmake release" make build/release+install
       - name: Run test suite
         run: |
           jobs="debug release"
           echo "===== parallel jobs: $jobs"
           parallel -kv --lb 'cd build/{} && bash ../../misc/testsuite/upx_testsuite_1.sh' ::: $jobs
-      - run: UPX_DEBUG_DOCTEST_VERBOSE=1 ./build/debug/upx --sysinfo -vv
-      - run: UPX_DEBUG_DOCTEST_VERBOSE=1 ./build/release/upx --sysinfo -vv
       - name: Show summary
         run: ls -ldF build/*/upx && size build/*/upx && file build/*/upx
 
@@ -161,7 +166,7 @@ jobs:
           - { os: ubuntu-22.04 }
           - { os: ubuntu-24.04 }
           - { os: ubuntu-22.04-arm }
-          - { os: ubuntu-24.04-arm }
+          # { os: ubuntu-24.04-arm }
     name: ${{ format('{0}', matrix.os) }}-0
     runs-on: ${{ matrix.os }}
     steps:
@@ -171,10 +176,11 @@ jobs:
       - run: (sudo dmidecode | sed -n -e '/System Information/,/^$/p') || true
       - run: sudo dmidecode -q || true
       - run: sudo dmidecode || true
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with: { submodules: true }
       - name: Check out test suite
         run: git clone --depth=1 https://github.com/upx/upx-testsuite ../deps/upx-testsuite
+      - run: ls -laF "$HOME" "$GITHUB_WORKSPACE" || true
       - run: set -x; clang --version; clang++ --version
       - run: set -x; gcc --version; g++ --version
       - run: clang   -E -x c   -dM /dev/null | LC_ALL=C sort # list predefined macros for C
@@ -200,6 +206,14 @@ jobs:
       - name: ${{ format('Upload artifact {0}', env.artifact_name) }}
         uses: actions/upload-artifact@v7
         with: { name: '${{ env.artifact_name }}', path: tmp/artifact }
+      - run: UPX_DEBUG_DOCTEST_VERBOSE=1 ./build/extra/clang/debug/upx --sysinfo -vv
+      - run: UPX_DEBUG_DOCTEST_VERBOSE=1 ./build/extra/clang/release/upx --sysinfo -vv
+      - run: UPX_DEBUG_DOCTEST_VERBOSE=1 ./build/extra/clang-std-cxx20/debug/upx --sysinfo -vv
+      - run: UPX_DEBUG_DOCTEST_VERBOSE=1 ./build/extra/clang-std-cxx20/release/upx --sysinfo -vv
+      - run: UPX_DEBUG_DOCTEST_VERBOSE=1 ./build/extra/gcc/debug/upx --sysinfo -vv
+      - run: UPX_DEBUG_DOCTEST_VERBOSE=1 ./build/extra/gcc/release/upx --sysinfo -vv
+      - run: UPX_DEBUG_DOCTEST_VERBOSE=1 ./build/extra/gcc-std-cxx20/debug/upx --sysinfo -vv
+      - run: UPX_DEBUG_DOCTEST_VERBOSE=1 ./build/extra/gcc-std-cxx20/release/upx --sysinfo -vv
       - name: Run install tests
         run: |
           jobs="gcc/debug gcc/release clang/debug clang/release"
@@ -281,10 +295,11 @@ jobs:
           sudo apt-get install -y wine wine32:i386 wine64
           ls -ldF /usr/bin/wine* /etc/alternatives/*wine* || true
           mkdir -p -v ~/.wine && wineboot --init
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with: { submodules: true }
       - name: Check out test suite
         run: git clone --depth=1 https://github.com/upx/upx-testsuite ../deps/upx-testsuite
+      - run: ls -laF "$HOME" "$GITHUB_WORKSPACE" || true
       - run: set -x; clang --version; clang++ --version
       - run: set -x; gcc --version; g++ --version
       - run: clang   -E -x c   -dM /dev/null | LC_ALL=C sort # list predefined macros for C
@@ -433,11 +448,12 @@ jobs:
             # TODO FIXME: UPX on macos-13+ is broken => disable run-packed for now
             macos-[12][3456]*) echo "UPX_CONFIG_DISABLE_RUN_PACKED_TEST=ON" >> $GITHUB_ENV ;;
           esac
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with: { submodules: true }
       - name: Check out test suite
         if: ${{ matrix.testsuite }}
         run: git clone --depth=1 https://github.com/upx/upx-testsuite ../deps/upx-testsuite
+      - run: ls -laF "$HOME" "$GITHUB_WORKSPACE" || true
       - run: set -x; xcode-select -p || true; xcodebuild -version || true
       - run: set -x; clang --version; clang++ --version
       - run: clang   -E -x c   -dM /dev/null | LC_ALL=C sort # list predefined macros for C
@@ -480,6 +496,8 @@ jobs:
       - name: ${{ format('Upload artifact {0}', env.artifact_name) }}
         uses: actions/upload-artifact@v7
         with: { name: '${{ env.artifact_name }}', path: tmp/artifact }
+      - run: UPX_DEBUG_DOCTEST_VERBOSE=1 ./build/extra/clang/debug/upx --sysinfo -vv
+      - run: UPX_DEBUG_DOCTEST_VERBOSE=1 ./build/extra/clang/release/upx --sysinfo -vv
       - name: Run install tests
         run: |
           (cd build/extra/clang/release && DESTDIR="$PWD/Install with cmake" cmake --install .)
@@ -537,10 +555,11 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - run: git config --global core.autocrlf false
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with: { submodules: true }
       - name: Check out test suite
         run: git clone --depth=1 https://github.com/upx/upx-testsuite ../deps/upx-testsuite
+      - run: ls -laF "$HOME" "$GITHUB_WORKSPACE" || true
       - name: Set platform
         run: |
           if [[ "${{ matrix.use_arm64ec }}" == "true" ]]; then true;
@@ -560,12 +579,13 @@ jobs:
             exit 1
           fi
       - run: echo "CXXFLAGS=$CXXFLAGS -DDOCTEST_CONFIG_DISABLE" >> $GITHUB_ENV
-        if: ${{ contains(matrix.name, 'windows-2026') }}
+        #if: false
+        if: ${{ contains(matrix.name, '2026') }}
       - run: make build/debug
       - run: make build/release
-      - run: shopt -s globstar; ls -ld build/**/upx.exe || true
-      - run: shopt -s globstar; size   build/**/upx.exe || true
-      - run: shopt -s globstar; file   build/**/upx.exe || true
+      - run: shopt -s globstar; ls -ldF build/**/upx.exe || true
+      - run: shopt -s globstar; size    build/**/upx.exe || true
+      - run: shopt -s globstar; file    build/**/upx.exe || true
       - name: Make artifact
         run: |
           N=$(echo "upx-${GITHUB_REF_NAME}-${GITHUB_SHA:0:7}-${{ matrix.name }}" | sed 's/[^0-9a-zA-Z_.-]/-/g')
@@ -603,7 +623,7 @@ jobs:
           env -C build/release/Release upx_exe=./upx.exe bash "$PWD"/misc/testsuite/upx_testsuite_1.sh
 
   job-windows-bh-toolchains: # build "by hand" using cmd.exe
-    if: github.repository_owner == 'upx'
+    #if: github.repository_owner == 'upx'
     #if: false
     needs: [ job-cppflags ]
     strategy:
@@ -627,7 +647,7 @@ jobs:
       B: release
     steps:
       - run: git config --global core.autocrlf false
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with: { submodules: true }
       - name: Prepare sources and Check out test suite
         run: |
@@ -638,6 +658,9 @@ jobs:
       # uses: ilammy/msvc-dev-cmd@v1
       - uses: m-doughty/msvc-dev-cmd@node24-v1
         with: { vsversion: '${{ matrix.vsversion }}', arch: '${{ matrix.vsarch }}' }
+      - run: ls -laF "$HOME" "$GITHUB_WORKSPACE" || true
+      - run: echo "UPX_CXXFLAGS=$UPX_CXXFLAGS -DDOCTEST_CONFIG_DISABLE" >> $GITHUB_ENV
+        if: ${{ contains(matrix.name, '2026') }}
       - name: Build by hand
         shell: cmd
         run: |
@@ -674,11 +697,10 @@ jobs:
           cat .GITREV.txt
           set /p GITREV=<.GITREV.txt
           set UPX_DEFS=-DUPX_CONFIG_DISABLE_WSTRICT=0 -DUPX_CONFIG_DISABLE_WERROR=0 -DWITH_THREADS=0 -DWITH_BZIP2=0 -DWITH_ZSTD=0
-          set UPX_DEFS=%UPX_DEFS% -DDOCTEST_CONFIG_DISABLE
           set UPX_LIBS=%BDIR%\ucl\ucl.lib %BDIR%\zlib\zlib.lib
           @rem set UPX_LIBS=%BDIR%\bzip2\bzip2.lib %BDIR%\ucl\ucl.lib %BDIR%\zlib\zlib.lib %BDIR%\zstd\zstd.lib
           set sources=%s%\*.cpp %s%\check\*.cpp %s%\compress\*.cpp %s%\console\*.cpp %s%\filter\*.cpp %s%\util\*.cpp
-          %RUN_CL% -J -O2 -W4 -WX -std:c++17 -Zc:__cplusplus -EHsc -DUPX_VERSION_GITREV="""%GITREV%""" %DEFS% %UPX_DEFS% -I%H%\vendor -Feupx.exe %sources% %UPX_LIBS% /link ${{ matrix.link_machine_flags }} setargv.obj
+          %RUN_CL% -J -O2 -W4 -WX -std:c++17 -Zc:__cplusplus -EHsc -DUPX_VERSION_GITREV="""%GITREV%""" %DEFS% %UPX_DEFS% %UPX_CXXFLAGS% -I%H%\vendor -Feupx.exe %sources% %UPX_LIBS% /link ${{ matrix.link_machine_flags }} setargv.obj
       - run: shopt -s globstar; ls -ld build/**/upx.exe || true
       - run: shopt -s globstar; size   build/**/upx.exe || true
       - run: shopt -s globstar; file   build/**/upx.exe || true
@@ -707,7 +729,7 @@ jobs:
           env -C build/$C/$B/upx upx_exe=./upx.exe bash "$PWD"/misc/testsuite/upx_testsuite_1.sh
 
   job-linux-zigcc: # uses cmake + make
-    if: github.repository_owner == 'upx'
+    #if: github.repository_owner == 'upx'
     needs: [ job-cppflags ]
     strategy:
       fail-fast: false
@@ -719,7 +741,7 @@ jobs:
           - { zig_target: aarch64-macos-none }
           - { zig_target: aarch64-windows-gnu }
           - { zig_target: arm-linux-musleabihf, qemu: qemu-arm }
-          - { zig_target: armeb-linux-musleabihf, Q_qemu: qemu-armeb }
+          - { zig_target: armeb-linux-musleabihf, qemu: qemu-armeb }
           - { zig_target: i386-linux-gnu.2.7, zig_flags: -march=i586 }
           - { zig_target: i386-linux-gnu.2.17, zig_flags: -march=i586 }
           - { zig_target: i386-linux-musl, zig_flags: -march=i586, qemu: qemu-i386 }
@@ -740,7 +762,7 @@ jobs:
           - { zig_target: powerpc64le-linux-musl, qemu: qemu-ppc64le, zig_pic: -fPIE }
           - { zig_target: riscv64-linux-musl, qemu: qemu-riscv64 }
           - { zig_target: riscv64-linux-musl, qemu: qemu-riscv64, zig_pic: -fPIC }
-          - { zig_target: riscv64-linux-musl, qemu: qemu-riscv64, zig_pic: -fPIE }
+          - { zig_target: riscv64-linux-musl, qemu: qemu-riscv64, zig_pic: -fPIE, container: 'alpine:3.18' }
           - { zig_target: x86_64-linux-gnu.2.7, qemu: qemu-x86_64 }  # can use QEMU because of gcompat
           - { zig_target: x86_64-linux-gnu.2.17, qemu: qemu-x86_64 } # can use QEMU because of gcompat
           - { zig_target: x86_64-linux-musl, qemu: qemu-x86_64 }
@@ -749,9 +771,11 @@ jobs:
           - { zig_target: x86_64-windows-gnu }
     name: ${{ format('zigcc {0} {1}', matrix.zig_target, matrix.zig_pic) }}
     runs-on: ubuntu-latest
-    container: ${{ matrix.container || 'alpine:3.23' }}
+    container: ${{ matrix.container || 'alpine:3.24' }}
     env:
-      container: ${{ matrix.container || 'alpine:3.23' }}
+      container: ${{ matrix.container || 'alpine:3.24' }}
+      #UPX_CONFIG_DISABLE_RELEASE_O2: 'ON'
+      UPX_CONFIG_EXTRA_COMPILE_OPTIONS_UPX: '$$<$$<CONFIG:Release>:-fomit-frame-pointer>'
       UPX_CONFIG_HAVE_WORKING_BUILD_RPATH: ''
       # for zig-cc wrapper scripts (see below):
       ZIG_CPPFLAGS: -DUPX_DOCTEST_CONFIG_MULTITHREADING
@@ -770,7 +794,7 @@ jobs:
           git config --global --add safe.directory '*' # needed when running in a container
           mkdir -p ~/.parallel && : > ~/.parallel/$(echo 6305-4721 | tr 0-7 leticlwi)
       - run: (sudo dmidecode | sed -n -e '/System Information/,/^$/p') || true
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with: { submodules: true }
       - name: Check out test suite
         if: ${{ matrix.qemu || matrix.wine }}
@@ -808,7 +832,7 @@ jobs:
           #echo "PATH=$PATH" && which zig
           echo -n 'zig version: '; zig version
           # patch zig
-          ls -la "$HOME" "$GITHUB_WORKSPACE" || true
+          ls -laF "$HOME" "$GITHUB_WORKSPACE" || true
           (cd ${ZIG_DIST_NAME} && patch --verbose -p1 -i "$GITHUB_WORKSPACE"/misc/patches/zig/0001-x.patch)
           # create wrapper scripts (needed for CMake)
           log=
@@ -819,7 +843,7 @@ jobs:
           echo -e '#!/bin/sh\n'$log'exec zig objcopy "$@"' > zig-objcopy
           echo -e '#!/bin/sh\n'$log'exec zig ranlib "$@"' > zig-ranlib
           chmod +x zig-ar zig-cc zig-cxx zig-objcopy zig-ranlib
-          ls -la; head zig-ar zig-cc zig-cxx zig-objcopy zig-ranlib
+          ls -laF; head zig-ar zig-cc zig-cxx zig-objcopy zig-ranlib
           # update ZIG_TARGET
           [[ $ZIG_TARGET == mips-linux-musleabi-* ]]     && ZIG_TARGET=mips-linux-musleabi
           [[ $ZIG_TARGET == mips-linux-musleabihf-* ]]   && ZIG_TARGET=mips-linux-musleabihf
@@ -846,6 +870,7 @@ jobs:
             echo "UPX_CONFIG_DISABLE_SANITIZE=ON" >> $GITHUB_ENV
           fi
           echo "ZIG_FLAGS=$ZIG_FLAGS" >> $GITHUB_ENV
+      - run: ls -laF "$HOME" "$GITHUB_WORKSPACE" || true
       - run: set -x; zig version; zig-cc --version || true; zig-cxx --version || true
       - run: zig-cc  -E -x c   -dM /dev/null # list predefined macros for C
       - run: zig-cxx -E -x c++ -dM /dev/null # list predefined macros for C++

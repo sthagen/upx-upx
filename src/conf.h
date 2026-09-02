@@ -41,6 +41,9 @@
 #if !defined(__has_builtin)
 #define __has_builtin(x) 0
 #endif
+#if !defined(__has_cpp_attribute)
+#define __has_cpp_attribute(x) 0
+#endif
 #if !defined(__has_declspec_attribute)
 #define __has_declspec_attribute(x) 0
 #endif
@@ -75,6 +78,9 @@ static_assert((char) (-1) == 255);             // -funsigned-char
 // disable some more strict warnings
 #if defined(__clang__) && __has_warning("-Wunnecessary-virtual-specifier")
 #pragma clang diagnostic ignored "-Wunnecessary-virtual-specifier"
+#endif
+#if defined(__clang__) && __has_warning("-Wunused-template")
+#pragma clang diagnostic ignored "-Wunused-template"
 #endif
 #if (ACC_CC_GNUC && ACC_CC_GNUC < 0x090000)
 #pragma GCC diagnostic ignored "-Wattributes"
@@ -446,7 +452,7 @@ inline void NO_fprintf(FILE *, const char *, ...) noexcept {}
 #define COMPILE_TIME_ASSERT_ALIGNED1(a) COMPILE_TIME_ASSERT_ALIGNOF__(a, char)
 
 // TABLESIZE
-#define TABLESIZE(table) ((sizeof(table) / sizeof((table)[0])))
+#define TABLESIZE(table) (sizeof(table) / sizeof((table)[0]))
 
 // mem_clear()
 template <class T>
@@ -494,7 +500,7 @@ noreturn void throwAssertFailed(const char *expr, const char *file, int line, co
 #endif
 #define assert_noexcept(e)                                                                         \
     ((void) (__acc_cte(e) || (assertFailed(#e, __FILE__, __LINE__, __func__), 0)))
-#define assert_noexcept2(e) assertFailed(e, #e, __FILE__, __LINE__, __func__)
+#define assert_noexcept2(e) (assertFailed(e, #e, __FILE__, __LINE__, __func__))
 #else
 #define assert_noexcept  assert
 #define assert_noexcept2 assert
@@ -590,7 +596,7 @@ using upx::tribool;
 #define UPX_F_VMLINUX_PPC64LE     40
 // #define UPX_F_DYLIB_PPC64LE       41 // DOES NOT EXIST
 #define UPX_F_LINUX_ELF64_ARM64   42
-#define UPX_F_W64PE_ARM64         43 // NOT YET IMPLEMENTED
+#define UPX_F_W64PE_ARM64         43
 #define UPX_F_W64PE_ARM64EC       44 // NOT YET IMPLEMENTED
 #define UPX_F_LINUX_ELF64_RISCV64 45
 #define UPX_F_CPM86_CMD           46 // CP/M-86 .cmd
@@ -859,12 +865,12 @@ noinline int do_files(int i, int argc, char *argv[]) may_throw;
 
 // help.cpp
 extern const char gitrev[];
-void show_header();
-void show_help(int verbose);
-void show_license();
-void show_sysinfo(const char *options_var);
-void show_usage();
-void show_version(bool one_line = false);
+noinline void show_header();
+noinline void show_help(int verbose);
+noinline void show_license();
+noinline void show_sysinfo(const char *options_var);
+noinline void show_usage();
+noinline void show_version(bool one_line = false);
 
 // compress/compress.cpp
 // clang-format off
